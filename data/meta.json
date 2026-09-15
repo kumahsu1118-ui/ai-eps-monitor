@@ -11,7 +11,7 @@
   "consensusDataAsOfDisplay": "Sep 15, 2026 09:36 Taipei Time",
   "lastSuccessfulCollection": "2026-09-15T01:36:00Z",
   "lastSuccessfulCollectionDisplay": "Sep 15, 2026 09:36 Taipei Time",
-  "sitePublished": "2026-09-15T05:31:24Z",
+  "sitePublished": "2026-09-15T05:31:53Z",
   "sitePublishedDisplay": "Sep 15, 2026 13:31 Taipei Time",
   "dataStale": false,
   "displayMappedYears": [
@@ -25,9 +25,9 @@
     "2027E",
     "2028E"
   ],
-  "dataVersion": "03f2feeb44dceed10c0556cd3861dea034899cbe04e7b4d4b26ba4f32521007b",
-  "buildId": "03f2feeb44dceed10c0556cd3861dea034899cbe04e7b4d4b26ba4f32521007b",
-  "alertEngineLastEvaluated": "2026-09-15T05:31:24Z",
+  "dataVersion": "86d789ae6f387604c51b0105eb9baf648133ffaa2607d55466ddaaad3410c5b5",
+  "buildId": "86d789ae6f387604c51b0105eb9baf648133ffaa2607d55466ddaaad3410c5b5",
+  "alertEngineLastEvaluated": "2026-09-15T05:31:53Z",
   "alertEngineStatus": "ok",
   "alertEngineError": null
 }

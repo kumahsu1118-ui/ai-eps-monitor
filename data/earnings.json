@@ -232,6 +232,13 @@
     ],
     "sources": [
       {
+        "tier": 1,
+        "title": "NVDA Company IR earnings release",
+        "url": "https://investor.nvidia.com/news/press-release-details/2026/NVIDIA-Announces-Financial-Results-for-Second-Quarter-Fiscal-2027/",
+        "date": "2026-08-26",
+        "sourceTier": "Company IR"
+      },
+      {
         "title": "NVIDIA Announces Financial Results for Second Quarter Fiscal 2027",
         "url": "https://investor.nvidia.com/news/press-release-details/2026/NVIDIA-Announces-Financial-Results-for-Second-Quarter-Fiscal-2027/default.aspx",
         "date": "2026-08-26",
@@ -535,6 +542,13 @@
       }
     ],
     "sources": [
+      {
+        "tier": 1,
+        "title": "AVGO Company IR earnings release",
+        "url": "https://investors.broadcom.com/news-releases/news-release-details/broadcom-inc-announces-third-quarter-fiscal-year-2026-financial",
+        "date": "2026-09-02",
+        "sourceTier": "Company IR"
+      },
       {
         "title": "Broadcom Inc. Announces Third Quarter Fiscal Year 2026 Financial Results and Quarterly Dividend",
         "url": "https://investors.broadcom.com/news-releases/news-release-details/broadcom-inc-announces-third-quarter-fiscal-year-2026-financial",
