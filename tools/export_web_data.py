@@ -16,6 +16,40 @@ import re
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+try:
+    from atomic_io import (
+        JsonlAtomicError,
+        PipelineLockedError,
+        acquire_global_pipeline_lock,
+        atomic_append_jsonl,
+        atomic_write_text,
+    )
+except ImportError:
+    import sys as _aio_sys
+    _aio_sys.path.insert(0, str(Path(__file__).resolve().parent))
+    from atomic_io import (
+        JsonlAtomicError,
+        PipelineLockedError,
+        acquire_global_pipeline_lock,
+        atomic_append_jsonl,
+        atomic_write_text,
+    )
+
+try:
+    from snapshot_quality import (
+        MixedBuildError,
+        check_build_generation_consistency,
+        snapshot_quality_gate,
+    )
+except ImportError:
+    import sys as _sq_sys
+    _sq_sys.path.insert(0, str(Path(__file__).resolve().parent))
+    from snapshot_quality import (
+        MixedBuildError,
+        check_build_generation_consistency,
+        snapshot_quality_gate,
+    )
+
 # Resolve project root whether invoked as tools/ or web/tools/ (symlink)
 _here = Path(__file__).resolve().parent
 ROOT = _here.parent if (_here / "export_web_data.py").exists() and (_here.parent / "data" / "snapshots").exists() else _here
@@ -42,6 +76,7 @@ EARNINGS_DIR = ROOT / "data" / "earnings"
 DAILY_SNAP_DIR = ROOT / "data" / "daily_eps_snapshots"
 WEB_DATA = ROOT / "web" / "data"
 DASH = ROOT / "dashboard"
+CHECKPOINT_PATH = ROOT / "data" / "comparison_checkpoint.json"
 
 TAIPEI = timezone(timedelta(hours=8))
 
@@ -535,7 +570,7 @@ def pack_eps_year(raw_year: dict | None, mapped_year: str | None = None) -> dict
         "consensus": cons,
         "high": high,
         "low": low,
-        "analysts": to_num(raw_year.get("analysts")),
+        "analysts": to_num(raw_year.get("analysts") if raw_year.get("analysts") is not None else raw_year.get("analystCount")),
         "dispersion": compute_dispersion(high, low, cons),
         "rev1M": to_num(raw_year.get("rev_1M_pct")),
         "rev3M": to_num(raw_year.get("rev_3M_pct")),
@@ -546,6 +581,15 @@ def pack_eps_year(raw_year: dict | None, mapped_year: str | None = None) -> dict
         "trueCalendarYearEps": true_cy,
         "slotMappingOnly": True,
     }
+    analysts = out.get("analysts")
+    out["analystCount"] = analysts
+    if analysts == 0:
+        out["coverageStatus"] = "warning"
+        out["coverageWarning"] = "analystCount=0"
+    elif analysts is None:
+        out["coverageStatus"] = "unknown"
+    else:
+        out["coverageStatus"] = "ok"
     fec = fiscal_equals_calendar(reported)
     if fec is True:
         out["fiscalEqualsCalendar"] = True
@@ -664,6 +708,13 @@ def build_companies(snap: dict, tickers: list[str], year_keys: list[str] | None 
             "dataAsOf": collection_as_of,
             "lastSuccessfulCollection": collection_as_of,
             "collectionFailed": collection_failed,
+            "usedLastKnownGood": bool(
+                d.get("last_known_good")
+                or d.get("used_last_known_good")
+                or d.get("lkg")
+                or d.get("usedLkg")
+            )
+            or (collection_failed and bool(d.get("last_successful_collection"))),
             "drivers": load_drivers(t),
         }
     return out
@@ -817,6 +868,26 @@ def _slot_from_alignment(align: str | None) -> str | None:
     return None
 
 
+def ticker_blocks_daily_observation(ticker: str, companies: dict, snap: dict) -> bool:
+    """LKG / collection-failed tickers must not append a fake daily EPS observation."""
+    c = companies.get(ticker) or {}
+    d = ((snap.get("tickers") or {}).get(ticker) or {}) if isinstance(snap, dict) else {}
+    if c.get("collectionFailed") or d.get("collection_failed"):
+        return True
+    flags = (
+        c.get("usedLastKnownGood"),
+        c.get("lastKnownGood"),
+        d.get("last_known_good"),
+        d.get("used_last_known_good"),
+        d.get("lkg"),
+        d.get("usedLkg"),
+        d.get("from_lkg"),
+    )
+    if any(bool(x) for x in flags):
+        return True
+    return False
+
+
 def seed_and_append_daily_snapshots(
     companies: dict,
     tickers: list[str],
@@ -827,19 +898,18 @@ def seed_and_append_daily_snapshots(
     """Append-only daily consensus store.
 
     Primary identity: (date, ticker, reportedFiscalLabel).
-    `slot` / mappedYear kept for display mapping only.
+    Stores ALL displayMappedYears (not just chart years).
     Same-day rules:
       - EPS unchanged vs last same-day record → do not append
       - EPS changed → append new record (keep prior same-day records)
-    Charts use the last chronologically per (ticker, slot, date).
+    LKG / collection-failed tickers are skipped (no fake observation).
+    JSONL writes are atomic fail-closed (no open('a') fallback).
     """
     year_keys = year_keys or display_mapped_years()
-    chart_years = chart_years_from(year_keys)
     DAILY_SNAP_DIR.mkdir(parents=True, exist_ok=True)
     jsonl_path = DAILY_SNAP_DIR / "daily.jsonl"
 
     existing: list[dict] = []
-    # Last consensus seen per key in file order (for same-day change detection)
     last_consensus: dict[tuple, object] = {}
     if jsonl_path.exists():
         for line in jsonl_path.read_text(encoding="utf-8").splitlines():
@@ -848,14 +918,12 @@ def seed_and_append_daily_snapshots(
                 continue
             row = json.loads(line)
             existing.append(row)
-            # Prefer fiscal identity; fall back to slot for legacy rows
             fiscal = row.get("reportedFiscalLabel") or row.get("fiscalKey")
             key = (row.get("date"), row.get("ticker"), fiscal or row.get("slot"))
             last_consensus[key] = row.get("consensus")
             if row.get("slot"):
                 last_consensus[(row.get("date"), row.get("ticker"), "slot:" + str(row.get("slot")))] = row.get("consensus")
 
-    # Seed from revision history dates (baselines / events) if key never seen
     history_raw = load_history()
     new_rows: list[dict] = []
     for raw in history_raw:
@@ -867,7 +935,7 @@ def seed_and_append_daily_snapshots(
         )
         if not date or not ticker:
             continue
-        if not fiscal and (not slot or slot not in chart_years):
+        if not fiscal and (not slot or slot not in year_keys):
             continue
         identity = fiscal or slot
         key = (date, ticker, identity)
@@ -877,7 +945,7 @@ def seed_and_append_daily_snapshots(
         row = {
             "date": date,
             "ticker": ticker,
-            "slot": slot,  # display mapping only
+            "slot": slot,
             "mappedYear": slot,
             "fiscalKey": fiscal,
             "consensus": eps,
@@ -889,12 +957,13 @@ def seed_and_append_daily_snapshots(
         new_rows.append(row)
         last_consensus[key] = eps
 
-    # Snapshot-day consensus: append on first sight OR when EPS changed same day
     snap_date = (snap.get("snapshot_utc") or snap_path.name)[:10]
     snap_utc = snap.get("snapshot_utc")
     for t in tickers:
+        if ticker_blocks_daily_observation(t, companies, snap):
+            continue
         c = companies.get(t) or {}
-        for slot in chart_years:
+        for slot in year_keys:
             e = (c.get("eps") or {}).get(slot) or {}
             fiscal = e.get("reportedFiscalLabel")
             identity = fiscal or slot
@@ -902,35 +971,42 @@ def seed_and_append_daily_snapshots(
             new_eps = e.get("consensus")
             if key in last_consensus:
                 if eps_same(last_consensus[key], new_eps):
-                    continue  # unchanged → do not append
+                    continue
+            analysts = e.get("analystCount") if e.get("analystCount") is not None else e.get("analysts")
+            coverage = e.get("coverageStatus")
+            if analysts == 0 and not coverage:
+                coverage = "warning"
             row = {
                 "date": snap_date,
                 "ticker": t,
-                "slot": slot,  # display mapping only
+                "slot": slot,
                 "mappedYear": slot,
                 "fiscalKey": fiscal,
                 "consensus": new_eps,
                 "reportedFiscalLabel": fiscal,
                 "calendarAlignment": e.get("calendarAlignment"),
+                "analystCount": analysts,
+                "coverageStatus": coverage,
                 "source": "daily_export",
                 "updateTime": snap_utc,
             }
+            if analysts == 0:
+                row["coverageWarning"] = e.get("coverageWarning") or "analystCount=0"
             new_rows.append(row)
             last_consensus[key] = new_eps
 
     if new_rows:
-        with jsonl_path.open("a", encoding="utf-8") as f:
-            for row in new_rows:
-                f.write(json.dumps(row, ensure_ascii=False) + "\n")
-                existing.append(row)
+        atomic_append_jsonl(jsonl_path, new_rows)
+        existing.extend(new_rows)
 
-    # Dated JSON for the day reflecting latest values (overwrite that day file only)
     day_payload = {
         "date": snap_date,
         "snapshotUtc": snap_utc,
         "tickers": {},
     }
     for t in tickers:
+        if ticker_blocks_daily_observation(t, companies, snap):
+            continue
         c = companies.get(t) or {}
         day_payload["tickers"][t] = {
             slot: {
@@ -938,12 +1014,14 @@ def seed_and_append_daily_snapshots(
                 "reportedFiscalLabel": ((c.get("eps") or {}).get(slot) or {}).get("reportedFiscalLabel"),
                 "calendarAlignment": ((c.get("eps") or {}).get(slot) or {}).get("calendarAlignment"),
                 "mappedYear": slot,
+                "analystCount": ((c.get("eps") or {}).get(slot) or {}).get("analystCount")
+                or ((c.get("eps") or {}).get(slot) or {}).get("analysts"),
+                "coverageStatus": ((c.get("eps") or {}).get(slot) or {}).get("coverageStatus"),
             }
-            for slot in chart_years
+            for slot in year_keys
         }
-        # Also expose by fiscal label for identity stability
         by_fiscal = {}
-        for slot in chart_years:
+        for slot in year_keys:
             e = (c.get("eps") or {}).get(slot) or {}
             lab = e.get("reportedFiscalLabel")
             if lab:
@@ -952,6 +1030,8 @@ def seed_and_append_daily_snapshots(
                     "reportedFiscalLabel": lab,
                     "calendarAlignment": e.get("calendarAlignment"),
                     "mappedYear": slot,
+                    "analystCount": e.get("analystCount") if e.get("analystCount") is not None else e.get("analysts"),
+                    "coverageStatus": e.get("coverageStatus"),
                 }
         day_payload["tickers"][t]["_byFiscal"] = by_fiscal
     write_json(DAILY_SNAP_DIR / f"{snap_date}.json", day_payload)
@@ -1333,11 +1413,11 @@ def regenerate_markdown_backups(companies: dict, valuation: list, snap: dict, ti
 
 def write_json(path: Path, obj):
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(obj, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    atomic_write_text(path, json.dumps(obj, indent=2, ensure_ascii=False) + "\n")
 
 
 def run_build_alerts() -> dict:
-    """Call deterministic alert engine before writing web/data/alerts.json."""
+    """Alert Engine — only after a publishable persist. Never a pre-gate step."""
     try:
         import build_alerts as ba
 
@@ -1386,6 +1466,116 @@ def load_prior_meta() -> dict:
         return {}
 
 
+def load_comparison_checkpoint() -> dict:
+    """Previous successful-export baseline for What Changed. Not advanced on failure."""
+    if not CHECKPOINT_PATH.exists():
+        return {}
+    try:
+        obj = json.loads(CHECKPOINT_PATH.read_text(encoding="utf-8"))
+        return obj if isinstance(obj, dict) else {}
+    except Exception:
+        return {}
+
+
+def advance_comparison_checkpoint(
+    companies: dict,
+    *,
+    data_version: str,
+    build_id: str,
+    snap_utc: str | None = None,
+) -> dict:
+    """Advance ONLY after a successful export write."""
+    payload = {
+        "dataVersion": data_version,
+        "buildId": build_id,
+        "snapshotUtc": snap_utc,
+        "advancedAt": now_utc_iso(),
+        "companies": companies,
+    }
+    CHECKPOINT_PATH.parent.mkdir(parents=True, exist_ok=True)
+    write_json(CHECKPOINT_PATH, payload)
+    return payload
+
+
+def compute_what_changed(
+    prior_companies: dict | None,
+    companies: dict,
+    prior_alert_ids: set | None = None,
+    new_alerts: list | None = None,
+) -> list[dict]:
+    """WHAT CHANGED vs the previous comparisonCheckpoint (not the in-flight export)."""
+    changes: list[dict] = []
+    prior_companies = prior_companies or {}
+    prior_alert_ids = prior_alert_ids or set()
+    for t, c in (companies or {}).items():
+        if not isinstance(c, dict):
+            continue
+        pc = prior_companies.get(t) or {}
+        if not isinstance(pc, dict):
+            pc = {}
+        for yk, e in (c.get("eps") or {}).items():
+            if not isinstance(e, dict):
+                continue
+            pe = ((pc.get("eps") or {}).get(yk) or {}) if isinstance(pc.get("eps"), dict) else {}
+            old_c, new_c = pe.get("consensus"), e.get("consensus")
+            if old_c is not None and new_c is not None:
+                try:
+                    if abs(float(old_c) - float(new_c)) > 1e-9:
+                        changes.append(
+                            {
+                                "ticker": t,
+                                "kind": "eps",
+                                "period": yk,
+                                "previous": old_c,
+                                "current": new_c,
+                                "summary": f"{t} {yk} consensus {old_c} → {new_c}",
+                            }
+                        )
+                except (TypeError, ValueError):
+                    pass
+            old_r = pe.get("rev1M")
+            new_r = e.get("rev1M")
+            if old_r is not None and new_r is not None:
+                try:
+                    if abs(float(old_r) - float(new_r)) > 1e-9:
+                        changes.append(
+                            {
+                                "ticker": t,
+                                "kind": "rev1M",
+                                "period": yk,
+                                "previous": old_r,
+                                "current": new_r,
+                                "summary": f"{t} {yk} SA 1M {old_r} → {new_r}",
+                            }
+                        )
+                except (TypeError, ValueError):
+                    pass
+        old_n = pc.get("nextEarningsRaw") or pc.get("nextEarnings")
+        new_n = c.get("nextEarningsRaw") or c.get("nextEarnings")
+        if old_n and new_n and str(old_n) != str(new_n):
+            changes.append(
+                {
+                    "ticker": t,
+                    "kind": "nextEarnings",
+                    "previous": old_n,
+                    "current": new_n,
+                    "summary": f"{t} next earnings {old_n} → {new_n}",
+                }
+            )
+    for a in new_alerts or []:
+        if not isinstance(a, dict) or not a.get("id"):
+            continue
+        if a.get("id") not in prior_alert_ids:
+            changes.append(
+                {
+                    "ticker": a.get("ticker"),
+                    "kind": "alert",
+                    "id": a.get("id"),
+                    "summary": a.get("message") or a.get("title"),
+                }
+            )
+    return changes
+
 
 def strip_operational_alert_fields(alerts_list: list) -> list:
     """Drop ageDays / other operational fields so dataVersion stays stable across calendar ticks."""
@@ -1430,152 +1620,241 @@ def collection_completeness(companies: dict, tickers: list[str]) -> dict:
 
 
 
-def main():
-    snap_path, snap = load_latest_snapshot()
-    tickers = load_watchlist()
-    driver_errors = ensure_driver_files(tickers)
-    snap_utc = snap.get("snapshot_utc") or ""
-    source = snap.get("source") or "Seeking Alpha"
-    display = taipei_display_safe(snap_utc)
+def main(*, acquire_lock: bool = True):
+    """Export after a publishable persist.
 
-    year_keys = display_mapped_years(now_taipei().year, include_y3=True)
-    chart_years = chart_years_from(year_keys)
+    Order inside a publishable run:
+      persist daily (fresh tickers only) → Alert Engine → web JSON →
+      dashboard.json/buildId → comparisonCheckpoint advance.
 
-    prior_meta = load_prior_meta()
+    Mixed-build or quality-gate reject aborts WITHOUT mutating Alert DB and
+    WITHOUT advancing comparisonCheckpoint.
+    """
+    lock = None
+    if acquire_lock:
+        try:
+            lock = acquire_global_pipeline_lock(ROOT)
+        except PipelineLockedError as exc:
+            raise SystemExit(f"PIPELINE LOCKED: {exc}") from exc
 
-    companies = build_companies(snap, tickers, year_keys=year_keys)
-    valuation = build_valuation(companies, tickers, snap_utc, year_keys=year_keys)
-    history_raw = load_history()
-    revisions = [map_history_row(r) for r in history_raw]
+    try:
+        # Reject mixed public generations before any persist / Alert Engine.
+        try:
+            check_build_generation_consistency(WEB_DATA)
+        except MixedBuildError as exc:
+            raise SystemExit(f"MIXED BUILD REJECTED: {exc}") from exc
 
-    daily_rows = seed_and_append_daily_snapshots(
-        companies, tickers, snap, snap_path, year_keys=year_keys
-    )
-    eps_history = build_eps_history_from_daily(daily_rows)
+        snap_path, snap = load_latest_snapshot()
+        tickers = load_watchlist()
 
-    earnings = load_or_init_earnings(companies, tickers)
+        gate = snapshot_quality_gate(snap, None)
+        if not gate.get("ok") or not gate.get("publishable"):
+            raise SystemExit(
+                f"QUALITY GATE REJECT ({gate.get('failReason')}): "
+                "abort export; Alert DB untouched; comparisonCheckpoint not advanced"
+            )
 
-    # Deterministic alert engine — must run before writing alerts.json
-    alerts_payload = run_build_alerts()
-    active = alerts_payload.get("activeAlerts") or alerts_payload.get("alerts") or []
-    history_alerts = alerts_payload.get("alertHistory") or active
-    alerts = {
-        "activeAlerts": active,
-        "alertHistory": history_alerts,
-        "alertDiagnostics": alerts_payload.get("alertDiagnostics") or [],
-        "alerts": active,  # legacy alias
-        "alertEngineLastEvaluated": alerts_payload.get("alertEngineLastEvaluated"),
-        "alertEngineStatus": alerts_payload.get("alertEngineStatus") or "error",
-        "alertEngineError": alerts_payload.get("alertEngineError"),
-        "oneShotActiveDays": alerts_payload.get("oneShotActiveDays"),
-    }
+        driver_errors = ensure_driver_files(tickers)
+        snap_utc = snap.get("snapshot_utc") or ""
+        source = snap.get("source") or "Seeking Alpha"
+        display = taipei_display_safe(snap_utc)
 
-    # Schedule-aware freshness (weekday 08:00 Taipei + grace) — replaces naive 48h
-    freshness = compute_freshness(snap_utc)
-    data_stale = bool(freshness.get("dataStale"))
+        year_keys = display_mapped_years(now_taipei().year, include_y3=True)
+        chart_years = chart_years_from(year_keys)
 
-    # Preserve prior sitePublished until publish actually ships a new payload
-    site_published = prior_meta.get("sitePublished")
-    site_published_display = prior_meta.get("sitePublishedDisplay")
-    if not site_published:
-        # First export: stamp once; publish script may refresh when hash changes
-        published_dt = now_taipei()
-        site_published = published_dt.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-        site_published_display = taipei_display_safe(site_published)
+        prior_meta = load_prior_meta()
+        checkpoint = load_comparison_checkpoint()
+        prior_companies = checkpoint.get("companies") if isinstance(checkpoint.get("companies"), dict) else {}
+        if not prior_companies:
+            try:
+                pc_path = WEB_DATA / "companies.json"
+                if pc_path.exists():
+                    prior_companies = json.loads(pc_path.read_text(encoding="utf-8"))
+            except Exception:
+                prior_companies = {}
+        prior_alert_ids: set = set()
+        try:
+            pa_path = WEB_DATA / "alerts.json"
+            if pa_path.exists():
+                prev_alerts = json.loads(pa_path.read_text(encoding="utf-8"))
+                prior_alert_ids = {
+                    a.get("id")
+                    for a in (prev_alerts.get("activeAlerts") or prev_alerts.get("alerts") or [])
+                    if isinstance(a, dict) and a.get("id")
+                }
+        except Exception:
+            prior_alert_ids = set()
 
-    # dataVersion = substantive EPS/price/earnings/active-alert payload.
-    # refreshVersion / lastSuccessfulCollection = operational (may tick without data change).
-    # ageDays must NOT change dataVersion — strip before hashing; UI ages from eventAt.
-    coll = collection_completeness(companies, tickers)
-    refresh_version = hashlib.sha256(
-        canonical_json_bytes(
-            {
-                "lastSuccessfulCollection": snap_utc,
-                "alertEngineLastEvaluated": alerts.get("alertEngineLastEvaluated"),
-                "sitePublished": site_published,
-                "collectionStatus": coll.get("collectionStatus"),
-            }
+        companies = build_companies(snap, tickers, year_keys=year_keys)
+        valuation = build_valuation(companies, tickers, snap_utc, year_keys=year_keys)
+        history_raw = load_history()
+        revisions = [map_history_row(r) for r in history_raw]
+
+        daily_rows = seed_and_append_daily_snapshots(
+            companies, tickers, snap, snap_path, year_keys=year_keys
         )
-    ).hexdigest()
+        eps_history = build_eps_history_from_daily(daily_rows)
 
-    payload_parts = {
-        "companies": companies,
-        "valuation": {"rows": valuation},
-        "revisions": {"revisions": revisions},
-        "eps_history": eps_history,
-        "earnings": earnings,
-        "alerts": {
-            "activeAlerts": strip_operational_alert_fields(active),
+        earnings = load_or_init_earnings(companies, tickers)
+
+        # Alert Engine — after persist, never pre-gate
+        alerts_payload = run_build_alerts()
+        active = alerts_payload.get("activeAlerts") or alerts_payload.get("alerts") or []
+        history_alerts = alerts_payload.get("alertHistory") or active
+        what_changed = compute_what_changed(prior_companies, companies, prior_alert_ids, active)
+        alerts = {
+            "activeAlerts": active,
+            "alertHistory": history_alerts,
+            "alertDiagnostics": alerts_payload.get("alertDiagnostics") or [],
+            "whatChangedSinceLastCollection": what_changed,
+            "changedSinceLastCollection": what_changed,
+            "comparisonCheckpoint": {
+                "dataVersion": checkpoint.get("dataVersion"),
+                "buildId": checkpoint.get("buildId"),
+                "advancedAt": checkpoint.get("advancedAt"),
+            },
+            "alerts": active,
+            "alertEngineLastEvaluated": alerts_payload.get("alertEngineLastEvaluated"),
+            "alertEngineStatus": alerts_payload.get("alertEngineStatus") or "error",
+            "alertEngineError": alerts_payload.get("alertEngineError"),
+            "oneShotActiveDays": alerts_payload.get("oneShotActiveDays"),
+        }
+
+        freshness = compute_freshness(snap_utc)
+        data_stale = bool(freshness.get("dataStale"))
+
+        site_published = prior_meta.get("sitePublished")
+        site_published_display = prior_meta.get("sitePublishedDisplay")
+        if not site_published:
+            published_dt = now_taipei()
+            site_published = published_dt.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+            site_published_display = taipei_display_safe(site_published)
+
+        coll = collection_completeness(companies, tickers)
+        refresh_version = hashlib.sha256(
+            canonical_json_bytes(
+                {
+                    "lastSuccessfulCollection": snap_utc,
+                    "alertEngineLastEvaluated": alerts.get("alertEngineLastEvaluated"),
+                    "sitePublished": site_published,
+                    "collectionStatus": coll.get("collectionStatus"),
+                }
+            )
+        ).hexdigest()
+
+        payload_parts = {
+            "companies": companies,
+            "valuation": {"rows": valuation},
+            "revisions": {"revisions": revisions},
+            "eps_history": eps_history,
+            "earnings": earnings,
+            "alerts": {
+                "activeAlerts": strip_operational_alert_fields(active),
+                "alertEngineStatus": alerts.get("alertEngineStatus"),
+            },
+            "watchlist": {"tickers": tickers},
+        }
+        data_version = compute_data_version(payload_parts)
+        build_id = data_version
+
+        quality_meta = {
+            "status": gate.get("status") or "pass",
+            "publishable": True,
+            "reason": gate.get("failReason"),
+            "extremeChanges": [
+                q for q in (gate.get("quarantined") or []) if q.get("reason") == "extreme_eps_change"
+            ],
+            "quarantined": gate.get("quarantined") or [],
+        }
+
+        meta = {
+            "lastUpdated": snap_utc,
+            "lastUpdatedDisplay": display,
+            "primarySource": source,
+            "snapshotFile": snap_path.name,
+            "revisionWindowNote": snap.get("revision_window_note"),
+            "calendarAlignmentRule": snap.get("calendar_alignment_rule"),
+            "mappingRule": MAPPING_RULE_NOTE,
+            "trueCyStatus": TRUE_CY_STATUS,
+            "momentumFormula": MOMENTUM_FORMULA_DOC,
+            "consensusDataAsOf": snap_utc,
+            "consensusDataAsOfDisplay": display,
+            "lastSuccessfulCollection": snap_utc,
+            "lastSuccessfulCollectionDisplay": display,
+            "sitePublished": site_published,
+            "sitePublishedDisplay": site_published_display,
+            "dataStale": data_stale,
+            "nextExpected": freshness.get("nextExpected"),
+            "staleAfter": freshness.get("staleAfter"),
+            "freshnessRule": freshness.get("freshnessRule"),
+            "graceHours": freshness.get("graceHours"),
+            "displayMappedYears": year_keys,
+            "chartYears": chart_years,
+            "dataVersion": data_version,
+            "refreshVersion": refresh_version,
+            "buildId": build_id,
+            "alertEngineLastEvaluated": alerts.get("alertEngineLastEvaluated"),
             "alertEngineStatus": alerts.get("alertEngineStatus"),
-        },
-        "watchlist": {"tickers": tickers},
-    }
-    data_version = compute_data_version(payload_parts)
-    build_id = data_version
+            "alertEngineError": alerts.get("alertEngineError"),
+            "oneShotActiveDays": alerts.get("oneShotActiveDays"),
+            "collectionStatus": coll["collectionStatus"],
+            "successfulTickers": coll["successfulTickers"],
+            "failedTickers": coll["failedTickers"],
+            "successfulCount": coll["successfulCount"],
+            "totalCount": coll["totalCount"],
+            "collectionStatusLabel": coll["collectionStatusLabel"],
+            "driverExportErrors": driver_errors or None,
+            "qualityGate": quality_meta,
+            "comparisonCheckpoint": {
+                "dataVersion": checkpoint.get("dataVersion"),
+                "buildId": checkpoint.get("buildId"),
+                "advancedAt": checkpoint.get("advancedAt"),
+                "usedForWhatChanged": True,
+            },
+        }
 
-    meta = {
-        "lastUpdated": snap_utc,
-        "lastUpdatedDisplay": display,
-        "primarySource": source,
-        "snapshotFile": snap_path.name,
-        "revisionWindowNote": snap.get("revision_window_note"),
-        "calendarAlignmentRule": snap.get("calendar_alignment_rule"),
-        "mappingRule": MAPPING_RULE_NOTE,
-        "trueCyStatus": TRUE_CY_STATUS,
-        "momentumFormula": MOMENTUM_FORMULA_DOC,
-        "consensusDataAsOf": snap_utc,
-        "consensusDataAsOfDisplay": display,
-        "lastSuccessfulCollection": snap_utc,
-        "lastSuccessfulCollectionDisplay": display,
-        "sitePublished": site_published,
-        "sitePublishedDisplay": site_published_display,
-        "dataStale": data_stale,
-        "nextExpected": freshness.get("nextExpected"),
-        "staleAfter": freshness.get("staleAfter"),
-        "freshnessRule": freshness.get("freshnessRule"),
-        "graceHours": freshness.get("graceHours"),
-        "displayMappedYears": year_keys,
-        "chartYears": chart_years,
-        "dataVersion": data_version,
-        "refreshVersion": refresh_version,
-        "buildId": build_id,
-        "alertEngineLastEvaluated": alerts.get("alertEngineLastEvaluated"),
-        "alertEngineStatus": alerts.get("alertEngineStatus"),
-        "alertEngineError": alerts.get("alertEngineError"),
-        "oneShotActiveDays": alerts.get("oneShotActiveDays"),
-        "collectionStatus": coll["collectionStatus"],
-        "successfulTickers": coll["successfulTickers"],
-        "failedTickers": coll["failedTickers"],
-        "successfulCount": coll["successfulCount"],
-        "totalCount": coll["totalCount"],
-        "collectionStatusLabel": coll["collectionStatusLabel"],
-        "driverExportErrors": driver_errors or None,
-    }
+        dashboard = {
+            "buildId": build_id,
+            "dataVersion": data_version,
+            "snapshotFile": snap_path.name,
+            "generatedAt": now_utc_iso(),
+        }
 
-    WEB_DATA.mkdir(parents=True, exist_ok=True)
-    write_json(WEB_DATA / "watchlist.json", {"tickers": tickers})
-    write_json(WEB_DATA / "meta.json", meta)
-    write_json(WEB_DATA / "companies.json", companies)
-    write_json(WEB_DATA / "valuation.json", {"rows": valuation})
-    write_json(WEB_DATA / "revisions.json", {"revisions": revisions})
-    write_json(WEB_DATA / "eps_history.json", eps_history)
-    write_json(WEB_DATA / "earnings.json", earnings)
-    write_json(WEB_DATA / "alerts.json", alerts)
+        WEB_DATA.mkdir(parents=True, exist_ok=True)
+        write_json(WEB_DATA / "watchlist.json", {"tickers": tickers})
+        write_json(WEB_DATA / "companies.json", companies)
+        write_json(WEB_DATA / "valuation.json", {"rows": valuation})
+        write_json(WEB_DATA / "revisions.json", {"revisions": revisions})
+        write_json(WEB_DATA / "eps_history.json", eps_history)
+        write_json(WEB_DATA / "earnings.json", earnings)
+        write_json(WEB_DATA / "alerts.json", alerts)
+        write_json(WEB_DATA / "meta.json", meta)
+        write_json(WEB_DATA / "dashboard.json", dashboard)
 
-    regenerate_markdown_backups(companies, valuation, snap, tickers, year_keys=year_keys)
+        regenerate_markdown_backups(companies, valuation, snap, tickers, year_keys=year_keys)
 
-    print(f"Exported web data → {WEB_DATA}")
-    print(f"  snapshot: {snap_path.name}")
-    print(f"  tickers: {', '.join(tickers)}")
-    print(f"  displayMappedYears: {year_keys}")
-    print(f"  consensusDataAsOfDisplay: {display}")
-    print(f"  sitePublishedDisplay: {site_published_display}")
-    print(f"  dataStale: {data_stale}")
-    print(f"  dataVersion: {data_version[:12]}…")
-    print(f"  refreshVersion: {refresh_version[:12]}…")
-    print(f"  collectionStatus: {coll.get('collectionStatusLabel')}")
-    print(f"  alertEngineStatus: {alerts.get('alertEngineStatus')} ({len(alerts.get('alerts') or [])} alerts)")
+        # comparisonCheckpoint advances ONLY after a successful export.
+        advance_comparison_checkpoint(
+            companies, data_version=data_version, build_id=build_id, snap_utc=snap_utc
+        )
 
+        print(f"Exported web data → {WEB_DATA}")
+        print(f"  snapshot: {snap_path.name}")
+        print(f"  tickers: {', '.join(tickers)}")
+        print(f"  displayMappedYears: {year_keys}")
+        print(f"  consensusDataAsOfDisplay: {display}")
+        print(f"  sitePublishedDisplay: {site_published_display}")
+        print(f"  dataStale: {data_stale}")
+        print(f"  dataVersion: {data_version[:12]}…")
+        print(f"  refreshVersion: {refresh_version[:12]}…")
+        print(f"  collectionStatus: {coll.get('collectionStatusLabel')}")
+        print(f"  alertEngineStatus: {alerts.get('alertEngineStatus')} ({len(alerts.get('alerts') or [])} alerts)")
+        print(f"  whatChanged: {len(what_changed)} vs previous checkpoint")
+    except JsonlAtomicError:
+        raise
+    finally:
+        if lock is not None:
+            lock.release()
 
 
 if __name__ == "__main__":

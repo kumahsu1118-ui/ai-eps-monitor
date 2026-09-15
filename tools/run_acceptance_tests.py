@@ -1,16 +1,17 @@
 #!/usr/bin/env python3
-"""Isolated acceptance tests for ai-eps-monitor (Round 2 + Round 3 Data Integrity).
+"""Isolated acceptance tests for ai-eps-monitor (Round 2 + Round 3 + Pipeline Integrity).
 
 Self-contained: builds synthetic fixtures in tempfile OR copies shipped
 fixtures/ so a clean unzip never needs hand-added data/universe.json.
 
-Prior suite + Round 2 + Round 3 named tests run in one command.
+Prior suite + Round 2 + Round 3 + Pipeline Integrity named tests run in one command.
 MUST NOT mutate production web/data under the real ROOT.
 """
 from __future__ import annotations
 
 import hashlib
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -133,7 +134,14 @@ def build_fixture(dest: Path) -> Path:
     dest.mkdir(parents=True, exist_ok=True)
     tools = dest / "tools"
     tools.mkdir(parents=True, exist_ok=True)
-    for name in ("export_web_data.py", "build_alerts.py", "sa_parser.py"):
+    for name in (
+        "export_web_data.py",
+        "build_alerts.py",
+        "sa_parser.py",
+        "atomic_io.py",
+        "snapshot_quality.py",
+        "pipeline.py",
+    ):
         src = ROOT / "tools" / name
         if src.exists():
             shutil.copy2(src, tools / name)
@@ -1195,9 +1203,389 @@ def test_review_same_build(fixture: Path) -> None:
     record("review_same_build_test", ok, f"gate_ok={gate_ok} mismatch={gate_mismatch}")
 
 
+# ---------- Pipeline Integrity named tests ----------
+
+def _restore_snapshot(fixture: Path, snap: dict) -> None:
+    snap_path = fixture / "data" / "snapshots" / "2026-09-15.json"
+    snap_path.write_text(json.dumps(snap, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+
+
+def _drop_mixed_dashboard(fixture: Path) -> None:
+    """review_same_build_test overwrites meta.json; drop a mismatched dashboard.json so later exports can run."""
+    web = fixture / "web" / "data"
+    dash = web / "dashboard.json"
+    meta = web / "meta.json"
+    if not dash.exists() or not meta.exists():
+        return
+    try:
+        d = json.loads(dash.read_text(encoding="utf-8"))
+        m = json.loads(meta.read_text(encoding="utf-8"))
+    except Exception:
+        dash.unlink(missing_ok=True)
+        return
+    if str(d.get("buildId") or d.get("dataVersion") or "") != str(m.get("buildId") or m.get("dataVersion") or ""):
+        dash.unlink()
+
+
+def test_rejected_snapshot_cannot_mutate_alert_db(fixture: Path) -> None:
+    _drop_mixed_dashboard(fixture)
+    pipe = import_mod(fixture, "pipeline")
+    alerts_path = fixture / "data" / "alerts" / "index.json"
+    seed = {
+        "alerts": [{"id": "keep-me", "rule": "probe", "message": "keep"}],
+        "activeAlerts": [{"id": "keep-me", "rule": "probe", "message": "keep"}],
+        "alertHistory": [{"id": "keep-me", "rule": "probe", "message": "keep"}],
+    }
+    alerts_path.write_text(json.dumps(seed, indent=2) + "\n", encoding="utf-8")
+    before = alerts_path.read_bytes()
+    empty = {"snapshot_utc": "2026-09-15T12:00:00Z", "tickers": {}}
+    dest = fixture / "data" / "snapshots" / "2026-09-16.json"
+    result = pipe.ingest_collected_snapshot(
+        empty, dest=dest, root=fixture, acquire_lock=True, run_export=False
+    )
+    after = alerts_path.read_bytes()
+    ok = result.get("publishable") is False
+    ok = ok and result.get("persisted") is False
+    ok = ok and result.get("alertsMutated") is False
+    ok = ok and after == before
+    ok = ok and not dest.exists()
+    pub = (ROOT / "tools" / "publish_github_pages.sh").read_text(encoding="utf-8")
+    code_lines = [ln for ln in pub.splitlines() if ln.strip() and not ln.strip().startswith("#")]
+    ok = ok and any("tools/pipeline.py" in ln for ln in code_lines)
+    ok = ok and not any("build_alerts.py" in ln for ln in code_lines)
+    record(
+        "rejected_snapshot_cannot_mutate_alert_db_test",
+        ok,
+        f"publishable={result.get('publishable')} mutated={result.get('alertsMutated')} dest={dest.exists()}",
+    )
+
+
+def test_partial_collection_does_not_create_fake_daily_observation(fixture: Path) -> None:
+    _drop_mixed_dashboard(fixture)
+    snap_path = fixture / "data" / "snapshots" / "2026-09-15.json"
+    original = json.loads(snap_path.read_text(encoding="utf-8"))
+    snap = json.loads(snap_path.read_text(encoding="utf-8"))
+    keys = snap.setdefault("tickers", {}).setdefault("KEYS", {})
+    keys["collection_failed"] = True
+    keys["last_known_good"] = True
+    keys["lkg"] = True
+    eps27 = keys.setdefault("eps", {}).setdefault("2027E", {})
+    eps27["consensus"] = 999.0
+    tsm = snap["tickers"]["TSM"]
+    tsm.setdefault("eps", {}).setdefault("2026E", {})["analysts"] = 0
+    tsm["eps"]["2026E"]["consensus"] = 5.55
+    snap_path.write_text(json.dumps(snap, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    run_export(fixture)
+    jsonl = fixture / "data" / "daily_eps_snapshots" / "daily.jsonl"
+    rows = [json.loads(l) for l in jsonl.read_text(encoding="utf-8").splitlines() if l.strip()]
+    today = (snap.get("snapshot_utc") or "2026-09-15")[:10]
+    keys_fake = [
+        r
+        for r in rows
+        if r.get("ticker") == "KEYS" and r.get("date") == today and r.get("consensus") == 999.0
+    ]
+    nvda_today = [r for r in rows if r.get("ticker") == "NVDA" and r.get("date") == today]
+    meta = json.loads((fixture / "web" / "data" / "meta.json").read_text(encoding="utf-8"))
+    years = meta.get("displayMappedYears") or []
+    nvda_slots = {r.get("slot") for r in nvda_today}
+    companies = json.loads((fixture / "web" / "data" / "companies.json").read_text(encoding="utf-8"))
+    tsm_eps = ((companies.get("TSM") or {}).get("eps") or {}).get("2026E") or {}
+    ok = len(keys_fake) == 0
+    ok = ok and len(nvda_today) >= 1
+    ok = ok and years and set(years).issubset(nvda_slots)
+    ok = ok and tsm_eps.get("analystCount") == 0
+    ok = ok and tsm_eps.get("coverageStatus") == "warning"
+    _restore_snapshot(fixture, original)
+    record(
+        "partial_collection_does_not_create_fake_daily_observation_test",
+        ok,
+        f"keys_fake={len(keys_fake)} nvda_slots={sorted(nvda_slots)} years={years} tsm_cov={tsm_eps.get('coverageStatus')}",
+    )
+
+
+def test_changed_since_checkpoint_advances(fixture: Path) -> None:
+    exp = import_mod(fixture, "export_web_data")
+    run_export(fixture)
+    cp_path = fixture / "data" / "comparison_checkpoint.json"
+    ok = cp_path.exists()
+    cp1 = json.loads(cp_path.read_text(encoding="utf-8")) if cp_path.exists() else {}
+    v1 = cp1.get("dataVersion")
+    prior_nvda = (((cp1.get("companies") or {}).get("NVDA") or {}).get("eps") or {}).get("2027E") or {}
+    snap_path = fixture / "data" / "snapshots" / "2026-09-15.json"
+    original = json.loads(snap_path.read_text(encoding="utf-8"))
+    snap = json.loads(snap_path.read_text(encoding="utf-8"))
+    snap["tickers"]["NVDA"]["eps"]["2027E"]["consensus"] = 16.25
+    snap_path.write_text(json.dumps(snap, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+
+    orig_advance = exp.advance_comparison_checkpoint
+
+    def boom(*_a, **_k):
+        raise RuntimeError("injected checkpoint failure")
+
+    exp.advance_comparison_checkpoint = boom  # type: ignore[method-assign]
+    failed = False
+    try:
+        exp.main()
+    except RuntimeError as exc:
+        failed = "injected checkpoint" in str(exc)
+    finally:
+        exp.advance_comparison_checkpoint = orig_advance  # type: ignore[method-assign]
+
+    cp_fail = json.loads(cp_path.read_text(encoding="utf-8"))
+    ok = ok and failed and cp_fail.get("dataVersion") == v1
+
+    alerts_mid = json.loads((fixture / "web" / "data" / "alerts.json").read_text(encoding="utf-8"))
+    changed_mid = alerts_mid.get("whatChangedSinceLastCollection") or alerts_mid.get("changedSinceLastCollection") or []
+    used_previous = any(
+        c.get("kind") == "eps" and c.get("ticker") == "NVDA" and abs(float(c.get("current") or 0) - 16.25) < 1e-9
+        for c in changed_mid
+        if isinstance(c, dict)
+    )
+    ok = ok and used_previous
+
+    exp.main()
+    cp2 = json.loads(cp_path.read_text(encoding="utf-8"))
+    ok = ok and cp2.get("dataVersion") and cp2.get("dataVersion") != v1
+    _restore_snapshot(fixture, original)
+    record(
+        "changed_since_checkpoint_advances_test",
+        ok,
+        f"failed={failed} v1={str(v1)[:8] if v1 else None} advanced={cp2.get('dataVersion') != v1} used_previous={used_previous} prior={prior_nvda.get('consensus')}",
+    )
+
+
+def test_source_1m_hold_preserves_event_age(fixture: Path) -> None:
+    ba = import_mod(fixture, "build_alerts")
+    snap_path = fixture / "data" / "snapshots" / "2026-09-15.json"
+    snap = json.loads(snap_path.read_text(encoding="utf-8"))
+    snap["tickers"]["AVGO"]["eps"]["2028E"]["rev_1M_pct"] = 15.7
+    (fixture / "data" / "alerts" / "index.json").write_text(
+        json.dumps({"alerts": [], "activeAlerts": [], "alertHistory": []}, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    now0 = datetime(2026, 9, 1, 12, 0, 0, tzinfo=timezone.utc)
+    gen = ba.rule6_source_reported_1m(["AVGO"], snap=snap)
+    held = ba.apply_sa_1m_hold_state(gen, [], now=now0)
+    ok = len(held) >= 1
+    h1 = held[0] if held else {}
+    ok = ok and str(h1.get("openedAt") or "").startswith("2026-09-01")
+    ok = ok and str(h1.get("lastMaterialChangeAt") or "").startswith("2026-09-01")
+    ok = ok and str(h1.get("lastObservedAt") or "").startswith("2026-09-01")
+    ok = ok and h1.get("sourceLabel") == "Seeking Alpha 1M"
+    ok = ok and ba.age_days(h1, now=now0) == 0
+
+    now1 = datetime(2026, 9, 11, 12, 0, 0, tzinfo=timezone.utc)
+    gen2 = ba.rule6_source_reported_1m(["AVGO"], snap=snap)
+    held2 = ba.apply_sa_1m_hold_state(gen2, held, now=now1)
+    h2 = next((a for a in held2 if a.get("id") == h1.get("id")), None)
+    ok = ok and h2 is not None
+    if h2:
+        ok = ok and h2.get("openedAt") == h1.get("openedAt")
+        ok = ok and h2.get("lastMaterialChangeAt") == h1.get("lastMaterialChangeAt")
+        ok = ok and str(h2.get("lastObservedAt") or "").startswith("2026-09-11")
+        ok = ok and ba.age_days(h2, now=now1) == 10
+        ok = ok and "internal 30d" not in json.dumps(h2).lower()
+    record(
+        "source_1m_hold_preserves_event_age_test",
+        ok,
+        f"age={ba.age_days(h2, now=now1) if h2 else None} opened={h1.get('openedAt')} observed={h2.get('lastObservedAt') if h2 else None}",
+    )
+
+
+def test_jsonl_atomic_failure_aborts(fixture: Path) -> None:
+    exp = import_mod(fixture, "export_web_data")
+    jsonl = fixture / "data" / "daily_eps_snapshots" / "daily.jsonl"
+    jsonl.parent.mkdir(parents=True, exist_ok=True)
+    original = jsonl.read_text(encoding="utf-8") if jsonl.exists() else ""
+    src = (fixture / "tools" / "export_web_data.py").read_text(encoding="utf-8")
+    aio_src = (fixture / "tools" / "atomic_io.py").read_text(encoding="utf-8")
+    no_fallback = 'jsonl_path.open("a"' not in src and "with jsonl_path.open" not in src
+    fail_closed = "JsonlAtomicError" in aio_src and "os.replace" in aio_src and "atomic_append_jsonl" in src
+
+    snap_path = fixture / "data" / "snapshots" / "2026-09-15.json"
+    snap = json.loads(snap_path.read_text(encoding="utf-8"))
+    snap["tickers"]["NVDA"]["eps"]["2027E"]["consensus"] = 17.01
+    companies = exp.build_companies(snap, ["NVDA"], year_keys=exp.display_mapped_years(2026))
+
+    def boom(*_a, **_k):
+        raise exp.JsonlAtomicError("injected atomic jsonl failure")
+
+    orig = exp.atomic_append_jsonl
+    exp.atomic_append_jsonl = boom  # type: ignore[method-assign]
+    aborted = False
+    try:
+        exp.seed_and_append_daily_snapshots(companies, ["NVDA"], snap, snap_path, year_keys=["2026E", "2027E", "2028E", "2029E"])
+    except exp.JsonlAtomicError:
+        aborted = True
+    finally:
+        exp.atomic_append_jsonl = orig  # type: ignore[method-assign]
+    after = jsonl.read_text(encoding="utf-8") if jsonl.exists() else ""
+    ok = aborted and after == original and no_fallback and fail_closed
+    record(
+        "jsonl_atomic_failure_aborts_test",
+        ok,
+        f"aborted={aborted} unchanged={after == original} no_fallback={no_fallback}",
+    )
+
+
+def test_global_pipeline_lock(fixture: Path) -> None:
+    aio = import_mod(fixture, "atomic_io")
+    lock_path = fixture / "data" / ".pipeline.lock"
+    lock = aio.acquire_global_pipeline_lock(fixture)
+    try:
+        child = subprocess.run(
+            [
+                sys.executable,
+                "-c",
+                "from pathlib import Path\n"
+                "import sys\n"
+                "sys.path.insert(0, 'tools')\n"
+                "import atomic_io\n"
+                "try:\n"
+                "    atomic_io.acquire_global_pipeline_lock(Path('.'))\n"
+                "    print('GOT_LOCK')\n"
+                "    raise SystemExit(0)\n"
+                "except atomic_io.PipelineLockedError:\n"
+                "    print('LOCKED')\n"
+                "    raise SystemExit(2)\n",
+            ],
+            cwd=str(fixture),
+            capture_output=True,
+            text=True,
+        )
+        export_rc = subprocess.call(
+            [sys.executable, str(fixture / "tools" / "export_web_data.py")],
+            cwd=str(fixture),
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        ok = child.returncode == 2 and "LOCKED" in (child.stdout or "")
+        ok = ok and export_rc != 0
+        ok = ok and lock_path.exists()
+        ok = ok and str(lock_path).endswith("data/.pipeline.lock")
+    finally:
+        lock.release()
+    lock2 = aio.acquire_global_pipeline_lock(fixture)
+    lock2.release()
+    record(
+        "global_pipeline_lock_test",
+        ok,
+        f"child={child.returncode} export_rc={export_rc} path={lock_path.name}",
+    )
+
+
+def test_fiscal_coverage_regression(fixture: Path) -> None:
+    sq = import_mod(fixture, "snapshot_quality")
+    prior = {
+        "tickers": {
+            "NVDA": {
+                "eps": {
+                    "2026E": {"consensus": 9.31},
+                    "2027E": {"consensus": 15.61},
+                    "2028E": {"consensus": 21.06},
+                }
+            }
+        }
+    }
+    new = {"tickers": {"NVDA": {"eps": {"2026E": {"consensus": 9.31}}}}}
+    gate = sq.snapshot_quality_gate(new, prior)
+    q = gate.get("quarantined") or []
+    hits = [x for x in q if x.get("reason") == "fiscal_coverage_regression" and x.get("status") == "needs_verification"]
+    written = sq.apply_quarantine(new, gate)
+    blob = written["tickers"]["NVDA"]
+    ok = gate.get("ok") is True and gate.get("publishable") is True
+    ok = ok and len(hits) >= 1
+    ok = ok and (
+        blob.get("needs_verification") is True or blob.get("fiscalCoverageNeedsVerification") is True
+    )
+    record("fiscal_coverage_regression_test", ok, f"hits={hits} status={gate.get('status')}")
+
+
+def test_price_outlier_needs_verification(fixture: Path) -> None:
+    sq = import_mod(fixture, "snapshot_quality")
+    prior = {"tickers": {"NVDA": {"price": 210.0, "eps": {"2027E": {"consensus": 15.61}}}}}
+    cases = [
+        (2100.0, "price_outlier_x10"),
+        (21000.0, "price_outlier_x100"),
+        (420.0, "price_outlier_large_move"),
+    ]
+    ok = True
+    details = []
+    for new_px, reason in cases:
+        new = {"tickers": {"NVDA": {"price": new_px, "eps": {"2027E": {"consensus": 15.61}}}}}
+        gate = sq.snapshot_quality_gate(new, prior)
+        q = gate.get("quarantined") or []
+        hit = [x for x in q if x.get("reason") == reason and x.get("status") == "needs_verification"]
+        written = sq.apply_quarantine(new, gate)
+        kept = written["tickers"]["NVDA"].get("price")
+        details.append(f"{reason}:{len(hit)}:{kept}")
+        ok = ok and len(hit) >= 1
+        ok = ok and gate.get("publishable") is True
+        ok = ok and abs(float(kept) - 210.0) < 1e-9
+        ok = ok and written["tickers"]["NVDA"].get("needs_verification") is True
+    record("price_outlier_needs_verification_test", ok, "; ".join(details))
+
+
+def test_mixed_build_generation_rejected(fixture: Path) -> None:
+    sq = import_mod(fixture, "snapshot_quality")
+    web = fixture / "web" / "data"
+    web.mkdir(parents=True, exist_ok=True)
+    alerts_path = fixture / "data" / "alerts" / "index.json"
+    alerts_path.write_text(
+        json.dumps({"alerts": [{"id": "keep-mixed"}], "activeAlerts": [{"id": "keep-mixed"}], "alertHistory": [{"id": "keep-mixed"}]}, indent=2)
+        + "\n",
+        encoding="utf-8",
+    )
+    before = alerts_path.read_bytes()
+    (web / "meta.json").write_text(json.dumps({"buildId": "aaa111", "dataVersion": "aaa111"}) + "\n", encoding="utf-8")
+    (web / "dashboard.json").write_text(json.dumps({"buildId": "bbb222", "dataVersion": "bbb222"}) + "\n", encoding="utf-8")
+    mixed = False
+    try:
+        sq.check_build_generation_consistency(web)
+    except sq.MixedBuildError:
+        mixed = True
+    rc = subprocess.call(
+        [sys.executable, str(fixture / "tools" / "export_web_data.py")],
+        cwd=str(fixture),
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    after = alerts_path.read_bytes()
+    ok = mixed and rc != 0 and after == before
+    # Restore a consistent pair so later exports in this fixture can proceed.
+    (web / "dashboard.json").write_text(json.dumps({"buildId": "aaa111", "dataVersion": "aaa111"}) + "\n", encoding="utf-8")
+    match = sq.check_build_generation_consistency(web)
+    ok = ok and match.get("ok") is True
+    record(
+        "mixed_build_generation_rejected_test",
+        ok,
+        f"mixed={mixed} rc={rc} alerts_unchanged={after == before}",
+    )
+
+
+def test_same_day_multiple_raw_snapshot_preserved(fixture: Path) -> None:
+    sq = import_mod(fixture, "snapshot_quality")
+    snap_dir = fixture / "data" / "snapshots"
+    s1 = {"snapshot_utc": "2026-09-15T01:00:00Z", "tickers": {"NVDA": {"price": 1}}}
+    s2 = {"snapshot_utc": "2026-09-15T08:00:00Z", "tickers": {"NVDA": {"price": 2}}}
+    p1 = sq.persist_raw_snapshot(snap_dir, s1, when=datetime(2026, 9, 15, 1, 0, 0, tzinfo=timezone.utc))
+    p2 = sq.persist_raw_snapshot(snap_dir, s2, when=datetime(2026, 9, 15, 8, 0, 0, tzinfo=timezone.utc))
+    ok = p1.exists() and p2.exists() and p1 != p2
+    ok = ok and p1.name.startswith("raw_") and p2.name.startswith("raw_")
+    ok = ok and json.loads(p1.read_text(encoding="utf-8")).get("snapshot_utc") == "2026-09-15T01:00:00Z"
+    ok = ok and json.loads(p2.read_text(encoding="utf-8")).get("snapshot_utc") == "2026-09-15T08:00:00Z"
+    ok = ok and (snap_dir / "2026-09-15.json").exists()
+    dated = json.loads((snap_dir / "2026-09-15.json").read_text(encoding="utf-8"))
+    ok = ok and "NVDA" in (dated.get("tickers") or {})
+    record(
+        "same_day_multiple_raw_snapshot_preserved_test",
+        ok,
+        f"p1={p1.name} p2={p2.name}",
+    )
+
 
 def main() -> int:
-    print("=== ai-eps-monitor Round 2 + Round 3 Data Integrity acceptance (isolated) ===")
+    print("=== ai-eps-monitor Pipeline Integrity acceptance (isolated) ===")
     print(f"ROOT={ROOT}")
     before = snapshot_prod_fingerprints()
 
@@ -1241,6 +1629,18 @@ def main() -> int:
         test_momentum_determinism(fixture)
         test_data_version_vs_refresh(fixture)
         test_review_same_build(fixture)
+
+        # Pipeline Integrity
+        test_rejected_snapshot_cannot_mutate_alert_db(fixture)
+        test_partial_collection_does_not_create_fake_daily_observation(fixture)
+        test_changed_since_checkpoint_advances(fixture)
+        test_source_1m_hold_preserves_event_age(fixture)
+        test_jsonl_atomic_failure_aborts(fixture)
+        test_global_pipeline_lock(fixture)
+        test_fiscal_coverage_regression(fixture)
+        test_price_outlier_needs_verification(fixture)
+        test_mixed_build_generation_rejected(fixture)
+        test_same_day_multiple_raw_snapshot_preserved(fixture)
 
     test_production_unmutated(before)
 

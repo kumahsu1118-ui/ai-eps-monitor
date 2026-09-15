@@ -35,6 +35,14 @@ import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+try:
+    from atomic_io import atomic_write_text
+except ImportError:
+    _sys_path_here = Path(__file__).resolve().parent
+    if str(_sys_path_here) not in sys.path:
+        sys.path.insert(0, str(_sys_path_here))
+    from atomic_io import atomic_write_text
+
 _here = Path(__file__).resolve().parent
 ROOT = _here.parent
 if not (ROOT / "data" / "snapshots").exists():
@@ -51,12 +59,14 @@ DRIVERS_DIR = ROOT / "data" / "drivers"
 ALERTS_PATH = ROOT / "data" / "alerts" / "index.json"
 UNIVERSE_PATH = ROOT / "data" / "universe.json"
 DAILY_JSONL = ROOT / "data" / "daily_eps_snapshots" / "daily.jsonl"
+SNAP_DIR = ROOT / "data" / "snapshots"
 
 TICKERS_DEFAULT = ["NVDA", "AVGO", "TSM", "MSFT", "BE", "KEYS"]
 
 # One-shot homepage window (within 14–30 days). Documented choice: 21 days.
 ONE_SHOT_ACTIVE_DAYS = 21
 CUMULATIVE_LOOKBACK_DAYS = 30
+SA_1M_ALERT_PCT = 5.0
 
 
 def now_utc_iso() -> str:
@@ -241,8 +251,15 @@ def alert(
 
 
 def age_days(alert_obj: dict, now: datetime | None = None) -> int:
+    """Age from lastMaterialChangeAt for SA 1M holds; else eventAt/eventDate/createdAt."""
     now = now or datetime.now(timezone.utc)
-    ev = parse_date(alert_obj.get("eventAt") or alert_obj.get("eventDate") or alert_obj.get("createdAt"))
+    ev = parse_date(
+        alert_obj.get("lastMaterialChangeAt")
+        or alert_obj.get("eventAt")
+        or alert_obj.get("eventDate")
+        or alert_obj.get("openedAt")
+        or alert_obj.get("createdAt")
+    )
     if ev is None:
         return 0
     return max(0, int((now - ev).total_seconds() // 86400))
@@ -250,6 +267,8 @@ def age_days(alert_obj: dict, now: datetime | None = None) -> int:
 
 def is_active(alert_obj: dict, now: datetime | None = None) -> bool:
     now = now or datetime.now(timezone.utc)
+    if str(alert_obj.get("lifecycleState") or "").lower() == "resolved":
+        return False
     until = parse_date(alert_obj.get("expiresAt") or alert_obj.get("activeUntil"))
     if until is not None:
         return now <= until
@@ -794,6 +813,139 @@ def rule5_driver_or_digest_flags(tickers: list[str]) -> list[dict]:
     return out
 
 
+def load_latest_snapshot_dict() -> dict | None:
+    if not SNAP_DIR.exists():
+        return None
+    dated = sorted(
+        p
+        for p in SNAP_DIR.glob("20*.json")
+        if not p.name.startswith("raw_") and re.match(r"^\d{4}-\d{2}-\d{2}", p.name)
+    )
+    if not dated:
+        return None
+    try:
+        return json.loads(dated[-1].read_text(encoding="utf-8"))
+    except Exception:
+        return None
+
+
+def sa_1m_stable_id(ticker: str, fiscal: str) -> str:
+    return make_alert_id("source_reported_1m_revision", ticker, fiscal, "sa1m", "sa_1m_hold")
+
+
+def rule6_source_reported_1m(tickers: list[str], snap: dict | None = None) -> list[dict]:
+    """Seeking Alpha source-reported |1M| >= 5% — stateful HOLD.
+
+    Labeled 'Seeking Alpha 1M' (not Internal 30D).
+    Hold fields: openedAt / lastMaterialChangeAt / lastObservedAt.
+    Age is computed from lastMaterialChangeAt.
+    """
+    snap = snap if snap is not None else load_latest_snapshot_dict()
+    if not snap:
+        return []
+    tickers_blob = snap.get("tickers") or {}
+    out = []
+    snap_utc = snap.get("snapshot_utc")
+    for t in tickers:
+        td = tickers_blob.get(t) or {}
+        eps = td.get("eps") or {}
+        for slot, year in eps.items():
+            if not isinstance(year, dict):
+                continue
+            rev = to_num(year.get("rev_1M_pct") if "rev_1M_pct" in year else year.get("rev1M"))
+            if rev is None or abs(rev) < SA_1M_ALERT_PCT:
+                continue
+            fiscal = year.get("reported_fiscal_label") or year.get("reportedFiscalLabel") or slot
+            direction = "upgrade" if rev > 0 else "downgrade"
+            a = alert(
+                "source_reported_1m_revision",
+                "high",
+                t,
+                f"{t} {fiscal}: Seeking Alpha 1M {direction} {rev:+.2f}% (≥5%)",
+                period=fiscal,
+                event_date="sa1m",
+                event_key="sa_1m_hold",
+                event_at=snap_utc,
+                revisionPct=rev,
+                source="Seeking Alpha 1M",
+                sourceLabel="Seeking Alpha 1M",
+                sourceWindow="1M",
+                notInternal30d=True,
+                oneshot=False,
+                lifecycleState="open",
+                slot=slot,
+            )
+            a["id"] = sa_1m_stable_id(t, fiscal)
+            a["expiresAt"] = None
+            a["activeUntil"] = None
+            out.append(a)
+    return out
+
+
+def apply_sa_1m_hold_state(
+    generated: list[dict],
+    prior_hist: list[dict] | None,
+    now: datetime | None = None,
+) -> list[dict]:
+    """Preserve openedAt / lastMaterialChangeAt; bump lastObservedAt; age from material change."""
+    now = now or datetime.now(timezone.utc)
+    now_iso = now.strftime("%Y-%m-%dT%H:%M:%SZ")
+    prior_by_id = {
+        a.get("id"): a
+        for a in (prior_hist or [])
+        if isinstance(a, dict) and a.get("rule") == "source_reported_1m_revision" and a.get("id")
+    }
+    out: list[dict] = []
+    for a in generated:
+        prior = prior_by_id.get(a.get("id"))
+        if prior and str(prior.get("lifecycleState") or "").lower() != "resolved":
+            opened = prior.get("openedAt") or prior.get("createdAt") or now_iso
+            a["openedAt"] = opened
+            a["createdAt"] = prior.get("createdAt") or a.get("createdAt") or opened
+            old_pct = to_num(prior.get("revisionPct"))
+            new_pct = to_num(a.get("revisionPct"))
+            material = False
+            if old_pct is not None and new_pct is not None:
+                if (old_pct >= 0) != (new_pct >= 0):
+                    material = True
+                elif abs(new_pct - old_pct) >= 1.0:
+                    material = True
+            a["lastMaterialChangeAt"] = (
+                now_iso if material else (prior.get("lastMaterialChangeAt") or opened)
+            )
+            a["lastObservedAt"] = now_iso
+            a["eventAt"] = a["lastMaterialChangeAt"]
+            a["oneshot"] = False
+            a["lifecycleState"] = "open"
+            a["expiresAt"] = None
+            a["activeUntil"] = None
+        else:
+            a["openedAt"] = now_iso
+            a["lastMaterialChangeAt"] = now_iso
+            a["lastObservedAt"] = now_iso
+            a["eventAt"] = now_iso
+            a["oneshot"] = False
+            a["lifecycleState"] = "open"
+            a["expiresAt"] = None
+            a["activeUntil"] = None
+        out.append(a)
+    gen_ids = {a.get("id") for a in out}
+    for aid, prior in prior_by_id.items():
+        if aid in gen_ids:
+            continue
+        if str(prior.get("lifecycleState") or "").lower() == "resolved":
+            out.append(prior)
+            continue
+        resolved = dict(prior)
+        resolved["lifecycleState"] = "resolved"
+        resolved["lastObservedAt"] = now_iso
+        resolved["resolvedAt"] = now_iso
+        resolved["expiresAt"] = now_iso
+        resolved["activeUntil"] = now_iso
+        out.append(resolved)
+    return out
+
+
 # Material rules shown on homepage (exclude informational insufficient-history)
 HOMEPAGE_RULES = {
     "single_revision_gt_2pct",
@@ -803,6 +955,7 @@ HOMEPAGE_RULES = {
     "gross_margin_pressure",
     "gross_margin_guidance_revision",
     "driver_status_change",
+    "source_reported_1m_revision",
     # legacy name kept if any residual
     "gm_guidance_change_gt_200bps",
 }
@@ -825,6 +978,11 @@ def evaluate_alerts(now: datetime | None = None) -> dict:
     generated.extend(rule3_results_and_guidance(tickers))
     generated.extend(rule4_gm(tickers))
     generated.extend(rule5_driver_or_digest_flags(tickers))
+    prior = load_json(ALERTS_PATH) or {}
+    prior_hist = prior.get("alertHistory") or prior.get("alerts") or []
+    sa_1m = rule6_source_reported_1m(tickers)
+    sa_1m = apply_sa_1m_hold_state(sa_1m, prior_hist, now=now)
+    generated.extend(sa_1m)
 
     # Deduplicate by id (keep first)
     seen = set()
@@ -857,9 +1015,12 @@ def evaluate_alerts(now: datetime | None = None) -> dict:
             old = hist_by_id[aid]
             if old.get("createdAt"):
                 a["createdAt"] = old["createdAt"]
-            if old.get("expiresAt") and not a.get("expiresAt"):
+            if a.get("oneshot") is not False and old.get("expiresAt") and not a.get("expiresAt"):
                 a["expiresAt"] = old["expiresAt"]
                 a["activeUntil"] = old.get("activeUntil") or old["expiresAt"]
+            for k in ("openedAt", "lastMaterialChangeAt", "lastObservedAt"):
+                if not a.get(k) and old.get(k):
+                    a[k] = old[k]
         hist_by_id[aid] = a
 
     history_all = list(hist_by_id.values())
@@ -949,7 +1110,7 @@ def evaluate_alerts(now: datetime | None = None) -> dict:
 
 def write_alerts(payload: dict) -> Path:
     ALERTS_PATH.parent.mkdir(parents=True, exist_ok=True)
-    ALERTS_PATH.write_text(json.dumps(payload, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    atomic_write_text(ALERTS_PATH, json.dumps(payload, indent=2, ensure_ascii=False) + "\n")
     return ALERTS_PATH
 
 

@@ -1,20 +1,24 @@
 #!/usr/bin/env bash
 # Sync exported web/ public files → site-repo → git push
 # NO_CHANGES (exit 0) when public payload hash unchanged vs site-repo/.data-version
+#
+# Pipeline order (do NOT run build_alerts before the quality gate):
+#   Collection → Quality Gate → publishable → persist → Alert Engine → Export → Publish
 set -euo pipefail
-ROOT=/workspace/ai-eps-monitor
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 WEB="$ROOT/web"
 REPO="$ROOT/site-repo"
-export PATH="/home/box/.local/bin:$PATH"
+export PATH="/home/box/.local/bin:${PATH:-}"
 
-python3 "$ROOT/tools/build_alerts.py"
-python3 "$ROOT/tools/export_web_data.py"
+# Integrity pipeline: lock → mixed-build check → quality gate → persist/daily →
+# Alert Engine → export. Rejected snapshots never mutate Alert DB.
+python3 "$ROOT/tools/pipeline.py"
 
 # Compute content hash of public payload (excludes meta publish-only stamps by hashing data files + app assets)
-HASH=$(python3 - <<'PY'
+HASH=$(python3 - <<PY
 import hashlib, json
 from pathlib import Path
-ROOT = Path("/workspace/ai-eps-monitor")
+ROOT = Path("$ROOT")
 WEB = ROOT / "web"
 h = hashlib.sha256()
 
@@ -77,7 +81,7 @@ python3 - <<PY
 import json
 from pathlib import Path
 from datetime import datetime, timezone, timedelta
-meta_path = Path("/workspace/ai-eps-monitor/web/data/meta.json")
+meta_path = Path("$ROOT") / "web" / "data" / "meta.json"
 meta = json.loads(meta_path.read_text(encoding="utf-8"))
 now = datetime.now(timezone(timedelta(hours=8)))
 utc = now.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -98,6 +102,8 @@ PY
 mkdir -p "$REPO/data"
 cp -a "$WEB/index.html" "$WEB/styles.css" "$WEB/app.js" "$REPO/"
 cp -a "$WEB/data/." "$REPO/data/"
+# Never publish pipeline lockfiles
+rm -f "$REPO/data/.pipeline.lock" "$REPO/data/"*.lock "$REPO/"*.lock 2>/dev/null || true
 cp "$REPO/index.html" "$REPO/404.html"
 touch "$REPO/.nojekyll"
 echo "$HASH" > "$VERSION_FILE"

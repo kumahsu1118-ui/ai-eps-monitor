@@ -48,7 +48,7 @@ cp -a "$ROOT"/web/index.html "$ROOT"/web/app.js "$ROOT"/web/styles.css "$DEST/we
 cp -a "$ROOT"/web/data/*.json "$DEST/web/data/" 2>/dev/null || true
 
 # Tools (no secrets)
-for f in export_web_data.py build_alerts.py run_acceptance_tests.py sa_parser.py publish_github_pages.sh build_review_zip.sh; do
+for f in export_web_data.py build_alerts.py run_acceptance_tests.py sa_parser.py publish_github_pages.sh build_review_zip.sh atomic_io.py snapshot_quality.py pipeline.py; do
   cp -a "$ROOT/tools/$f" "$DEST/tools/" 2>/dev/null || true
 done
 

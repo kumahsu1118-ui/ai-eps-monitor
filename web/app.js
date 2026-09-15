@@ -349,6 +349,8 @@
     state.alertHistory = (alerts && alerts.alertHistory) || state.alerts;
     state.alertEngineStatus = (alerts && alerts.alertEngineStatus) || (meta && meta.alertEngineStatus) || null;
     state.alertEngineError = (alerts && alerts.alertEngineError) || (meta && meta.alertEngineError) || null;
+    state.whatChanged = (alerts && (alerts.whatChangedSinceLastCollection || alerts.changedSinceLastCollection)) || [];
+    state.changedSinceLastCollection = state.whatChanged;
     state.ready = true;
     if (!state.chartTicker && state.watchlist.length) {
       state.chartTicker = state.watchlist[0];
@@ -603,10 +605,12 @@
   }
 
   /* ---------- alerts ---------- */
-  function alertAgeLabel(a) {
+    function alertAgeLabel(a) {
     let days = a && a.ageDays;
-    if (days == null && a && (a.eventAt || a.eventDate || a.createdAt)) {
-      const t = Date.parse(a.eventAt || a.eventDate || a.createdAt);
+    if (days == null && a) {
+      const t = Date.parse(
+        a.lastMaterialChangeAt || a.eventAt || a.eventDate || a.openedAt || a.createdAt
+      );
       if (!Number.isNaN(t)) days = Math.max(0, Math.floor((Date.now() - t) / 86400000));
     }
     if (days == null || Number.isNaN(Number(days))) return "";
@@ -665,6 +669,23 @@
         });
         box.appendChild(details);
       }
+    }
+    const changed = state.whatChanged || state.changedSinceLastCollection || [];
+    if (changed.length) {
+      const ch = el("div", { className: "changed-since section-note" });
+      ch.appendChild(
+        el("div", {
+          className: "section-title",
+          text: "What Changed Since Last Collection",
+          style: "font-size:14px;margin:12px 0 6px",
+        })
+      );
+      changed.slice(0, 8).forEach((a) => {
+        const msg =
+          typeof a === "string" ? a : a.summary || a.message || a.title || JSON.stringify(a);
+        ch.appendChild(el("div", { className: "alert-item", text: msg }));
+      });
+      box.appendChild(ch);
     }
     parent.appendChild(box);
   }

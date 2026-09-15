@@ -7,6 +7,12 @@ Repo: https://github.com/kumahsu1118-ui/ai-eps-monitor
 
 ## End-to-end steps
 
+**Hard order:** Collection → Quality Gate → publishable → persist → Alert Engine → Export → Publish.
+
+Rejected snapshots do **not** persist canonical data, do **not** append daily EPS, do **not** mutate Alert DB, and do **not** advance `comparisonCheckpoint`.
+
+`tools/publish_github_pages.sh` must **not** run `build_alerts.py` before the quality gate. It calls `tools/pipeline.py`.
+
 ### 1. Wake & load context
 - Bot reads watchlist (`web/data/watchlist.json` or `data/universe.json`).
 - Reads `README.md`, `sources/fiscal_year_map.md`, prior snapshot under `data/snapshots/`.
@@ -24,14 +30,18 @@ Repo: https://github.com/kumahsu1118-ui/ai-eps-monitor
 - Record **Last Close** (regular session) and **After Hours** separately if shown.
 - Preserve **Reported Fiscal Period Ending**; map only to FY-mapped calendar **slots** (not true CY EPS).
 
-**On failure for one ticker:** Write `Data unavailable` / null for that name; continue others; list gaps.
+**On failure for one ticker:** Write `Data unavailable` / null for that name; continue others; list gaps. **Do not** append a fake daily EPS observation from LKG / failed tickers.
 
-### 4. Persist private database (append-only)
-- Append dated file under `data/snapshots/` (never overwrite prior dates).
-- **Daily EPS snapshots:** append/update `data/daily_eps_snapshots/` for the calendar day **even if EPS unchanged**.
-- **Revision events:** append to `data/revisions/history.jsonl` **only if** consensus EPS actually changed vs prior snapshot. No empty revision rows.
+### 4. Quality gate then persist (only if publishable)
+- Quality gate: empty / 0-row parser → **reject** (no persist, no Alert Engine).
+- Fiscal coverage regression, price outlier (×10 / ×100 / large move), extreme EPS jump → `needs_verification` (still publishable; prior canonical kept).
+- Timestamped `raw_YYYYMMDDTHHMMSSZ.json` snapshots: same-day files are **preserved**.
+- Canonical persist only when `publishable`.
+- **Daily EPS snapshots:** append `data/daily_eps_snapshots/` for the calendar day **even if EPS unchanged**, storing **all** `displayMappedYears`. Skip collection-failed / LKG tickers. `analystCount=0` → `coverageStatus=warning`.
+- JSONL writes are **atomic fail-closed** (no `open(..., "a")` fallback).
+- Global mutex: `data/.pipeline.lock`.
 
-**On failure mid-write:** Prefer leave prior files intact; do not delete `history.jsonl` or earnings digests.
+**On failure mid-write:** Abort; leave prior files intact; do not delete `history.jsonl` or earnings digests; do not mutate Alert DB.
 
 ### 5. Earnings digests (persistent)
 - Read `data/earnings/{TICKER}.json`.
@@ -40,14 +50,15 @@ Repo: https://github.com/kumahsu1118-ui/ai-eps-monitor
 
 **On failure:** Keep existing digest; flag gap in digest `dataGaps`.
 
-### 6. Export web JSON
+### 6. Alert Engine then export web JSON
 ```bash
-python3 /workspace/ai-eps-monitor/tools/export_web_data.py
+python3 /workspace/ai-eps-monitor/tools/pipeline.py
 ```
-- Builds `web/data/*.json` (companies, valuation, revisions, eps_history from **daily snapshots**, earnings aggregate, meta freshness, alerts).
-- Markdown backups optional (`dashboard/`).
+- Alert Engine runs **after** a publishable persist (never pre-gate).
+- Builds `web/data/*.json` plus `dashboard.json` (`buildId` must match `meta.json`; mixed generations are rejected).
+- `comparisonCheckpoint` advances **only after successful export**. What Changed diffs against the **previous** checkpoint.
 
-**On failure:** Do not publish; notify user with exporter traceback.
+**On failure:** Do not publish; do not advance checkpoint; notify user with exporter traceback.
 
 ### 7. Publish to GitHub Pages
 ```bash
