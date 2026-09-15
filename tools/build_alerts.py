@@ -43,7 +43,13 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 _here = Path(__file__).resolve().parent
-ROOT = _here.parent
+if str(_here) not in sys.path:
+    sys.path.insert(0, str(_here))
+try:
+    from project_root import detect_root
+    ROOT = detect_root(_here)
+except Exception:
+    ROOT = _here.parent
 if not (ROOT / "data" / "snapshots").exists():
     cand = Path(__file__).resolve().parent
     for _ in range(5):

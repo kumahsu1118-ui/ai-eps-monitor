@@ -322,26 +322,95 @@ def validate_ticker_payload(
     return {"ticker": ticker, "status": status, "errors": errors, "warnings": warnings, "rowCount": len(usable)}
 
 
+def fiscal_of_row(row: dict | None) -> str | None:
+    """Reported Fiscal Period Ending identity (never the mapped display slot)."""
+    if not isinstance(row, dict):
+        return None
+    for k in (
+        "reportedFiscalPeriodEnding",
+        "reported_fiscal_label",
+        "reportedFiscalLabel",
+        "fiscalPeriodEnding",
+        "Fiscal Year",
+    ):
+        v = row.get(k)
+        if v and not is_explicit_unavailable(v):
+            return str(v).strip()
+    return None
+
+
+def content_hash_obj(obj) -> str:
+    blob = json.dumps(obj, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+    import hashlib
+    return hashlib.sha256(blob).hexdigest()
+
+
+def immutable_quarantine_path(qdir: Path, name: str, payload: dict) -> Path:
+    """Do not overwrite an existing different quarantine; preserve both via hash suffix."""
+    qdir = Path(qdir)
+    qdir.mkdir(parents=True, exist_ok=True)
+    base = name if name.endswith(".quarantine") else f"{name}.quarantine"
+    path = qdir / base
+    ch = content_hash_obj(payload)[:12]
+    if not path.exists():
+        return path
+    try:
+        existing = json.loads(path.read_text(encoding="utf-8"))
+        if content_hash_obj(existing) == content_hash_obj(payload):
+            return path
+    except Exception:
+        pass
+    stem = base[: -len(".quarantine")] if base.endswith(".quarantine") else base
+    alt = qdir / f"{stem}_{ch}.quarantine"
+    n = 0
+    while alt.exists():
+        try:
+            existing = json.loads(alt.read_text(encoding="utf-8"))
+            if content_hash_obj(existing) == content_hash_obj(payload):
+                return alt
+        except Exception:
+            pass
+        n += 1
+        alt = qdir / f"{stem}_{ch}_{n}.quarantine"
+    return alt
+
+
 def extreme_eps_change(
     ticker: str,
     new_td: dict,
     prior_td: dict | None,
     threshold_pct: float = EXTREME_EPS_CHANGE_PCT,
 ) -> list[dict]:
-    """Return list of extreme consensus changes (>threshold) vs last-known-good."""
+    """Extreme consensus changes vs LKG keyed ONLY by Fiscal Period Ending.
+
+    Mapped-slot fallback is forbidden: a fiscal-period rollover (same slot, new
+    reported period ending) is not an extreme change of the prior period.
+    """
     hits = []
     if not prior_td or not isinstance(prior_td, dict):
         return hits
     new_eps = (new_td or {}).get("eps") or {}
     old_eps = (prior_td or {}).get("eps") or {}
+    old_by_fiscal: dict[str, tuple] = {}
+    if isinstance(old_eps, dict):
+        for slot, orow in old_eps.items():
+            if not isinstance(orow, dict):
+                continue
+            fiscal = fiscal_of_row(orow)
+            if fiscal:
+                old_by_fiscal[fiscal] = (orow, slot)
     for slot, nrow in new_eps.items():
         if not isinstance(nrow, dict):
             continue
-        orow = old_eps.get(slot)
-        if not isinstance(orow, dict):
+        fiscal = fiscal_of_row(nrow)
+        if not fiscal:
             continue
-        nc = to_num(nrow.get("consensus"))
-        oc = to_num(orow.get("consensus"))
+        prev = old_by_fiscal.get(fiscal)
+        if prev is None:
+            continue  # new fiscal identity / rollover — not a revision of the old period
+        orow, old_slot = prev
+        nc = to_num(nrow.get("consensus") if "consensus" in nrow else nrow.get("eps"))
+        oc = to_num(orow.get("consensus") if "consensus" in orow else orow.get("eps"))
         if nc is None or oc is None or oc == 0:
             continue
         change = abs(nc - oc) / abs(oc) * 100.0
@@ -349,6 +418,8 @@ def extreme_eps_change(
             hits.append({
                 "ticker": ticker,
                 "slot": slot,
+                "priorSlot": old_slot,
+                "fiscalPeriodEnding": fiscal,
                 "priorConsensus": oc,
                 "newConsensus": nc,
                 "changePct": change,
@@ -813,14 +884,13 @@ def persist_snapshot_if_ok(
             # Prefer dedicated quarantine dir when writing into snapshots/
             if path.parent.name == "snapshots":
                 quarantine_dir = path.parent / "quarantine"
-        if quarantine_dir is not None:
-            quarantine_dir.mkdir(parents=True, exist_ok=True)
-            qpath = quarantine_dir / f"{path.name}.quarantine"
-        else:
-            qpath = path.with_suffix(path.suffix + ".quarantine")
         quarantine = dict(snap_out)
         quarantine["qualityGate"] = gate
         quarantine["status"] = gate["status"]
+        if quarantine_dir is not None:
+            qpath = immutable_quarantine_path(quarantine_dir, path.name, quarantine)
+        else:
+            qpath = immutable_quarantine_path(path.parent, path.name, quarantine)
         atomic_write_json(qpath, quarantine)
         # Ensure no validated candidate remains at target path
         if path.exists() and "quarantine" not in path.parts:

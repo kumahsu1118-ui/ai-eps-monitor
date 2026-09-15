@@ -27,11 +27,14 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 _here = Path(__file__).resolve().parent
-ROOT = _here.parent
 if str(_here) not in sys.path:
     sys.path.insert(0, str(_here))
 
-from atomic_io import append_jsonl_atomic, atomic_write_json  # noqa: E402
+from project_root import detect_root, export_root_env  # noqa: E402
+
+ROOT = detect_root(_here)
+
+from atomic_io import append_jsonl_atomic, atomic_write_json, dumps_json  # noqa: E402
 import snapshot_quality as sq  # noqa: E402
 
 INCOMING_DIR = ROOT / "data" / "incoming"
@@ -248,7 +251,6 @@ def generate_revision_events(
         prior_td = lkg.get(tu) or lkg.get(t) or {}
         prior_eps = (prior_td or {}).get("eps") or {} if isinstance(prior_td, dict) else {}
         prior_by_fiscal: dict[str, tuple] = {}
-        prior_by_slot: dict[str, tuple] = {}
         if isinstance(prior_eps, dict):
             for slot, row in prior_eps.items():
                 if not isinstance(row, dict):
@@ -257,7 +259,6 @@ def generate_revision_events(
                 cons = _consensus_of_row(row)
                 if fiscal:
                     prior_by_fiscal[fiscal] = (cons, row, slot)
-                prior_by_slot[slot] = (cons, row, slot)
 
         cur_eps = td.get("eps") or {}
         if not isinstance(cur_eps, dict):
@@ -272,7 +273,9 @@ def generate_revision_events(
             if not fiscal:
                 continue
             align = _calendar_of_row(row, fiscal)
-            prev_tuple = prior_by_fiscal.get(fiscal) or prior_by_slot.get(slot)
+            # Fiscal Period Ending is the only identity. Mapped-slot fallback is
+            # forbidden: a rollover that reuses a display slot is NOT a revision.
+            prev_tuple = prior_by_fiscal.get(fiscal)
             if prev_tuple is None and (tu, fiscal) in hist_last_eps:
                 prev_tuple = (hist_last_eps[(tu, fiscal)], {}, slot)
             if prev_tuple is None:
@@ -497,6 +500,7 @@ def publish_prebuilt_site() -> int:
     env["PIPELINE_LOCK_HELD"] = env.get("PIPELINE_LOCK_HELD", "1")
     env["SKIP_EXPORT"] = "1"
     env["PUBLISH_PREBUILT"] = "1"
+    env.update(export_root_env(ROOT))
     return subprocess.call(
         ["bash", str(_here / "publish_github_pages.sh")],
         cwd=str(ROOT),
@@ -532,6 +536,7 @@ def ingest_and_build(
         "quarantinePath": None,
         "stageDir": str(stage_dir),
         "ok": False,
+        "committed": False,
     }
 
     _write_run_status(
@@ -577,10 +582,10 @@ def ingest_and_build(
     QUARANTINE_DIR.mkdir(parents=True, exist_ok=True)
 
     if gate.get("publishable") is not True:
-        qpath = QUARANTINE_DIR / f"{tentative_name}.quarantine"
         quarantine = dict(snap_norm)
         quarantine["qualityGate"] = gate
         quarantine["status"] = gate.get("status")
+        qpath = sq.immutable_quarantine_path(QUARANTINE_DIR, tentative_name, quarantine)
         atomic_write_json(qpath, quarantine)
         abort_staged_run(stage_dir, f"gate:{gate.get('status')}:{gate.get('reason')}")
         result["quarantinePath"] = str(qpath)
@@ -592,7 +597,10 @@ def ingest_and_build(
         )
         return result
 
-    # STAGE only — do NOT write validated / revisions / mark incoming yet
+    # STAGE into a work root — canonical live trees are not mutated until CURRENT
+    import transaction as txn
+
+    work = txn.prepare_work_root(ROOT, stage_dir)
     stage_snap = stage_dir / "snapshot.json"
     atomic_write_json(stage_snap, snap_norm)
     events = generate_revision_events(
@@ -603,22 +611,33 @@ def ingest_and_build(
             ev["eventId"] = revision_event_id(ev)
     atomic_write_json(stage_dir / "proposed_revisions.json", {"events": events})
     (stage_dir / "proposed_revisions.jsonl").write_text(
-        "".join(json.dumps(e, ensure_ascii=False) + "\n" for e in events),
+        "".join(dumps_json(e, indent=None, ensure_ascii=False) + "\n" for e in events),
         encoding="utf-8",
     )
+
+    work_snap_dir = work / "data" / "snapshots"
+    work_snap_dir.mkdir(parents=True, exist_ok=True)
+    work_validated = work_snap_dir / tentative_name
+    if not work_validated.exists():
+        atomic_write_json(work_validated, snap_norm)
+    try:
+        atomic_write_json(work_snap_dir / "latest.json", snap_norm)
+    except Exception:
+        pass
+    work_rev = work / "data" / "revisions" / "history.jsonl"
+    append_revision_events(events, work_rev)
 
     if run_export:
         env = os.environ.copy()
         env["PIPELINE_LOCK_HELD"] = env.get("PIPELINE_LOCK_HELD", "1")
-        env["INGEST_GATED_SNAPSHOT"] = str(stage_snap)
+        env.update(export_root_env(work))
+        env["INGEST_GATED_SNAPSHOT"] = str(work_validated)
         env["INGEST_SNAPSHOT_UTC"] = snap_utc
         env["INGEST_REVISIONS_DONE"] = "1"
         env["INGEST_COLLECTION_RUN_ID"] = run_id
-        # Revisions owned by commit (INGEST_REVISIONS_DONE=1). Daily/alerts/web built here;
-        # FAULT_INJECT at export start still aborts before history mutations.
         rc = subprocess.call(
             [sys.executable, str(_here / "export_web_data.py")],
-            cwd=str(ROOT),
+            cwd=str(work),
             env=env,
         )
         result["exportRc"] = rc
@@ -633,16 +652,39 @@ def ingest_and_build(
             )
             return result
 
-    # COMMIT after successful export (or when export skipped after gate)
-    validated_path = commit_staged_run(stage_dir, snap_norm, events, snap_utc)
+    # COMMIT: generation snapshot + atomic CURRENT pointer + promote
+    try:
+        gen_id = txn.commit_work(ROOT, work, gen_id=run_id)
+    except Exception as exc:
+        abort_staged_run(stage_dir, f"commit_failed:{exc}")
+        result["runStatus"] = "aborted"
+        result["ok"] = False
+        result["committed"] = False
+        print(f"ERROR: COMMIT failed — previous generation preserved ({exc})", file=sys.stderr)
+        return result
+
+    validated_path = SNAP_DIR / tentative_name
+    if not validated_path.exists():
+        validated_path = commit_staged_run(stage_dir, snap_norm, events, snap_utc)
+    else:
+        _write_run_status(
+            stage_dir,
+            "committed",
+            {
+                "validatedPath": str(validated_path),
+                "revisionEventsAppended": len(events),
+                "generationId": gen_id,
+                "committedAt": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+            },
+        )
     result["validatedPath"] = str(validated_path)
+    result["generationId"] = gen_id
     try:
         run_meta = json.loads((stage_dir / "run.json").read_text(encoding="utf-8"))
-        result["revisionEventsAppended"] = int(run_meta.get("revisionEventsAppended") or 0)
+        result["revisionEventsAppended"] = int(run_meta.get("revisionEventsAppended") or len(events))
     except Exception:
-        result["revisionEventsAppended"] = 0
+        result["revisionEventsAppended"] = len(events)
 
-    # Mark processed incoming ONLY after successful commit
     try:
         processed = incoming_path.with_suffix(incoming_path.suffix + ".processed")
         if incoming_path.exists():
@@ -652,14 +694,14 @@ def ingest_and_build(
         print(f"WARNING: could not mark incoming processed: {rename_exc}", file=sys.stderr)
 
     result["runStatus"] = "committed"
+    result["committed"] = True
     result["ok"] = True
     print(
         f"INGEST OK status={gate.get('status')} validated={validated_path} "
-        f"revisions=+{result['revisionEventsAppended']} runId={run_id}"
+        f"revisions=+{result['revisionEventsAppended']} runId={run_id} gen={gen_id}"
     )
 
     if run_publish:
-        # Publish prebuilt site — must NOT re-export / recompute revisions
         rc = publish_prebuilt_site()
         result["publishRc"] = rc
         if rc not in (0,):

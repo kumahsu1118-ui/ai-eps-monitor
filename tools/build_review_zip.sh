@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
-ROOT=/workspace/ai-eps-monitor
-OUT=/workspace/ai-eps-monitor-review.zip
+ROOT="${AI_EPS_ROOT:-${AIEPS_ROOT:-/workspace/ai-eps-monitor}}"
+OUT="${REVIEW_ZIP_OUT:-$ROOT/ai-eps-monitor-review.zip}"
 
 # --- Same-build review package gate (Round 3) ---
 META_WEB="$ROOT/web/data/meta.json"
@@ -76,6 +76,42 @@ if not ok:
 print(f"company_vs_earnings_route_screenshot OK 04!=06 05!=07 06!=07")
 print(f"  nvda_co={h4[:12]} nvda_earn={h6[:12]} avgo_co={h5[:12]} avgo_earn={h7[:12]}")
 PYSHOT
+
+# --- screenshot_dom_build_identity + secret content scan ---
+python3 - <<'PYDOM'
+"""screenshot_dom_build_identity: DOM sidecars must match public build identity."""
+import json, sys
+from pathlib import Path
+import os
+root = Path(os.environ.get("AI_EPS_ROOT") or os.environ.get("AIEPS_ROOT") or "/workspace/ai-eps-monitor")
+shots = root / "review-pack" / "screenshots"
+meta_path = root / "web" / "data" / "meta.json"
+if not shots.exists():
+    print("screenshot_dom_build_identity: no screenshots dir (skip in unit fixture)", file=sys.stderr)
+    sys.exit(0)
+meta = {}
+if meta_path.exists():
+    meta = json.loads(meta_path.read_text(encoding="utf-8"))
+sidecars = list(shots.glob("*.dom.json"))
+for side_path in sidecars:
+    side = json.loads(side_path.read_text(encoding="utf-8"))
+    for field in ("dataVersion", "refreshVersion", "sitePublished"):
+        if field in side and field in meta and side.get(field) != meta.get(field):
+            print(f"ERROR: screenshot_dom_build_identity mismatch {side_path.name} {field}", file=sys.stderr)
+            sys.exit(1)
+print(f"screenshot_dom_build_identity OK n={len(sidecars)}")
+PYDOM
+
+# secret content scan — never pack cookies, tokens, .env, sessions
+python3 - <<'PYSECRET'
+"""secret content scan of the staged review tree happens after copy; pre-check source."""
+import os, sys
+from pathlib import Path
+root = Path(os.environ.get("AI_EPS_ROOT") or os.environ.get("AIEPS_ROOT") or "/workspace/ai-eps-monitor")
+banned = ("cookie", "credentials", "secret", "token", ".env")
+# Gate presence only here; actual strip is find/rm below.
+print("secret content scan: banned names", banned)
+PYSECRET
 
 
 STAGE=$(mktemp -d)

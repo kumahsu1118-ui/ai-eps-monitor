@@ -16,22 +16,18 @@ import re
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-# Resolve project root whether invoked as tools/ or web/tools/ (symlink)
+# Resolve project root. AI_EPS_ROOT / AIEPS_ROOT always wins (staging work roots).
 _here = Path(__file__).resolve().parent
-ROOT = _here.parent if (_here / "export_web_data.py").exists() and (_here.parent / "data" / "snapshots").exists() else _here
-if not (ROOT / "data" / "snapshots").exists():
-    cand = Path(__file__).resolve().parent
-    for _ in range(5):
-        if (cand / "data" / "snapshots").exists():
-            ROOT = cand
-            break
-        cand = cand.parent
-if not (ROOT / "data" / "snapshots").exists():
-    raise SystemExit("Cannot locate project root with data/snapshots")
-
 import sys as _sys
 if str(_here) not in _sys.path:
     _sys.path.insert(0, str(_here))
+from project_root import detect_root  # noqa: E402
+
+ROOT = detect_root(_here)
+if os.environ.get("AI_EPS_ROOT") or os.environ.get("AIEPS_ROOT"):
+    (ROOT / "data" / "snapshots").mkdir(parents=True, exist_ok=True)
+elif not (ROOT / "data" / "snapshots").exists():
+    raise SystemExit("Cannot locate project root with data/snapshots")
 
 SNAP_DIR = ROOT / "data" / "snapshots"
 REV_PATH = ROOT / "data" / "revisions" / "history.jsonl"
@@ -2076,14 +2072,21 @@ def stamp_build_id(obj, build_id: str, *, ticker_map: bool = False):
 
 
 def quarantine_snapshot(snap_path: Path, snap: dict, gate: dict) -> Path:
-    """Save invalid snapshot to quarantine; do not touch public web/data."""
+    """Save invalid snapshot to quarantine; do not touch public web/data.
+
+    Same-timestamp collisions preserve both files via content-hash suffix.
+    """
     qdir = ROOT / "data" / "snapshots" / "quarantine"
     qdir.mkdir(parents=True, exist_ok=True)
     name = snap_path.name if snap_path else "unknown.json"
-    qpath = qdir / f"{name}.quarantine"
     payload = dict(snap) if isinstance(snap, dict) else {"raw": snap}
     payload["qualityGate"] = gate
     payload["status"] = gate.get("status")
+    try:
+        import snapshot_quality as sq
+        qpath = sq.immutable_quarantine_path(qdir, name, payload)
+    except Exception:
+        qpath = qdir / f"{name}.quarantine"
     write_json(qpath, payload)
     return qpath
 
@@ -2347,6 +2350,21 @@ def _main_locked() -> int:
     data_version = compute_data_version(payload_parts)
     build_id = data_version
 
+    app_version = None
+    release_version = None
+    try:
+        from static_publish import compute_app_version, compute_release_version
+        web_dir = ROOT / "web"
+        app_version = compute_app_version(web_dir)
+        release_version = compute_release_version(
+            web_dir,
+            app_version=app_version,
+            data_version=data_version,
+            refresh_version=refresh_version,
+        )
+    except Exception as _ver_exc:
+        print(f"WARNING: app/release version hash failed: {_ver_exc}")
+
     meta = {
         "lastUpdated": snap_utc,
         "lastUpdatedDisplay": display,
@@ -2389,6 +2407,9 @@ def _main_locked() -> int:
         "collectionStatusLabel": coll["collectionStatusLabel"],
         "driverExportErrors": driver_errors or None,
         "qualityGate": snap.get("qualityGate"),
+        "schemaVersion": "1",
+        "appVersion": app_version,
+        "releaseVersion": release_version,
     }
 
     WEB_DATA.mkdir(parents=True, exist_ok=True)

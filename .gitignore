@@ -37,3 +37,6 @@ site-repo/.git/
 web/overview-verify.png
 web/pages-verify.png
 *.lock
+data/generations/
+data/staging/
+data/.pending-publish

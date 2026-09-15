@@ -142,6 +142,9 @@ def build_fixture(dest: Path) -> Path:
         "ingest_snapshot.py",
         "publish_github_pages.sh",
         "build_review_zip.sh",
+        "transaction.py",
+        "project_root.py",
+        "static_publish.py",
     ):
         src = ROOT / "tools" / name
         if src.exists():
@@ -154,6 +157,11 @@ def build_fixture(dest: Path) -> Path:
         src = ROOT / "web" / name
         if src.exists():
             shutil.copy2(src, web / name)
+    vendor_src = ROOT / "web" / "vendor"
+    if vendor_src.exists():
+        shutil.copytree(vendor_src, web / "vendor", dirs_exist_ok=True)
+    elif (ROOT / "vendor").exists():
+        shutil.copytree(ROOT / "vendor", web / "vendor", dirs_exist_ok=True)
 
     for sub in ("snapshots", "revisions", "drivers", "earnings", "alerts", "daily_eps_snapshots", "incoming", "snapshots/quarantine"):
         (dest / "data" / sub).mkdir(parents=True, exist_ok=True)
@@ -3502,6 +3510,430 @@ def test_null_eps_not_daily_observation(fixture: Path) -> None:
     record("null_eps_not_daily_observation_test", ok, f"new={len(new_lines)} nulls={len(null_obs)}")
 
 
+# ---------------------------------------------------------------------------
+# Identity Integrity + Deployment Completeness + Crash Consistency
+# ---------------------------------------------------------------------------
+
+
+def _publish_env(fixture: Path, extra: dict | None = None) -> dict:
+    import os
+    env = os.environ.copy()
+    env["AI_EPS_ROOT"] = str(fixture)
+    env["AIEPS_ROOT"] = str(fixture)
+    env["PIPELINE_LOCK_HELD"] = "1"
+    env["SKIP_EXPORT"] = "1"
+    env["PUBLISH_PREBUILT"] = "1"
+    env["SKIP_GIT_PUSH"] = "1"
+    env.pop("FAULT_INJECT_PUSH", None)
+    env.pop("FAULT_INJECT_COMMIT", None)
+    env.pop("FAULT_INJECT_EXPORT_EXIT", None)
+    if extra:
+        env.update({k: str(v) for k, v in extra.items() if v is not None})
+        for k, v in extra.items():
+            if v is None:
+                env.pop(k, None)
+    return env
+
+
+def _ensure_publishable_meta(fixture: Path) -> None:
+    meta_path = fixture / "web" / "data" / "meta.json"
+    if not meta_path.exists():
+        run_export(fixture)
+    meta = json.loads(meta_path.read_text(encoding="utf-8"))
+    qg = meta.get("qualityGate") or {}
+    if qg.get("publishable") is not True:
+        meta["qualityGate"] = {"status": "ok", "publishable": True, "reason": None}
+        meta_path.write_text(json.dumps(meta, indent=2) + "\n", encoding="utf-8")
+
+
+def test_clean_publish_contains_all_index_assets(fixture: Path) -> None:
+    """Published site-repo must contain every local asset referenced by index.html, including vendor/**."""
+    sp = import_mod(fixture, "static_publish")
+    _ensure_publishable_meta(fixture)
+    html = (fixture / "web" / "index.html").read_text(encoding="utf-8")
+    assets = sp.parse_index_assets(html)
+    ok = "vendor/chart.umd.min.js" in assets
+    ok = ok and "app.js" in assets and "styles.css" in assets
+    env = _publish_env(fixture)
+    proc = subprocess.run(
+        ["bash", str(fixture / "tools" / "publish_github_pages.sh")],
+        cwd=str(fixture),
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    repo = fixture / "site-repo"
+    missing = [a for a in assets if not (repo / a).exists()]
+    vendor_files = list((fixture / "web" / "vendor").rglob("*")) if (fixture / "web" / "vendor").exists() else []
+    vendor_missing = [
+        str(p.relative_to(fixture / "web"))
+        for p in vendor_files
+        if p.is_file() and not (repo / p.relative_to(fixture / "web")).exists()
+    ]
+    busted = (repo / "index.html").read_text(encoding="utf-8") if (repo / "index.html").exists() else ""
+    ok = ok and proc.returncode == 0
+    ok = ok and not missing and not vendor_missing
+    ok = ok and "?v=" in busted
+    record(
+        "clean_publish_contains_all_index_assets_test",
+        ok,
+        f"rc={proc.returncode} assets={assets} missing={missing} vendor_missing={vendor_missing}",
+    )
+
+
+def test_vendor_change_changes_app_version(fixture: Path) -> None:
+    """appVersion / releaseVersion must include vendor/** content."""
+    sp = import_mod(fixture, "static_publish")
+    web = fixture / "web"
+    vendor = web / "vendor"
+    vendor.mkdir(parents=True, exist_ok=True)
+    vf = vendor / "chart.umd.min.js"
+    if not vf.exists():
+        vf.write_text("/* chart stub */\n", encoding="utf-8")
+    v1 = sp.compute_app_version(web)
+    r1 = sp.compute_release_version(web, app_version=v1)
+    vf.write_bytes(vf.read_bytes() + b"\n/* vendor bump */\n")
+    v2 = sp.compute_app_version(web)
+    r2 = sp.compute_release_version(web, app_version=v2)
+    ok = bool(v1) and bool(v2) and v1 != v2
+    ok = ok and r1 != r2
+    record("vendor_change_changes_app_version_test", ok, f"v1={v1[:12]} v2={v2[:12]}")
+
+
+def test_vendor_change_triggers_publish(fixture: Path) -> None:
+    """Vendor-only change must change publish hash so NO_CHANGES is not taken."""
+    sp = import_mod(fixture, "static_publish")
+    _ensure_publishable_meta(fixture)
+    web = fixture / "web"
+    vf = web / "vendor" / "chart.umd.min.js"
+    vf.parent.mkdir(parents=True, exist_ok=True)
+    if not vf.exists():
+        vf.write_text("/* chart */\n", encoding="utf-8")
+    h1 = sp.compute_publish_hash(web)
+    env = _publish_env(fixture)
+    proc1 = subprocess.run(
+        ["bash", str(fixture / "tools" / "publish_github_pages.sh")],
+        cwd=str(fixture),
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    vf.write_bytes(vf.read_bytes() + b"\n/* trigger */\n")
+    h2 = sp.compute_publish_hash(web)
+    proc2 = subprocess.run(
+        ["bash", str(fixture / "tools" / "publish_github_pages.sh")],
+        cwd=str(fixture),
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    out2 = (proc2.stdout or "") + (proc2.stderr or "")
+    ok = h1 != h2
+    ok = ok and proc1.returncode == 0 and proc2.returncode == 0
+    ok = ok and "NO_CHANGES" not in out2
+    record("vendor_change_triggers_publish_test", ok, f"h1={h1[:12]} h2={h2[:12]} out2={out2[-120:]}")
+
+
+def test_fiscal_period_rollover_not_revision(fixture: Path) -> None:
+    """Same mapped slot + new Fiscal Period Ending is NOT an EPS revision."""
+    ing = import_mod(fixture, "ingest_snapshot")
+    lkg = {"NVDA": _good_ticker(200, 9.31, 15.61, "Jan 2027", "Jan 2028")}
+    rolled = _good_ticker(200, 15.61, 21.06, "Jan 2028", "Jan 2029")
+    current = {"snapshot_utc": "2027-02-01T08:00:00Z", "tickers": {"NVDA": rolled}}
+    events = ing.generate_revision_events(current, lkg)
+    false_rev = [
+        e
+        for e in events
+        if isinstance(e.get("Previous EPS"), (int, float))
+        and abs(float(e["Previous EPS"]) - 9.31) < 1e-9
+        and abs(float(e.get("Current EPS") or 0) - 15.61) < 1e-9
+    ]
+    jan28_real = [
+        e
+        for e in events
+        if e.get("Fiscal Year") == "Jan 2028"
+        and isinstance(e.get("Previous EPS"), (int, float))
+        and abs(float(e["Previous EPS"]) - 15.61) < 1e-9
+        and abs(float(e.get("Current EPS") or 0) - 15.61) < 1e-9
+        and "baseline" not in str(e.get("Reason") or "").lower()
+    ]
+    ok = len(false_rev) == 0
+    ok = ok and len(jan28_real) == 0  # same fiscal, same EPS
+    src = (fixture / "tools" / "ingest_snapshot.py").read_text(encoding="utf-8")
+    ok = ok and "prior_by_slot.get(slot)" not in src
+    record("fiscal_period_rollover_not_revision_test", ok, f"n={len(events)} false={len(false_rev)}")
+
+
+def test_fiscal_period_rollover_not_extreme_change(fixture: Path) -> None:
+    """Rollover that reuses a mapped slot must not trip extreme_eps_change."""
+    sq = import_mod(fixture, "snapshot_quality")
+    prior = {
+        "tickers": {
+            "NVDA": _good_ticker(200, 10.0, 15.0, "Jan 2027", "Jan 2028"),
+        }
+    }
+    rolled = {
+        "tickers": {
+            "NVDA": _good_ticker(200, 15.0, 20.0, "Jan 2028", "Jan 2029"),
+        }
+    }
+    hits = sq.extreme_eps_change("NVDA", rolled["tickers"]["NVDA"], prior["tickers"]["NVDA"])
+    gate = sq.gate_snapshot(rolled, prior, expected_tickers=["NVDA"])
+    ok = hits == []
+    ok = ok and not (gate.get("extremeChanges") or [])
+    ok = ok and gate.get("reason") != "extreme_eps_change"
+    record(
+        "fiscal_period_rollover_not_extreme_change_test",
+        ok,
+        f"hits={hits} reason={gate.get('reason')}",
+    )
+
+
+def test_same_fiscal_period_real_revision(fixture: Path) -> None:
+    """Same Fiscal Period Ending + different consensus is a real revision."""
+    ing = import_mod(fixture, "ingest_snapshot")
+    sq = import_mod(fixture, "snapshot_quality")
+    lkg = {"NVDA": _good_ticker(200, 9.0, 15.61, "Jan 2027", "Jan 2028")}
+    cur_td = _good_ticker(200, 9.0, 16.00, "Jan 2027", "Jan 2028")
+    current = {"snapshot_utc": "2026-09-21T08:00:00Z", "tickers": {"NVDA": cur_td}}
+    events = ing.generate_revision_events(current, lkg)
+    ev = next((e for e in events if e.get("Fiscal Year") == "Jan 2028"), None)
+    ok = ev is not None
+    if ev:
+        ok = ok and abs(float(ev["Previous EPS"]) - 15.61) < 1e-9
+        ok = ok and abs(float(ev["Current EPS"]) - 16.00) < 1e-9
+        ok = ok and "baseline" not in str(ev.get("Reason") or "").lower()
+    # Same identity with a huge swing is extreme
+    huge = json.loads(json.dumps(lkg))
+    huge["NVDA"]["eps"]["2027E"]["consensus"] = 30.0
+    hits = sq.extreme_eps_change("NVDA", huge["NVDA"], lkg["NVDA"])
+    ok = ok and len(hits) >= 1
+    ok = ok and hits[0].get("fiscalPeriodEnding") == "Jan 2028"
+    record("same_fiscal_period_real_revision_test", ok, f"ev={ev is not None} extreme={len(hits)}")
+
+
+def test_crash_during_commit_preserves_previous_generation(fixture: Path) -> None:
+    """SIGKILL after generation snapshot / before CURRENT leaves previous generation live."""
+    import os
+    txn = import_mod(fixture, "transaction")
+    stage_a = fixture / "data" / "staging" / "crashA"
+    work_a = txn.prepare_work_root(fixture, stage_a)
+    (work_a / "web").mkdir(parents=True, exist_ok=True)
+    (work_a / "web" / "markerA.txt").write_text("generation-A\n", encoding="utf-8")
+    gen_a = txn.commit_work(fixture, work_a, gen_id="genA")
+    fp_a = txn.canonical_fingerprint(fixture)
+    ok = txn.read_current(fixture) == "genA"
+    ok = ok and (fixture / "web" / "markerA.txt").read_text(encoding="utf-8") == "generation-A\n"
+
+    stage_b = fixture / "data" / "staging" / "crashB"
+    work_b = txn.prepare_work_root(fixture, stage_b)
+    (work_b / "web" / "markerB.txt").write_text("generation-B\n", encoding="utf-8")
+
+    env = os.environ.copy()
+    env["FAULT_INJECT_COMMIT"] = "crash_before_pointer"
+    env["AI_EPS_ROOT"] = str(fixture)
+    env["AIEPS_ROOT"] = str(fixture)
+    code = (
+        "import sys\n"
+        f"sys.path.insert(0, {str(fixture / 'tools')!r})\n"
+        "import transaction as t\n"
+        "from pathlib import Path\n"
+        f"t.commit_work(Path({str(fixture)!r}), Path({str(work_b)!r}), gen_id='genB')\n"
+    )
+    proc = subprocess.run(
+        [sys.executable, "-c", code],
+        cwd=str(fixture),
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=20,
+    )
+    ok = ok and proc.returncode != 0
+    ok = ok and txn.read_current(fixture) == gen_a
+    ok = ok and txn.canonical_fingerprint(fixture) == fp_a
+    ok = ok and not (fixture / "web" / "markerB.txt").exists()
+    ok = ok and (fixture / "data" / "generations" / "CURRENT").read_text(encoding="utf-8").strip() == "genA"
+    record(
+        "crash_during_commit_preserves_previous_generation_test",
+        ok,
+        f"rc={proc.returncode} current={txn.read_current(fixture)} a={gen_a}",
+    )
+
+
+def test_real_parent_lock_publish_integration(fixture: Path) -> None:
+    """Parent holds flock; child publish with PIPELINE_LOCK_HELD=1 must exit rc==0."""
+    import os
+    import fcntl
+    _ensure_publishable_meta(fixture)
+    pub = fixture / "tools" / "publish_github_pages.sh"
+    body = pub.read_text(encoding="utf-8")
+    ok = "PIPELINE_LOCK_HELD" in body and "skip re-flock" in body
+    ok = ok and "AI_EPS_ROOT" in body
+    lock_path = fixture / "data" / ".pipeline.lock"
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    fd = os.open(str(lock_path), os.O_CREAT | os.O_RDWR, 0o644)
+    proc = None
+    proc2 = None
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        env = _publish_env(fixture)
+        proc = subprocess.run(
+            ["bash", str(pub)],
+            cwd=str(fixture),
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        out = (proc.stdout or "") + (proc.stderr or "")
+        ok = ok and proc.returncode == 0
+        ok = ok and "skip re-flock" in out
+
+        env2 = _publish_env(fixture, {"PIPELINE_LOCK_HELD": None})
+        proc2 = subprocess.run(
+            ["bash", str(pub)],
+            cwd=str(fixture),
+            env=env2,
+            capture_output=True,
+            text=True,
+            timeout=8,
+        )
+        out2 = (proc2.stdout or "") + (proc2.stderr or "")
+        ok = ok and proc2.returncode != 0
+        ok = ok and "RUN ALREADY IN PROGRESS" in out2
+    finally:
+        try:
+            fcntl.flock(fd, fcntl.LOCK_UN)
+        except OSError:
+            pass
+        os.close(fd)
+    record(
+        "real_parent_lock_publish_integration_test",
+        ok,
+        f"held_rc={None if proc is None else proc.returncode} blocked_rc={None if proc2 is None else proc2.returncode}",
+    )
+
+
+def test_atomic_jsonl_rejects_nonfinite(fixture: Path) -> None:
+    """append_jsonl_atomic uses allow_nan=False and rejects NaN/Inf."""
+    aio = import_mod(fixture, "atomic_io")
+    src = (fixture / "tools" / "atomic_io.py").read_text(encoding="utf-8")
+    ok = "allow_nan=False" in src or "allow_nan = False" in src
+    p = fixture / "data" / "daily_eps_snapshots" / "nonfinite.jsonl"
+    if p.exists():
+        p.unlink()
+    raised_nan = False
+    try:
+        aio.append_jsonl_atomic(p, [{"ticker": "NVDA", "consensus": float("nan")}])
+    except (aio.NonFiniteNumberError, ValueError):
+        raised_nan = True
+    raised_inf = False
+    try:
+        aio.append_jsonl_atomic(p, [{"ticker": "NVDA", "consensus": float("inf")}])
+    except (aio.NonFiniteNumberError, ValueError):
+        raised_inf = True
+    aio.append_jsonl_atomic(p, [{"ticker": "NVDA", "consensus": 15.61}])
+    ok = ok and raised_nan and raised_inf
+    ok = ok and p.exists()
+    text = p.read_text(encoding="utf-8")
+    ok = ok and "15.61" in text
+    ok = ok and "NaN" not in text and "Infinity" not in text
+    record("atomic_jsonl_rejects_nonfinite_test", ok, f"nan={raised_nan} inf={raised_inf}")
+
+
+def test_pending_publish_retry(fixture: Path) -> None:
+    """Failed publish writes pending marker; next run retries and clears it."""
+    aio = import_mod(fixture, "atomic_io")
+    _ensure_publishable_meta(fixture)
+    pending = fixture / "data" / ".pending-publish"
+    version_file = fixture / "site-repo" / ".data-version"
+    if pending.exists():
+        pending.unlink()
+    if version_file.exists():
+        version_file.unlink()
+    # Force a payload change so HASH does not take the NO_CHANGES path before fault inject.
+    vf = fixture / "web" / "vendor" / "chart.umd.min.js"
+    vf.parent.mkdir(parents=True, exist_ok=True)
+    if vf.exists():
+        vf.write_bytes(vf.read_bytes() + b"\n/* pending-retry */\n")
+    else:
+        vf.write_text("/* pending-retry */\n", encoding="utf-8")
+    env_fail = _publish_env(fixture, {"FAULT_INJECT_PUSH": "1"})
+    proc1 = subprocess.run(
+        ["bash", str(fixture / "tools" / "publish_github_pages.sh")],
+        cwd=str(fixture),
+        env=env_fail,
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    ok = proc1.returncode != 0
+    ok = ok and pending.exists()
+    ok = ok and aio.has_pending_publish(fixture)
+    env_ok = _publish_env(fixture)
+    proc2 = subprocess.run(
+        ["bash", str(fixture / "tools" / "publish_github_pages.sh")],
+        cwd=str(fixture),
+        env=env_ok,
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    out2 = (proc2.stdout or "") + (proc2.stderr or "")
+    ok = ok and proc2.returncode == 0
+    ok = ok and not pending.exists()
+    ok = ok and "pending publish retry" in ((proc1.stdout or "") + (proc1.stderr or "") + out2)
+    record(
+        "pending_publish_retry_test",
+        ok,
+        f"rc1={proc1.returncode} rc2={proc2.returncode} pending_after={pending.exists()} out1={(proc1.stderr or '')[-180:]}",
+    )
+
+
+def test_quarantine_collision_preserved(fixture: Path) -> None:
+    """Same-timestamp quarantine with different content must not overwrite the first."""
+    sq = import_mod(fixture, "snapshot_quality")
+    ing = import_mod(fixture, "ingest_snapshot")
+    ing.ROOT = fixture
+    ing.INCOMING_DIR = fixture / "data" / "incoming"
+    ing.SNAP_DIR = fixture / "data" / "snapshots"
+    ing.QUARANTINE_DIR = fixture / "data" / "snapshots" / "quarantine"
+    ing.STAGING_DIR = fixture / "data" / "staging"
+    ing.REV_PATH = fixture / "data" / "revisions" / "history.jsonl"
+    ing.UNIVERSE_PATH = fixture / "data" / "universe.json"
+    qdir = fixture / "data" / "snapshots" / "quarantine"
+    utc = "2026-09-27T12:00:00Z"
+    bad_a = {
+        "snapshot_utc": utc,
+        "note": "alpha",
+        "tickers": {
+            "NVDA": {
+                "price": 0,
+                "eps": {
+                    "2026E": {"consensus": 1.0, "high": 1.1, "low": 0.9, "analysts": 5, "rev_1M_pct": 0.1, "reported_fiscal_label": "Jan 2027"},
+                    "2027E": {"consensus": 2.0, "high": 2.1, "low": 1.9, "analysts": 5, "rev_1M_pct": 0.1, "reported_fiscal_label": "Jan 2028"},
+                },
+            }
+        },
+    }
+    bad_b = json.loads(json.dumps(bad_a))
+    bad_b["note"] = "beta"
+    bad_b["tickers"]["NVDA"]["eps"]["2026E"]["consensus"] = 1.5
+    incoming_a = _write_incoming_from_snap(fixture, bad_a, name="qcol_a.json")
+    r1 = ing.ingest_and_build(incoming_a, expected_tickers=["NVDA"], run_export=False, run_publish=False)
+    incoming_b = _write_incoming_from_snap(fixture, bad_b, name="qcol_b.json")
+    r2 = ing.ingest_and_build(incoming_b, expected_tickers=["NVDA"], run_export=False, run_publish=False)
+    p1 = Path(r1.get("quarantinePath") or "")
+    p2 = Path(r2.get("quarantinePath") or "")
+    ok = p1.exists() and p2.exists() and p1.resolve() != p2.resolve()
+    ok = ok and json.loads(p1.read_text(encoding="utf-8")).get("note") == "alpha"
+    ok = ok and json.loads(p2.read_text(encoding="utf-8")).get("note") == "beta"
+    qfiles = list(qdir.glob("*2026-09-27T120000Z*"))
+    ok = ok and len(qfiles) >= 2
+    record("quarantine_collision_preserved_test", ok, f"p1={p1.name} p2={p2.name} n={len(qfiles)}")
 
 
 def main() -> int:
@@ -3618,6 +4050,19 @@ def main() -> int:
         test_source_domain_classification(fixture)
         test_revision_generation_failure_blocks_export(fixture)
         test_null_eps_not_daily_observation(fixture)
+
+        # Identity Integrity + Deployment Completeness + Crash Consistency
+        test_clean_publish_contains_all_index_assets(fixture)
+        test_vendor_change_changes_app_version(fixture)
+        test_vendor_change_triggers_publish(fixture)
+        test_fiscal_period_rollover_not_revision(fixture)
+        test_fiscal_period_rollover_not_extreme_change(fixture)
+        test_same_fiscal_period_real_revision(fixture)
+        test_crash_during_commit_preserves_previous_generation(fixture)
+        test_real_parent_lock_publish_integration(fixture)
+        test_atomic_jsonl_rejects_nonfinite(fixture)
+        test_pending_publish_retry(fixture)
+        test_quarantine_collision_preserved(fixture)
 
     test_production_unmutated(before)
 
