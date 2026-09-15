@@ -13,8 +13,8 @@
   "consensusDataAsOfDisplay": "Sep 15, 2026 09:36 Taipei Time",
   "lastSuccessfulCollection": "2026-09-15T01:36:00Z",
   "lastSuccessfulCollectionDisplay": "Sep 15, 2026 09:36 Taipei Time",
-  "sitePublished": "2026-09-15T09:26:52Z",
-  "sitePublishedDisplay": "Sep 15, 2026 17:26 Taipei Time",
+  "sitePublished": "2026-09-15T09:27:51Z",
+  "sitePublishedDisplay": "Sep 15, 2026 17:27 Taipei Time",
   "dataStale": false,
   "nextExpected": "2026-09-16T00:00:00Z",
   "staleAfter": "2026-09-16T06:00:00Z",
@@ -35,9 +35,9 @@
   "dataVersion": "7f93184951a93aef15985e40abd73ff0ac5e796069798909ac17b85730a8ba8b",
   "refreshVersion": "13b6e576e814b2f5cdbbfd778ce61edb4e1f7a7df9dd9a13a3922bab864f9bb0",
   "buildId": "7f93184951a93aef15985e40abd73ff0ac5e796069798909ac17b85730a8ba8b",
-  "alertEngineLastEvaluated": "2026-09-15T09:04:26Z",
-  "alertEngineLastAttempt": "2026-09-15T09:04:26Z",
-  "alertEngineLastSuccessfulEvaluation": "2026-09-15T09:04:26Z",
+  "alertEngineLastEvaluated": "2026-09-15T09:27:21Z",
+  "alertEngineLastAttempt": "2026-09-15T09:27:21Z",
+  "alertEngineLastSuccessfulEvaluation": "2026-09-15T09:27:21Z",
   "alertEngineStatus": "ok",
   "alertEngineError": null,
   "oneShotActiveDays": 21,
@@ -82,5 +82,8 @@
     "missingTickers": [],
     "unexpectedTickers": [],
     "message": "ok"
-  }
+  },
+  "schemaVersion": "1",
+  "appVersion": "09a6f4aeca12515f1277d9950974af77e32d21e75735c34cdde2ce0838cf0e13",
+  "releaseVersion": "4987b2ca69090f2f656c1f089bdedc48f5a180e287d05008b631b5657eed4f4a"
 }
