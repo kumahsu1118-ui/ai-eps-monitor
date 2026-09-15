@@ -107,6 +107,7 @@ def append_jsonl_atomic(path: Path, rows: list[dict], *, lock_path: Path | None 
 
 PIPELINE_LOCK_NAME = ".pipeline.lock"
 RUN_IN_PROGRESS_MSG = "RUN ALREADY IN PROGRESS"
+PENDING_PUBLISH_NAME = ".pending-publish"
 
 
 class GlobalPipelineLock:
@@ -157,4 +158,29 @@ class PipelineBusy(RuntimeError):
 
 def default_pipeline_lock_path(root: Path) -> Path:
     return Path(root) / "data" / PIPELINE_LOCK_NAME
+
+
+def pending_publish_path(root: Path) -> Path:
+    return Path(root) / "data" / PENDING_PUBLISH_NAME
+
+
+def write_pending_publish(root: Path, payload: dict | None = None) -> Path:
+    path = pending_publish_path(root)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    body = payload if isinstance(payload, dict) else {"pending": True}
+    atomic_write_json(path, body)
+    return path
+
+
+def clear_pending_publish(root: Path) -> None:
+    path = pending_publish_path(root)
+    if path.exists():
+        try:
+            path.unlink()
+        except OSError:
+            pass
+
+
+def has_pending_publish(root: Path) -> bool:
+    return pending_publish_path(root).exists()
 

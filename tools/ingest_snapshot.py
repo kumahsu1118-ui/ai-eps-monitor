@@ -1,18 +1,21 @@
 #!/usr/bin/env python3
-"""Single E2E ingest entrypoint (deterministic, transactional).
+"""Single E2E ingest entrypoint — sole writer of pipeline state.
 
 Fixed flow:
   Incoming raw → Quality Gate (per-ticker LKG)
-  → STAGE under data/staging/<runId>/ (runStatus=staged)
-  → revision/daily/alerts/web build
-  → atomic COMMIT to validated persistent history (runStatus=committed)
-  → (optional) publish_prebuilt_site (no second export)
+  → STAGE under data/staging/<runId>/work (runStatus=staged)
+  → revision/daily/alerts/web build in the work root
+  → generation snapshot + atomic CURRENT flip (runStatus=committed)
+  → materialize live trees from CURRENT (materializationStatus ok/failed/pending)
+  → (optional) publish_prebuilt_site (publish-only, no second export)
 
-On export failure → ABORT (runStatus=aborted): must NOT become LKG;
-incoming must NOT be marked successfully processed.
+Export failure BEFORE CURRENT → ABORT (runStatus=aborted): must NOT become LKG.
+Materialization failure AFTER CURRENT → committed + materializationStatus
+failed/pending, never aborted. Retry with --materialize-current.
 
 Browser/collection writes ONLY data/incoming/<UTC timestamp>.json.
 Only this module may COMMIT validated snapshots + revision history.
+Standalone export/publish are read-only / publish-only unless --legacy-mutate.
 """
 from __future__ import annotations
 
@@ -27,9 +30,20 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 _here = Path(__file__).resolve().parent
-ROOT = _here.parent
 if str(_here) not in sys.path:
     sys.path.insert(0, str(_here))
+
+try:
+    from project_root import detect_root, export_root_env
+except Exception:  # pragma: no cover
+    def detect_root(start=None):
+        return Path(start or _here).resolve().parent if start else _here.parent
+
+    def export_root_env(root):
+        resolved = str(Path(root).resolve())
+        return {"AI_EPS_ROOT": resolved, "AIEPS_ROOT": resolved}
+
+ROOT = detect_root(_here)
 
 from atomic_io import append_jsonl_atomic, atomic_write_json  # noqa: E402
 import snapshot_quality as sq  # noqa: E402
@@ -497,6 +511,7 @@ def publish_prebuilt_site() -> int:
     env["PIPELINE_LOCK_HELD"] = env.get("PIPELINE_LOCK_HELD", "1")
     env["SKIP_EXPORT"] = "1"
     env["PUBLISH_PREBUILT"] = "1"
+    env.update(export_root_env(ROOT))
     return subprocess.call(
         ["bash", str(_here / "publish_github_pages.sh")],
         cwd=str(ROOT),
@@ -532,6 +547,8 @@ def ingest_and_build(
         "quarantinePath": None,
         "stageDir": str(stage_dir),
         "ok": False,
+        "committed": False,
+        "materializationStatus": None,
     }
 
     _write_run_status(
@@ -592,7 +609,10 @@ def ingest_and_build(
         )
         return result
 
-    # STAGE only — do NOT write validated / revisions / mark incoming yet
+    # STAGE into a work root — live canonical trees are not mutated until CURRENT
+    import transaction as txn
+
+    work = txn.prepare_work_root(ROOT, stage_dir)
     stage_snap = stage_dir / "snapshot.json"
     atomic_write_json(stage_snap, snap_norm)
     events = generate_revision_events(
@@ -607,18 +627,31 @@ def ingest_and_build(
         encoding="utf-8",
     )
 
+    work_snap_dir = work / "data" / "snapshots"
+    work_snap_dir.mkdir(parents=True, exist_ok=True)
+    work_validated = work_snap_dir / tentative_name
+    if not work_validated.exists():
+        atomic_write_json(work_validated, snap_norm)
+    try:
+        atomic_write_json(work_snap_dir / "latest.json", snap_norm)
+    except Exception:
+        pass
+    work_rev = work / "data" / "revisions" / "history.jsonl"
+    append_revision_events(events, work_rev)
+
     if run_export:
         env = os.environ.copy()
         env["PIPELINE_LOCK_HELD"] = env.get("PIPELINE_LOCK_HELD", "1")
-        env["INGEST_GATED_SNAPSHOT"] = str(stage_snap)
+        env.update(export_root_env(work))
+        env["INGEST_GATED_SNAPSHOT"] = str(work_validated)
         env["INGEST_SNAPSHOT_UTC"] = snap_utc
         env["INGEST_REVISIONS_DONE"] = "1"
         env["INGEST_COLLECTION_RUN_ID"] = run_id
-        # Revisions owned by commit (INGEST_REVISIONS_DONE=1). Daily/alerts/web built here;
-        # FAULT_INJECT at export start still aborts before history mutations.
+        env["LEGACY_MUTATE"] = "1"  # ingest is the sole writer; persist into work root
+        # FAULT_INJECT at export start still aborts before CURRENT.
         rc = subprocess.call(
-            [sys.executable, str(_here / "export_web_data.py")],
-            cwd=str(ROOT),
+            [sys.executable, str(_here / "export_web_data.py"), "--legacy-mutate"],
+            cwd=str(work),
             env=env,
         )
         result["exportRc"] = rc
@@ -628,21 +661,51 @@ def ingest_and_build(
             result["ok"] = False
             print(
                 f"ERROR: export_web_data.py exited {rc} — ABORT staged run "
-                f"(validated/revisions/incoming untouched)",
+                f"(CURRENT not flipped; validated/revisions/incoming untouched)",
                 file=sys.stderr,
             )
             return result
 
-    # COMMIT after successful export (or when export skipped after gate)
-    validated_path = commit_staged_run(stage_dir, snap_norm, events, snap_utc)
-    result["validatedPath"] = str(validated_path)
+    # COMMIT: generation snapshot + atomic CURRENT pointer, then materialize.
+    # After CURRENT, materialization failure is committed (never aborted).
+    try:
+        commit_info = txn.commit_work(ROOT, work, gen_id=run_id)
+    except Exception as exc:
+        abort_staged_run(stage_dir, f"commit_failed:{exc}")
+        result["runStatus"] = "aborted"
+        result["ok"] = False
+        result["committed"] = False
+        print(f"ERROR: COMMIT failed before CURRENT — aborted ({exc})", file=sys.stderr)
+        return result
+
+    gen_id = commit_info.get("generationId") or run_id
+    mat_status = commit_info.get("materializationStatus") or "ok"
+    result["generationId"] = gen_id
+    result["materializationStatus"] = mat_status
+    result["committed"] = True
+
+    validated_path = SNAP_DIR / tentative_name
+    if not validated_path.exists() and mat_status == "ok":
+        validated_path = commit_staged_run(stage_dir, snap_norm, events, snap_utc)
+    else:
+        _write_run_status(
+            stage_dir,
+            "committed",
+            {
+                "validatedPath": str(validated_path) if validated_path.exists() else None,
+                "revisionEventsAppended": len(events),
+                "generationId": gen_id,
+                "materializationStatus": mat_status,
+                "committedAt": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+            },
+        )
+    result["validatedPath"] = str(validated_path) if validated_path.exists() else None
     try:
         run_meta = json.loads((stage_dir / "run.json").read_text(encoding="utf-8"))
-        result["revisionEventsAppended"] = int(run_meta.get("revisionEventsAppended") or 0)
+        result["revisionEventsAppended"] = int(run_meta.get("revisionEventsAppended") or len(events))
     except Exception:
-        result["revisionEventsAppended"] = 0
+        result["revisionEventsAppended"] = len(events)
 
-    # Mark processed incoming ONLY after successful commit
     try:
         processed = incoming_path.with_suffix(incoming_path.suffix + ".processed")
         if incoming_path.exists():
@@ -652,14 +715,20 @@ def ingest_and_build(
         print(f"WARNING: could not mark incoming processed: {rename_exc}", file=sys.stderr)
 
     result["runStatus"] = "committed"
-    result["ok"] = True
+    result["ok"] = mat_status == "ok"
     print(
-        f"INGEST OK status={gate.get('status')} validated={validated_path} "
-        f"revisions=+{result['revisionEventsAppended']} runId={run_id}"
+        f"INGEST OK status={gate.get('status')} validated={result['validatedPath']} "
+        f"revisions=+{result['revisionEventsAppended']} runId={run_id} gen={gen_id} "
+        f"materialization={mat_status}"
     )
+    if mat_status != "ok":
+        print(
+            f"WARNING: CURRENT flipped but materializationStatus={mat_status} — "
+            "retry with --materialize-current (never aborted)",
+            file=sys.stderr,
+        )
 
-    if run_publish:
-        # Publish prebuilt site — must NOT re-export / recompute revisions
+    if run_publish and mat_status == "ok":
         rc = publish_prebuilt_site()
         result["publishRc"] = rc
         if rc not in (0,):
@@ -681,7 +750,7 @@ def ingest_latest_incoming(**kwargs) -> dict:
 
 
 def main(argv: list[str] | None = None) -> int:
-    ap = argparse.ArgumentParser(description="Deterministic transactional ingest entrypoint")
+    ap = argparse.ArgumentParser(description="Deterministic transactional ingest entrypoint (sole writer)")
     ap.add_argument(
         "incoming",
         nargs="?",
@@ -694,6 +763,11 @@ def main(argv: list[str] | None = None) -> int:
         help="After single export+commit, publish_prebuilt_site (no second export)",
     )
     ap.add_argument("--write-incoming", help="Write given snapshot JSON path into data/incoming/ only")
+    ap.add_argument(
+        "--materialize-current",
+        action="store_true",
+        help="Retry live materialization from CURRENT (post-commit; never aborts)",
+    )
     args = ap.parse_args(argv)
 
     if args.write_incoming:
@@ -715,6 +789,14 @@ def main(argv: list[str] | None = None) -> int:
             print(RUN_IN_PROGRESS_MSG, flush=True)
             return 2
     try:
+        if args.materialize_current:
+            import transaction as txn
+            info = txn.materialize_from_current(ROOT)
+            print(
+                f"MATERIALIZE CURRENT gen={info.get('generationId')} "
+                f"status={info.get('materializationStatus')} committed={info.get('committed')}"
+            )
+            return 0 if info.get("materializationStatus") == "ok" else 1
         if args.incoming:
             result = ingest_and_build(
                 Path(args.incoming),

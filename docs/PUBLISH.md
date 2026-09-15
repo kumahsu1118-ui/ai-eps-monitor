@@ -11,13 +11,12 @@ Source of truth:
 To refresh the public site:
 
 ```bash
-python3 tools/export_web_data.py
-bash tools/sync_pages_root.sh
-git add index.html 404.html app.js styles.css data/*.json .data-version web/data
-git commit -m "Update dashboard data"
-git push
+python3 tools/ingest_snapshot.py --publish
+# or, publish-only from the committed CURRENT generation:
+bash tools/publish_github_pages.sh
 ```
 
-`sync_pages_root.sh` copies public JSON onto `data/*.json` without deleting pipeline subdirectories.
+Standalone `python3 tools/export_web_data.py` is read-only (no daily/alerts persist) unless `--legacy-mutate`.
+`publish_github_pages.sh` is publish-only unless `--legacy-mutate`.
 
-`tools/publish_github_pages.sh` is a wrapper around `sync_pages_root.sh` (this repo is the Pages repo; there is no separate `site-repo` clone).
+Publish copies CURRENT generation `web/` (full static tree, cache-bust `?v=`) into `site-repo/` / Pages root. Pending-publish retries use `ensure_live_matches_current` and prefer CURRENT `web/` over a drifted live tree.

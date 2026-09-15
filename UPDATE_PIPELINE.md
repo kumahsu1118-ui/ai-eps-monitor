@@ -5,6 +5,30 @@ Routine: **AI EPS Monitor daily check** — weekdays `0 8 * * 1-5` (Taipei / CRO
 Public site: https://kumahsu1118-ui.github.io/ai-eps-monitor/  
 Repo: https://github.com/kumahsu1118-ui/ai-eps-monitor  
 
+## Writer roles (fail-closed)
+
+| Command | Default role | May persist snapshots / revisions / daily / alerts? |
+|---------|--------------|------------------------------------------------------|
+| `python3 tools/ingest_snapshot.py` | **Sole writer** | Yes — stages in a work root, flips `data/generations/CURRENT`, then materializes live trees |
+| `python3 tools/export_web_data.py` | **Pure read-only** | No. Writes public `web/data/*.json` only. Persist requires `--legacy-mutate` |
+| `bash tools/publish_github_pages.sh` | **Publish-only** | No. Copies CURRENT generation `web/` to Pages. Re-export requires `--legacy-mutate` |
+
+`--legacy-mutate` is the only switch that lets standalone export/publish mutate pipeline state. Do not use it in the daily path; ingest already persists into its work root.
+
+## Commit vs materialization
+
+1. Gate + stage under `data/staging/<runId>/work`.
+2. Export (legacy-mutate **inside the work root only**).
+3. Snapshot `data/generations/<id>/` and **atomically flip `CURRENT`** — this is COMMIT (`runStatus=committed`).
+4. Materialize live trees from CURRENT (`materializationStatus=ok`).
+5. If step 4 fails: **still committed**. `materializationStatus` is `failed` or `pending`, **never `aborted`**. Retry:
+
+```bash
+python3 tools/ingest_snapshot.py --materialize-current
+```
+
+Publish retries (`data/.pending-publish`) call `ensure_live_matches_current` and prefer CURRENT generation `web/` over a drifted live tree.
+
 ## End-to-end steps
 
 ### 1. Wake & load context
@@ -26,12 +50,15 @@ Repo: https://github.com/kumahsu1118-ui/ai-eps-monitor
 
 **On failure for one ticker:** Write `Data unavailable` / null for that name; continue others; list gaps.
 
-### 4. Persist private database (append-only)
-- Append dated file under `data/snapshots/` (never overwrite prior dates).
-- **Daily EPS snapshots:** append/update `data/daily_eps_snapshots/` for the calendar day **even if EPS unchanged**.
-- **Revision events:** append to `data/revisions/history.jsonl` **only if** consensus EPS actually changed vs prior snapshot. No empty revision rows.
+### 4. Persist via ingest (sole writer)
+```bash
+python3 tools/ingest_snapshot.py --publish
+```
+- Incoming JSON under `data/incoming/` only.
+- Quality gate → work-root stage → CURRENT commit → materialize → publish-only.
 
-**On failure mid-write:** Prefer leave prior files intact; do not delete `history.jsonl` or earnings digests.
+**On failure before CURRENT:** `runStatus=aborted`; leave prior generation intact.  
+**On materialization failure after CURRENT:** retry `--materialize-current`.
 
 ### 5. Earnings digests (persistent)
 - Read `data/earnings/{TICKER}.json`.
@@ -40,24 +67,29 @@ Repo: https://github.com/kumahsu1118-ui/ai-eps-monitor
 
 **On failure:** Keep existing digest; flag gap in digest `dataGaps`.
 
-### 6. Export web JSON
+### 6. Export web JSON (read-only by default)
 ```bash
-python3 /workspace/ai-eps-monitor/tools/export_web_data.py
+python3 tools/export_web_data.py
 ```
-- Builds `web/data/*.json` (companies, valuation, revisions, eps_history from **daily snapshots**, earnings aggregate, meta freshness, alerts).
-- Markdown backups optional (`dashboard/`).
+- Builds `web/data/*.json` from **validated** snapshots (no daily/alerts/revision persist).
+- Ingest already built the committed generation; a standalone export is for inspection.
+
+```bash
+python3 tools/export_web_data.py --legacy-mutate   # emergency only
+```
 
 **On failure:** Do not publish; notify user with exporter traceback.
 
-### 7. Publish to GitHub Pages
+### 7. Publish to GitHub Pages (publish-only)
 ```bash
-/workspace/ai-eps-monitor/tools/publish_github_pages.sh
+bash tools/publish_github_pages.sh
 ```
-- Copies **public** assets only into `site-repo/`.
+- Copies **CURRENT generation** `web/` (full static tree, cache-bust `?v=`).
 - `git commit` + `git push` **only if files changed** (no empty commits).
 - Never commit cookies, tokens, `.env`, browser profiles, SA sessions.
+- Failed push writes `data/.pending-publish`; the next run retries from CURRENT.
 
-**On failure (auth/push):** Leave local `web/` updated; notify user GitHub push failed; site may lag until retry.
+**On failure (auth/push):** Leave CURRENT intact; notify user GitHub push failed; site may lag until retry.
 
 ### 8. User digest
 - Short Chinese summary: who was revised, alerts (only if material), link to public HTTPS.
@@ -69,9 +101,9 @@ python3 /workspace/ai-eps-monitor/tools/export_web_data.py
 |------|---------|----------|
 | SA login | Session dead | Re-auth; no fake refresh; stale badge when >48h |
 | Single ticker pull | Page/block | Null/gaps for ticker; continue |
-| Snapshot write | Disk/error | Abort publish; keep last good snapshot |
-| Export | Script error | Abort publish; notify |
-| Git push | Auth/network | Local OK; notify; retry next run |
+| Snapshot write / export before CURRENT | Disk/error | Abort; keep last good generation |
+| Materialize after CURRENT | Promote error | committed + failed/pending; retry `--materialize-current` |
+| Git push | Auth/network | pending-publish; retry from CURRENT web/ |
 | Pages CDN lag | Old JSON briefly | Expected; cache-bust / wait |
 
 ## What is NOT in the public repo
