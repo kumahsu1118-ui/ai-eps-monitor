@@ -15,9 +15,9 @@ Buy-side monitor for NVDA, AVGO, TSM, MSFT, BE, KEYS.
 
 | Path | Role |
 |------|------|
-| `tools/` | Exporter, alert engine, SA parser, acceptance tests, publish |
+| `tools/` | Exporter, alert engine, SA parser, **ingest_snapshot.py** (single ingest entrypoint), acceptance tests, publish |
 | `web/` | SPA (`index.html`, `app.js`, `styles.css`) + exported `web/data/*.json` |
-| `data/` | Pipeline DB (`snapshots/`, `revisions/`, `drivers/`, `earnings/`, `alerts/`) **and** Pages public JSON at `data/*.json` |
+| `data/` | Pipeline DB (`incoming/`, `snapshots/` validated, `quarantine/`, `revisions/`, `drivers/`, `earnings/`, `alerts/`) **and** Pages public JSON at `data/*.json` |
 | `tests/fixtures/` | Sanitized universe/snapshots + SA HTML parser fixtures |
 | `docs/` | Mapping audit, pipeline, Round 2 spec, test results |
 
@@ -31,6 +31,7 @@ bash tools/sync_pages_root.sh
 ## Tests (must PASS on a clean checkout)
 
 ```bash
+python3 tools/ingest_snapshot.py          # incoming → quality gate → validated snapshots
 python3 tools/run_acceptance_tests.py
 ```
 

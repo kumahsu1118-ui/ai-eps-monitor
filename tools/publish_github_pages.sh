@@ -72,27 +72,17 @@ if [[ -n "$PREV" && "$PREV" == "$HASH" ]]; then
   exit 0
 fi
 
-# Payload changed — stamp sitePublished + ensure dataVersion/buildId in meta, then commit
+# Payload changed — stamp sitePublished atomically onto meta.json AND dashboard.json
 python3 - <<PY
-import json
+import sys
 from pathlib import Path
-from datetime import datetime, timezone, timedelta
-meta_path = Path("/workspace/ai-eps-monitor/web/data/meta.json")
-meta = json.loads(meta_path.read_text(encoding="utf-8"))
-now = datetime.now(timezone(timedelta(hours=8)))
-utc = now.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"]
-display = f"{months[now.month-1]} {now.day}, {now.year} {now.hour:02d}:{now.minute:02d} Taipei Time"
-meta["sitePublished"] = utc
-meta["sitePublishedDisplay"] = display
-# Do not write latestSuccessfulRefresh as a primary field
-meta.pop("latestSuccessfulRefresh", None)
-meta.pop("siteRepoCommit", None)
-if not meta.get("dataVersion"):
-    meta["dataVersion"] = "$HASH"
-    meta["buildId"] = "$HASH"
-meta_path.write_text(json.dumps(meta, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
-print("stamped sitePublished", display)
+ROOT = Path("/workspace/ai-eps-monitor")
+if not (ROOT / "tools" / "publish_metadata.py").exists():
+    ROOT = Path(__file__).resolve().parent.parent if False else Path("$ROOT")
+sys.path.insert(0, str(ROOT / "tools"))
+from publish_metadata import stamp_site_published
+result = stamp_site_published(ROOT / "web" / "data")
+print("stamped sitePublished", result.get("sitePublishedDisplay"), "buildId", result.get("buildId"))
 PY
 
 mkdir -p "$REPO/data"

@@ -23,11 +23,24 @@ Repo: https://github.com/kumahsu1118-ui/ai-eps-monitor
 - For each ticker: earnings estimates + revisions (SA **1M/3M/6M** only; never invent 7D/30D/90D).
 - Record **Last Close** (regular session) and **After Hours** separately if shown.
 - Preserve **Reported Fiscal Period Ending**; map only to FY-mapped calendar **slots** (not true CY EPS).
+- Write the raw pull to `data/incoming/` (not directly to `data/snapshots/`).
 
 **On failure for one ticker:** Write `Data unavailable` / null for that name; continue others; list gaps.
 
+### 3b. Ingest (single entrypoint)
+```bash
+python3 tools/ingest_snapshot.py
+```
+Order: **incoming → Quality Gate → validated `data/snapshots/`**. Rejects go to `data/quarantine/` and never enter validated history. `load_latest` reads only validated snapshots.
+
+Per-ticker last-known-good (LKG) applies to extreme EPS / price / coverage. A `19.38 → missing → 1.938` sequence is `needs_verification` (decimal-shift vs LKG), not a new baseline.
+
+`generate_revision_events` runs **before** the Alert Engine. `evaluate_alerts(gated_snapshot=...)` uses the gated object; it does not glob for current. A broken source manifest cannot suppress SA 1M alerts.
+
+**On failure:** Quarantine the reject; keep last validated snapshot; do not mutate Alert DB from the rejected object.
+
 ### 4. Persist private database (append-only)
-- Append dated file under `data/snapshots/` (never overwrite prior dates).
+- Append dated file under `data/snapshots/` **only after the quality gate** (never overwrite prior dates).
 - **Daily EPS snapshots:** append/update `data/daily_eps_snapshots/` for the calendar day **even if EPS unchanged**.
 - **Revision events:** append to `data/revisions/history.jsonl` **only if** consensus EPS actually changed vs prior snapshot. No empty revision rows.
 

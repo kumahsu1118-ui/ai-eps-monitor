@@ -513,13 +513,22 @@
     set("#meta-published", m.sitePublishedDisplay || m.sitePublished);
     set("#meta-source", m.primarySource);
     const collEl = $("#meta-collection-status");
+    const collRow = $("#meta-collection-status-row");
+    const collStatus = String(m.collectionStatus || "").toLowerCase();
+    const showCollectionRow = collStatus === "partial" || collStatus === "failed";
+    if (collRow) {
+      if (showCollectionRow) {
+        collRow.removeAttribute("hidden");
+        collRow.style.display = "";
+      } else {
+        /* complete (or unknown) — hide the entire Collection status row */
+        collRow.setAttribute("hidden", "");
+        collRow.style.display = "none";
+      }
+    }
     if (collEl) {
       const label = m.collectionStatusLabel || m.collectionStatus;
-      if (label && String(m.collectionStatus || "").toLowerCase() === "partial") {
-        collEl.textContent = String(label);
-        collEl.removeAttribute("hidden");
-        collEl.style.display = "";
-      } else if (label && String(m.collectionStatus || "").toLowerCase() === "failed") {
+      if (showCollectionRow && label) {
         collEl.textContent = String(label);
         collEl.removeAttribute("hidden");
         collEl.style.display = "";

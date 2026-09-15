@@ -32,6 +32,18 @@ if not (ROOT / "data" / "snapshots").exists():
 import sys as _sys
 if str(_here) not in _sys.path:
     _sys.path.insert(0, str(_here))
+try:
+    from snapshot_quality import list_validated_snapshot_paths, load_latest_validated_snapshot
+    from revision_events import generate_revision_events
+    from publish_metadata import build_dashboard_payload, write_meta_and_dashboard
+    from atomic_io import atomic_write_json
+except ImportError:
+    list_validated_snapshot_paths = None
+    load_latest_validated_snapshot = None
+    generate_revision_events = None
+    build_dashboard_payload = None
+    write_meta_and_dashboard = None
+    atomic_write_json = None
 
 SNAP_DIR = ROOT / "data" / "snapshots"
 REV_PATH = ROOT / "data" / "revisions" / "history.jsonl"
@@ -138,6 +150,12 @@ def to_display_str(x):
 
 
 def load_latest_snapshot():
+    """Latest VALIDATED snapshot only (data/snapshots/). Never incoming/ or quarantine/."""
+    if load_latest_validated_snapshot is not None:
+        path, snap = load_latest_validated_snapshot(SNAP_DIR)
+        if path is None or snap is None:
+            raise SystemExit(f"No validated snapshot found in {SNAP_DIR}")
+        return path, snap
     dated = sorted(
         p
         for p in SNAP_DIR.glob("20*.json")
@@ -1333,15 +1351,18 @@ def regenerate_markdown_backups(companies: dict, valuation: list, snap: dict, ti
 
 def write_json(path: Path, obj):
     path.parent.mkdir(parents=True, exist_ok=True)
+    if atomic_write_json is not None:
+        atomic_write_json(path, obj)
+        return
     path.write_text(json.dumps(obj, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
 
 
-def run_build_alerts() -> dict:
+def run_build_alerts(gated_snapshot: dict | None = None) -> dict:
     """Call deterministic alert engine before writing web/data/alerts.json."""
     try:
         import build_alerts as ba
 
-        payload = ba.evaluate_alerts()
+        payload = ba.evaluate_alerts(gated_snapshot=gated_snapshot)
         ba.write_alerts(payload)
         return payload
     except Exception as exc:
@@ -1445,6 +1466,21 @@ def main():
 
     companies = build_companies(snap, tickers, year_keys=year_keys)
     valuation = build_valuation(companies, tickers, snap_utc, year_keys=year_keys)
+
+    # generate_revision_events BEFORE alerts (idempotent if ingest already ran)
+    if generate_revision_events is not None:
+        prior_path = None
+        if list_validated_snapshot_paths is not None:
+            validated = [p for p in list_validated_snapshot_paths(SNAP_DIR) if p.resolve() != snap_path.resolve()]
+            prior_path = validated[-1] if validated else None
+        prior_snap = None
+        if prior_path and prior_path.exists():
+            try:
+                prior_snap = json.loads(prior_path.read_text(encoding="utf-8"))
+            except Exception:
+                prior_snap = None
+        generate_revision_events(prior_snap, snap, REV_PATH)
+
     history_raw = load_history()
     revisions = [map_history_row(r) for r in history_raw]
 
@@ -1455,8 +1491,8 @@ def main():
 
     earnings = load_or_init_earnings(companies, tickers)
 
-    # Deterministic alert engine — must run before writing alerts.json
-    alerts_payload = run_build_alerts()
+    # Deterministic alert engine — must run after revision events, with gated snapshot
+    alerts_payload = run_build_alerts(gated_snapshot=snap)
     active = alerts_payload.get("activeAlerts") or alerts_payload.get("alerts") or []
     history_alerts = alerts_payload.get("alertHistory") or active
     alerts = {
@@ -1553,14 +1589,36 @@ def main():
     }
 
     WEB_DATA.mkdir(parents=True, exist_ok=True)
-    write_json(WEB_DATA / "watchlist.json", {"tickers": tickers})
-    write_json(WEB_DATA / "meta.json", meta)
-    write_json(WEB_DATA / "companies.json", companies)
-    write_json(WEB_DATA / "valuation.json", {"rows": valuation})
-    write_json(WEB_DATA / "revisions.json", {"revisions": revisions})
+    watchlist_obj = {"tickers": tickers}
+    companies_obj = companies
+    valuation_obj = {"rows": valuation}
+    revisions_obj = {"revisions": revisions}
+    write_json(WEB_DATA / "watchlist.json", watchlist_obj)
+    write_json(WEB_DATA / "companies.json", companies_obj)
+    write_json(WEB_DATA / "valuation.json", valuation_obj)
+    write_json(WEB_DATA / "revisions.json", revisions_obj)
     write_json(WEB_DATA / "eps_history.json", eps_history)
     write_json(WEB_DATA / "earnings.json", earnings)
     write_json(WEB_DATA / "alerts.json", alerts)
+
+    dashboard = None
+    if build_dashboard_payload is not None:
+        dashboard = build_dashboard_payload(
+            meta=meta,
+            companies=companies_obj,
+            valuation=valuation_obj,
+            revisions=revisions_obj,
+            eps_history=eps_history,
+            earnings=earnings,
+            alerts=alerts,
+            watchlist=watchlist_obj,
+        )
+    if write_meta_and_dashboard is not None and dashboard is not None:
+        write_meta_and_dashboard(WEB_DATA, meta, dashboard)
+    else:
+        write_json(WEB_DATA / "meta.json", meta)
+        if dashboard is not None:
+            write_json(WEB_DATA / "dashboard.json", dashboard)
 
     regenerate_markdown_backups(companies, valuation, snap, tickers, year_keys=year_keys)
 

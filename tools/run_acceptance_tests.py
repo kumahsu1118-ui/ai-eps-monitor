@@ -60,7 +60,17 @@ def _copy_tree_file(src: Path, dest: Path) -> bool:
 
 
 def build_synthetic_universe() -> dict:
-    return {"tickers": ["NVDA", "AVGO", "TSM", "MSFT", "BE", "KEYS"]}
+    return {
+        "tickers": ["NVDA", "AVGO", "TSM", "MSFT", "BE", "KEYS"],
+        "fiscalEnd": {
+            "NVDA": {"month": 1, "label": "Jan"},
+            "AVGO": {"month": 10, "label": "Oct"},
+            "TSM": {"month": 12, "label": "Dec"},
+            "MSFT": {"month": 6, "label": "Jun"},
+            "BE": {"month": 12, "label": "Dec"},
+            "KEYS": {"month": 10, "label": "Oct"},
+        },
+    }
 
 
 def build_synthetic_snapshot() -> dict:
@@ -133,10 +143,10 @@ def build_fixture(dest: Path) -> Path:
     dest.mkdir(parents=True, exist_ok=True)
     tools = dest / "tools"
     tools.mkdir(parents=True, exist_ok=True)
-    for name in ("export_web_data.py", "build_alerts.py", "sa_parser.py"):
-        src = ROOT / "tools" / name
-        if src.exists():
-            shutil.copy2(src, tools / name)
+    for src in (ROOT / "tools").glob("*.py"):
+        if src.name == "run_acceptance_tests.py":
+            continue
+        shutil.copy2(src, tools / src.name)
 
     web = dest / "web"
     web.mkdir(parents=True, exist_ok=True)
@@ -146,7 +156,7 @@ def build_fixture(dest: Path) -> Path:
         if src.exists():
             shutil.copy2(src, web / name)
 
-    for sub in ("snapshots", "revisions", "drivers", "earnings", "alerts", "daily_eps_snapshots"):
+    for sub in ("snapshots", "revisions", "drivers", "earnings", "alerts", "daily_eps_snapshots", "incoming", "quarantine"):
         (dest / "data" / sub).mkdir(parents=True, exist_ok=True)
 
     shipped = ROOT / "fixtures" / "data"
@@ -1195,9 +1205,387 @@ def test_review_same_build(fixture: Path) -> None:
     record("review_same_build_test", ok, f"gate_ok={gate_ok} mismatch={gate_mismatch}")
 
 
+# ---------- Ingestion Integrity named tests ----------
+
+def _copy_snapshot(snap: dict) -> dict:
+    return json.loads(json.dumps(snap))
+
+
+def to_num_test(x):
+    if x is None:
+        return None
+    try:
+        return float(x)
+    except Exception:
+        return None
+
+
+def test_invalid_snapshot_not_in_validated_history(fixture: Path) -> None:
+    ingest = import_mod(fixture, "ingest_snapshot")
+    sq = import_mod(fixture, "snapshot_quality")
+    exp = import_mod(fixture, "export_web_data")
+
+    snap_dir = fixture / "data" / "snapshots"
+    incoming = fixture / "data" / "incoming"
+    quarantine = fixture / "data" / "quarantine"
+    incoming.mkdir(parents=True, exist_ok=True)
+    quarantine.mkdir(parents=True, exist_ok=True)
+
+    before_paths = {p.name for p in sq.list_validated_snapshot_paths(snap_dir)}
+    latest_before, _latest_snap = sq.load_latest_validated_snapshot(snap_dir)
+
+    bad = {"snapshot_utc": "2026-09-16T12:00:00Z", "tickers": {}}
+    incoming_path = incoming / "2026-09-16_empty.json"
+    incoming_path.write_text(json.dumps(bad) + "\n", encoding="utf-8")
+    result = ingest.ingest_incoming_file(incoming_path, root=fixture, run_alerts=False)
+
+    after_paths = {p.name for p in sq.list_validated_snapshot_paths(snap_dir)}
+    latest_after, _ = sq.load_latest_validated_snapshot(snap_dir)
+    exp_path, _exp_snap = exp.load_latest_snapshot()
+
+    in_validated = "2026-09-16.json" in after_paths
+    qfiles = list(quarantine.glob("*.json"))
+    ok = result.get("quarantined") is True
+    ok = ok and result.get("validated") is False
+    ok = ok and not in_validated
+    ok = ok and after_paths == before_paths
+    ok = ok and latest_after == latest_before
+    ok = ok and len(qfiles) >= 1
+    ok = ok and "incoming" not in str(exp_path)
+    ok = ok and "quarantine" not in str(exp_path)
+    record(
+        "invalid_snapshot_not_in_validated_history_test",
+        ok,
+        f"quarantined={result.get('quarantined')} after={sorted(after_paths)} q={len(qfiles)}",
+    )
+
+
+def test_lkg_after_partial_collection(fixture: Path) -> None:
+    """19.38 → missing → 1.938 must needs_verification against per-ticker LKG."""
+    ingest = import_mod(fixture, "ingest_snapshot")
+    snap_path = fixture / "data" / "snapshots" / "2026-09-15.json"
+    snap = json.loads(snap_path.read_text(encoding="utf-8"))
+    avgo = snap["tickers"]["AVGO"]["eps"]["2027E"]
+    avgo["consensus"] = 19.38
+    avgo["reported_fiscal_label"] = avgo.get("reported_fiscal_label") or "Nov 2027"
+    snap_path.write_text(json.dumps(snap, indent=2) + "\n", encoding="utf-8")
+
+    partial = _copy_snapshot(snap)
+    partial["snapshot_utc"] = "2026-09-16T01:00:00Z"
+    year = partial["tickers"]["AVGO"]["eps"].get("2027E") or {}
+    year["consensus"] = None
+    partial["tickers"]["AVGO"]["eps"]["2027E"] = year
+    partial["tickers"]["AVGO"]["data_gaps"] = ["collection fail (fixture)"]
+    r1 = ingest.ingest_snapshot(partial, root=fixture, run_alerts=False, source_name="partial.json")
+    gated1 = r1.get("gatedSnapshot") or {}
+    kept = (((gated1.get("tickers") or {}).get("AVGO") or {}).get("eps") or {}).get("2027E") or {}
+
+    shifted = _copy_snapshot(snap)
+    shifted["snapshot_utc"] = "2026-09-17T01:00:00Z"
+    shifted["tickers"]["AVGO"]["eps"]["2027E"]["consensus"] = 1.938
+    r2 = ingest.ingest_snapshot(shifted, root=fixture, run_alerts=False, source_name="shifted.json")
+    gated2 = r2.get("gatedSnapshot") or {}
+    year2 = (((gated2.get("tickers") or {}).get("AVGO") or {}).get("eps") or {}).get("2027E") or {}
+    qs = year2.get("quarantineStatus") or year2.get("needs_verification")
+    ok = r1.get("validated") is True and r2.get("validated") is True
+    ok = ok and to_num_test(kept.get("consensus")) is not None and abs(float(kept.get("consensus")) - 19.38) < 1e-9
+    ok = ok and year2.get("needs_verification") is True
+    ok = ok and qs in (True, "needs_verification")
+    ok = ok and year2.get("rejectedConsensus") is not None and abs(float(year2.get("rejectedConsensus")) - 1.938) < 1e-9
+    ok = ok and abs(float(year2.get("consensus")) - 19.38) < 1e-9
+    record(
+        "lkg_after_partial_collection_test",
+        ok,
+        f"kept={kept.get('consensus')} final={year2.get('consensus')} rejected={year2.get('rejectedConsensus')} nv={year2.get('needs_verification')}",
+    )
+
+
+def test_revision_events_generated_before_alerts(fixture: Path) -> None:
+    ingest_src = (fixture / "tools" / "ingest_snapshot.py").read_text(encoding="utf-8")
+    exp_src = (fixture / "tools" / "export_web_data.py").read_text(encoding="utf-8")
+    i1 = ingest_src.find("generate_revision_events")
+    i2 = ingest_src.find("evaluate_alerts")
+    e1 = exp_src.find("generate_revision_events")
+    e2 = exp_src.find("run_build_alerts")
+    order_ok = 0 <= i1 < i2 and 0 <= e1 < e2
+
+    ingest = import_mod(fixture, "ingest_snapshot")
+    hist = fixture / "data" / "revisions" / "history.jsonl"
+    before = sum(1 for line in hist.read_text(encoding="utf-8").splitlines() if line.strip()) if hist.exists() else 0
+    (fixture / "data" / "alerts" / "index.json").write_text(
+        json.dumps({"alerts": [], "activeAlerts": [], "alertHistory": []}, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    snap = json.loads((fixture / "data" / "snapshots" / "2026-09-15.json").read_text(encoding="utf-8"))
+    nxt = _copy_snapshot(snap)
+    nxt["snapshot_utc"] = "2026-09-18T01:00:00Z"
+    old = float(nxt["tickers"]["NVDA"]["eps"]["2027E"]["consensus"])
+    nxt["tickers"]["NVDA"]["eps"]["2027E"]["consensus"] = round(old * 1.05, 4)
+    result = ingest.ingest_snapshot(nxt, root=fixture, run_alerts=True, source_name="rev.json")
+    after = sum(1 for line in hist.read_text(encoding="utf-8").splitlines() if line.strip())
+    events = result.get("revisionEvents") or []
+    payload = json.loads((fixture / "data" / "alerts" / "index.json").read_text(encoding="utf-8"))
+    hits = [
+        a
+        for a in (payload.get("activeAlerts") or []) + (payload.get("alertHistory") or [])
+        if a.get("rule") == "single_revision_gt_2pct" and a.get("ticker") == "NVDA"
+    ]
+    ok = order_ok and after > before and len(events) >= 1 and len(hits) >= 1
+    record(
+        "revision_events_generated_before_alerts_test",
+        ok,
+        f"order={order_ok} events={len(events)} alerts={len(hits)} {before}→{after}",
+    )
+
+
+def test_revision_events_on_consensus_change(fixture: Path) -> None:
+    ingest = import_mod(fixture, "ingest_snapshot")
+    sq = import_mod(fixture, "snapshot_quality")
+    _, latest = sq.load_latest_validated_snapshot(fixture / "data" / "snapshots")
+    prev = json.loads((fixture / "data" / "snapshots" / "2026-09-15.json").read_text(encoding="utf-8"))
+    base = (((latest or prev).get("tickers") or {}).get("MSFT") or {}).get("eps") or {}
+    old = to_num_test((base.get("2027E") or {}).get("consensus")) or 6.0
+    nxt = _copy_snapshot(latest or prev)
+    nxt["snapshot_utc"] = "2026-09-19T01:00:00Z"
+    nxt["tickers"]["MSFT"]["eps"]["2027E"]["consensus"] = round(old * 1.04, 4)
+    nxt["tickers"]["MSFT"]["eps"]["2027E"]["reported_fiscal_label"] = (
+        (base.get("2027E") or {}).get("reported_fiscal_label") or "Dec 2027"
+    )
+    result = ingest.ingest_snapshot(nxt, root=fixture, run_alerts=False, source_name="msft_rev.json")
+    events = [e for e in (result.get("revisionEvents") or []) if e.get("Ticker") == "MSFT"]
+    ok = len(events) >= 1
+    if events:
+        ok = ok and to_num_test(events[0].get("Previous EPS")) is not None
+        ok = ok and abs(float(events[0].get("Current EPS")) - round(old * 1.04, 4)) < 1e-6
+        ok = ok and "baseline" not in str(events[0].get("Reason") or "").lower()
+    record("revision_events_on_consensus_change_test", ok, f"n={len(events)}")
+
+
+def test_revision_events_not_emitted_when_unchanged(fixture: Path) -> None:
+    ingest = import_mod(fixture, "ingest_snapshot")
+    sq = import_mod(fixture, "snapshot_quality")
+    _, latest = sq.load_latest_validated_snapshot(fixture / "data" / "snapshots")
+    hist = fixture / "data" / "revisions" / "history.jsonl"
+    before = sum(1 for line in hist.read_text(encoding="utf-8").splitlines() if line.strip()) if hist.exists() else 0
+    nxt = _copy_snapshot(latest)
+    nxt["snapshot_utc"] = "2026-09-20T01:00:00Z"
+    result = ingest.ingest_snapshot(nxt, root=fixture, run_alerts=False, source_name="unchanged.json")
+    after = sum(1 for line in hist.read_text(encoding="utf-8").splitlines() if line.strip())
+    ok = before == after and len(result.get("revisionEvents") or []) == 0
+    record("revision_events_not_emitted_when_unchanged_test", ok, f"{before}→{after}")
+
+
+def test_revision_events_skip_lkg_fill(fixture: Path) -> None:
+    ingest = import_mod(fixture, "ingest_snapshot")
+    sq = import_mod(fixture, "snapshot_quality")
+    _, latest = sq.load_latest_validated_snapshot(fixture / "data" / "snapshots")
+    hist = fixture / "data" / "revisions" / "history.jsonl"
+    before = sum(1 for line in hist.read_text(encoding="utf-8").splitlines() if line.strip()) if hist.exists() else 0
+    nxt = _copy_snapshot(latest)
+    nxt["snapshot_utc"] = "2026-09-21T01:00:00Z"
+    nxt["tickers"]["AVGO"]["eps"]["2027E"]["consensus"] = 1.938
+    result = ingest.ingest_snapshot(nxt, root=fixture, run_alerts=False, source_name="avgo_shift.json")
+    after = sum(1 for line in hist.read_text(encoding="utf-8").splitlines() if line.strip())
+    fake = [
+        e
+        for e in (result.get("revisionEvents") or [])
+        if e.get("Ticker") == "AVGO" and abs(float(e.get("Current EPS") or 0) - 1.938) < 1e-6
+    ]
+    ok = len(fake) == 0
+    record("revision_events_skip_lkg_fill_test", ok, f"fake={len(fake)} {before}→{after}")
+
+
+def test_alert_engine_uses_gated_snapshot_context(fixture: Path) -> None:
+    ba = import_mod(fixture, "build_alerts")
+    import inspect
+
+    src = inspect.getsource(ba.evaluate_alerts) + inspect.getsource(ba.rule6_source_reported_1m)
+    no_glob = "glob(" not in src
+
+    decoy = json.loads((fixture / "data" / "snapshots" / "2026-09-15.json").read_text(encoding="utf-8"))
+    decoy["tickers"]["NVDA"]["eps"]["2027E"]["rev_1M_pct"] = 99.0
+    (fixture / "data" / "incoming").mkdir(parents=True, exist_ok=True)
+    (fixture / "data" / "incoming" / "current.json").write_text(json.dumps(decoy) + "\n")
+    (fixture / "data" / "incoming" / "decoy_latest.json").write_text(json.dumps(decoy) + "\n")
+
+    gated = _copy_snapshot(decoy)
+    gated["tickers"]["NVDA"]["eps"]["2027E"]["rev_1M_pct"] = 6.0
+    gated["tickers"]["AVGO"]["eps"]["2027E"]["rev_1M_pct"] = 0.1
+    (fixture / "data" / "alerts" / "index.json").write_text(
+        json.dumps({"alerts": [], "activeAlerts": [], "alertHistory": []}, indent=2) + "\n"
+    )
+    payload = ba.evaluate_alerts(gated_snapshot=gated)
+    hits = [a for a in (payload.get("activeAlerts") or []) if a.get("rule") == "source_reported_1m_revision"]
+    nvda = [a for a in hits if a.get("ticker") == "NVDA"]
+    ok = no_glob
+    ok = ok and len(nvda) >= 1
+    ok = ok and all("Seeking Alpha 1M" in str(a.get("sourceLabel") or a.get("source") or a.get("message")) for a in nvda)
+    ok = ok and all("Internal 30D" not in str(a.get("message") or "") for a in nvda)
+    ok = ok and all(abs(float(a.get("revisionPct") or 0) - 99.0) > 1 for a in nvda)
+    ok = ok and any(abs(float(a.get("revisionPct") or 0) - 6.0) < 1e-6 for a in nvda)
+    record(
+        "alert_engine_uses_gated_snapshot_context_test",
+        ok,
+        f"no_glob={no_glob} n={len(nvda)} pcts={[a.get('revisionPct') for a in nvda]}",
+    )
+
+
+def test_manifest_cannot_break_source_1m(fixture: Path) -> None:
+    ba = import_mod(fixture, "build_alerts")
+    import inspect
+
+    src = inspect.getsource(ba.rule6_source_reported_1m) + inspect.getsource(ba.evaluate_alerts)
+    no_glob = "glob(" not in src
+
+    (fixture / "data" / "source_manifest.json").write_text("{ BROKEN", encoding="utf-8")
+    (fixture / "sources").mkdir(parents=True, exist_ok=True)
+    (fixture / "sources" / "manifest.json").write_text("null", encoding="utf-8")
+    (fixture / "data" / "snapshots" / "manifest.json").write_text(json.dumps({"rev1M": {}}), encoding="utf-8")
+
+    snap = json.loads((fixture / "data" / "snapshots" / "2026-09-15.json").read_text(encoding="utf-8"))
+    gated = _copy_snapshot(snap)
+    base_year = gated["tickers"]["KEYS"]["eps"].get("2027E") or gated["tickers"]["KEYS"]["eps"].get("2026E") or {}
+    gated["tickers"]["KEYS"]["eps"]["2028E"] = dict(base_year)
+    gated["tickers"]["KEYS"]["eps"]["2028E"]["rev_1M_pct"] = 8.5
+    gated["tickers"]["KEYS"]["eps"]["2028E"]["reported_fiscal_label"] = "Oct 2028"
+    gated["tickers"]["KEYS"]["eps"]["2028E"]["consensus"] = 8.0
+    (fixture / "data" / "alerts" / "index.json").write_text(
+        json.dumps({"alerts": [], "activeAlerts": [], "alertHistory": []}, indent=2) + "\n"
+    )
+    payload = ba.evaluate_alerts(gated_snapshot=gated)
+    hits = [
+        a
+        for a in (payload.get("activeAlerts") or payload.get("alertHistory") or [])
+        if a.get("rule") == "source_reported_1m_revision" and a.get("ticker") == "KEYS"
+    ]
+    ok = no_glob and len(hits) >= 1
+    ok = ok and any("Seeking Alpha 1M" in str(a.get("sourceLabel") or a.get("message") or "") for a in hits)
+    record("manifest_cannot_break_source_1m_test", ok, f"no_glob={no_glob} hits={len(hits)}")
+
+
+def test_missing_fiscal_identity_rejected(fixture: Path) -> None:
+    ingest = import_mod(fixture, "ingest_snapshot")
+    sq = import_mod(fixture, "snapshot_quality")
+    universe = json.loads((fixture / "data" / "universe.json").read_text(encoding="utf-8"))
+    fiscal_end = universe.get("fiscalEnd") or {}
+    ok_universe = all(t in fiscal_end for t in ["NVDA", "AVGO", "TSM", "MSFT", "BE", "KEYS"])
+    ok_universe = ok_universe and int((fiscal_end.get("NVDA") or {}).get("month") or 0) == 1
+
+    snap = json.loads((fixture / "data" / "snapshots" / "2026-09-15.json").read_text(encoding="utf-8"))
+    bad = _copy_snapshot(snap)
+    bad["snapshot_utc"] = "2026-09-23T01:00:00Z"
+    bad["tickers"]["NVDA"]["eps"]["2027E"]["reported_fiscal_label"] = None
+    bad["tickers"]["NVDA"]["eps"]["2027E"].pop("reportedFiscalLabel", None)
+    result = ingest.ingest_snapshot(bad, root=fixture, run_alerts=False, source_name="no_fiscal.json")
+    after = {p.name for p in sq.list_validated_snapshot_paths(fixture / "data" / "snapshots")}
+    ok = ok_universe
+    ok = ok and result.get("ok") is False
+    ok = ok and result.get("quarantined") is True
+    ok = ok and (result.get("gate") or {}).get("failReason") == "missing_fiscal_identity"
+    ok = ok and "2026-09-23.json" not in after
+    record(
+        "missing_fiscal_identity_rejected_test",
+        ok,
+        f"universe={ok_universe} reason={(result.get('gate') or {}).get('failReason')}",
+    )
+
+
+def test_dashboard_publish_metadata_sync(fixture: Path) -> None:
+    pm = import_mod(fixture, "publish_metadata")
+    aio = import_mod(fixture, "atomic_io")
+    import inspect
+
+    uses_pair = "atomic_write_json_pair" in inspect.getsource(pm.stamp_site_published)
+    uses_replace = "os.replace" in inspect.getsource(aio.atomic_write_json_pair)
+
+    web = fixture / "web" / "data"
+    web.mkdir(parents=True, exist_ok=True)
+    meta = {
+        "dataVersion": "abc123",
+        "buildId": "abc123",
+        "sitePublished": "2026-09-15T01:00:00Z",
+        "sitePublishedDisplay": "old",
+        "collectionStatus": "complete",
+    }
+    dash = {
+        "buildId": "abc123",
+        "meta": dict(meta),
+        "companies": {"NVDA": {}},
+        "sitePublished": "2026-09-15T01:00:00Z",
+    }
+    (web / "meta.json").write_text(json.dumps(meta, indent=2) + "\n")
+    (web / "dashboard.json").write_text(json.dumps(dash, indent=2) + "\n")
+    stamped = pm.stamp_site_published(
+        web,
+        site_published="2026-09-15T08:00:00Z",
+        site_published_display="Sep 15, 2026 16:00 Taipei Time",
+    )
+    meta2 = json.loads((web / "meta.json").read_text(encoding="utf-8"))
+    dash2 = json.loads((web / "dashboard.json").read_text(encoding="utf-8"))
+    ok = uses_pair and uses_replace
+    ok = ok and meta2.get("sitePublished") == "2026-09-15T08:00:00Z"
+    ok = ok and dash2.get("sitePublished") == "2026-09-15T08:00:00Z"
+    ok = ok and (dash2.get("meta") or {}).get("sitePublished") == "2026-09-15T08:00:00Z"
+    ok = ok and meta2.get("sitePublished") == (dash2.get("meta") or {}).get("sitePublished")
+    ok = ok and meta2.get("buildId") == dash2.get("buildId")
+    ok = ok and stamped.get("sitePublished") == meta2.get("sitePublished")
+    record(
+        "dashboard_publish_metadata_sync_test",
+        ok,
+        f"pair={uses_pair} meta={meta2.get('sitePublished')} dash={dash2.get('sitePublished')}",
+    )
+
+
+def test_screenshot_dom_build_identity(fixture: Path) -> None:
+    sd = import_mod(fixture, "screenshot_dom")
+    app = (fixture / "web" / "app.js").read_text(encoding="utf-8")
+    html = (fixture / "web" / "index.html").read_text(encoding="utf-8")
+    hide_row = "meta-collection-status-row" in app and "hidden" in app
+    html_has_row = 'id="meta-collection-status-row"' in html
+
+    meta = {
+        "dataVersion": "deadbeef",
+        "buildId": "deadbeef",
+        "collectionStatus": "complete",
+        "collectionStatusLabel": "COMPLETE",
+    }
+    sidecar = sd.build_dom_sidecar(meta, html=html, screenshot="01-overview-latest.png")
+    ok = sidecar.get("dataVersion") == "deadbeef" and sidecar.get("buildId") == "deadbeef"
+    ok = ok and sidecar["selectors"]["#meta-collection-status-row"]["hidden"] is True
+    ok = ok and sidecar["secretScan"]["ok"] is True
+    ok = ok and hide_row and html_has_row
+
+    dirty = sd.scan_content_secrets("authorization: Bearer ghp_" + "a" * 24)
+    ok = ok and dirty.get("ok") is False and len(dirty.get("hits") or []) >= 1
+
+    shot_dir = fixture / "review-pack" / "screenshots"
+    shot_dir.mkdir(parents=True, exist_ok=True)
+    png = shot_dir / "01-overview-latest.png"
+    png.write_bytes(b"\x89PNG\r\n\x1a\n")
+    written = sd.write_screenshot_sidecars(shot_dir, meta, html=html)
+    sidecar_path = shot_dir / "01-overview-latest.dom.json"
+    ok = ok and sidecar_path.exists() and len(written) >= 1
+    loaded = json.loads(sidecar_path.read_text(encoding="utf-8"))
+    ok = ok and loaded.get("dataVersion") == "deadbeef"
+    record(
+        "screenshot_dom_build_identity_test",
+        ok,
+        f"hidden={sidecar['selectors']['#meta-collection-status-row']['hidden']} secrets={sidecar['secretScan']['ok']}",
+    )
+
+
+def test_ingest_snapshot_is_single_entrypoint(fixture: Path) -> None:
+    p = fixture / "tools" / "ingest_snapshot.py"
+    body = p.read_text(encoding="utf-8")
+    ok = p.exists()
+    ok = ok and ("incoming" in body)
+    ok = ok and "generate_revision_events" in body and "evaluate_alerts" in body
+    ok = ok and "snapshot_quality_gate" in body
+    record("ingest_snapshot_single_entrypoint_test", ok, f"exists={p.exists()}")
+
 
 def main() -> int:
-    print("=== ai-eps-monitor Round 2 + Round 3 Data Integrity acceptance (isolated) ===")
+    print("=== ai-eps-monitor Ingestion Integrity + prior acceptance (isolated) ===")
     print(f"ROOT={ROOT}")
     before = snapshot_prod_fingerprints()
 
@@ -1241,6 +1629,20 @@ def main() -> int:
         test_momentum_determinism(fixture)
         test_data_version_vs_refresh(fixture)
         test_review_same_build(fixture)
+
+        # Ingestion Integrity
+        test_invalid_snapshot_not_in_validated_history(fixture)
+        test_lkg_after_partial_collection(fixture)
+        test_revision_events_generated_before_alerts(fixture)
+        test_revision_events_on_consensus_change(fixture)
+        test_revision_events_not_emitted_when_unchanged(fixture)
+        test_revision_events_skip_lkg_fill(fixture)
+        test_alert_engine_uses_gated_snapshot_context(fixture)
+        test_manifest_cannot_break_source_1m(fixture)
+        test_missing_fiscal_identity_rejected(fixture)
+        test_dashboard_publish_metadata_sync(fixture)
+        test_screenshot_dom_build_identity(fixture)
+        test_ingest_snapshot_is_single_entrypoint(fixture)
 
     test_production_unmutated(before)
 

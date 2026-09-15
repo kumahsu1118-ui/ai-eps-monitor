@@ -317,26 +317,49 @@
     return res.json();
   }
 
-  async function loadAll() {
-    const [
-      watchlist,
-      meta,
-      companies,
-      valuation,
-      revisions,
-      epsHistory,
-      earnings,
-      alerts,
-    ] = await Promise.all([
-      loadJSON("watchlist.json"),
-      loadJSON("meta.json"),
-      loadJSON("companies.json"),
-      loadJSON("valuation.json"),
-      loadJSON("revisions.json"),
-      loadJSON("eps_history.json"),
-      loadJSON("earnings.json"),
-      loadJSON("alerts.json"),
-    ]);
+  async function loadAll(retryCount) {
+    retryCount = retryCount || 0;
+    /* Prefer single atomic dashboard.json so sitePublished cannot drift from meta.json */
+    let dash = null;
+    try {
+      dash = await loadJSON("dashboard.json");
+    } catch (_) {
+      dash = null;
+    }
+
+    let watchlist, meta, companies, valuation, revisions, epsHistory, earnings, alerts;
+    if (dash && dash.meta && dash.companies) {
+      meta = dash.meta || {};
+      companies = dash.companies || {};
+      valuation = dash.valuation || {};
+      revisions = dash.revisions || {};
+      epsHistory = dash.epsHistory || {};
+      earnings = dash.earnings || {};
+      alerts = dash.alerts || {};
+      watchlist = dash.watchlist || { tickers: Object.keys(companies) };
+      const bid = dash.buildId || (meta && meta.buildId);
+      if (bid && meta && !meta.buildId) meta.buildId = bid;
+    } else {
+      [
+        watchlist,
+        meta,
+        companies,
+        valuation,
+        revisions,
+        epsHistory,
+        earnings,
+        alerts,
+      ] = await Promise.all([
+        loadJSON("watchlist.json"),
+        loadJSON("meta.json"),
+        loadJSON("companies.json"),
+        loadJSON("valuation.json"),
+        loadJSON("revisions.json"),
+        loadJSON("eps_history.json"),
+        loadJSON("earnings.json"),
+        loadJSON("alerts.json"),
+      ]);
+    }
 
     state.watchlist = (watchlist && watchlist.tickers) || Object.keys(companies || {});
     state.meta = meta || {};
@@ -434,13 +457,22 @@
     set("#meta-published", m.sitePublishedDisplay || m.sitePublished);
     set("#meta-source", m.primarySource);
     const collEl = $("#meta-collection-status");
+    const collRow = $("#meta-collection-status-row");
+    const collStatus = String(m.collectionStatus || "").toLowerCase();
+    const showCollectionRow = collStatus === "partial" || collStatus === "failed";
+    if (collRow) {
+      if (showCollectionRow) {
+        collRow.removeAttribute("hidden");
+        collRow.style.display = "";
+      } else {
+        /* complete (or unknown) — hide the entire Collection status row */
+        collRow.setAttribute("hidden", "");
+        collRow.style.display = "none";
+      }
+    }
     if (collEl) {
       const label = m.collectionStatusLabel || m.collectionStatus;
-      if (label && String(m.collectionStatus || "").toLowerCase() === "partial") {
-        collEl.textContent = String(label);
-        collEl.removeAttribute("hidden");
-        collEl.style.display = "";
-      } else if (label && String(m.collectionStatus || "").toLowerCase() === "failed") {
+      if (showCollectionRow && label) {
         collEl.textContent = String(label);
         collEl.removeAttribute("hidden");
         collEl.style.display = "";

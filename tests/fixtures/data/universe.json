@@ -6,5 +6,13 @@
   "primary_sources": ["company_ir", "10-Q", "10-K", "8-K", "earnings_presentation", "official_transcript"],
   "secondary_sources": ["seeking_alpha_estimates", "seeking_alpha_transcript", "seeking_alpha_revisions"],
   "tertiary_sources": ["bloomberg", "reuters", "wsj", "cnbc", "mgmt_interview"],
-  "quaternary_sources": ["x", "analyst_posts", "supply_chain_rumors"]
+  "quaternary_sources": ["x", "analyst_posts", "supply_chain_rumors"],
+  "fiscalEnd": {
+    "NVDA": {"month": 1, "label": "Jan", "typical": "Late January"},
+    "AVGO": {"month": 10, "label": "Oct", "typical": "Late October / early November"},
+    "TSM": {"month": 12, "label": "Dec", "typical": "Calendar year (Dec)"},
+    "MSFT": {"month": 6, "label": "Jun", "typical": "June 30"},
+    "BE": {"month": 12, "label": "Dec", "typical": "Calendar year (Dec)"},
+    "KEYS": {"month": 10, "label": "Oct", "typical": "October 31"}
+  }
 }
