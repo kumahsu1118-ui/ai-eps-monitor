@@ -325,6 +325,17 @@
     return m ? m[1] + "E" : "";
   }
 
+  const SUPPORTED_SCHEMA_VERSION = "1";
+
+  function assertSchemaCompatible(meta) {
+    const sv = meta && meta.schemaVersion != null ? String(meta.schemaVersion) : null;
+    if (sv && sv !== SUPPORTED_SCHEMA_VERSION) {
+      throw new Error(
+        "incompatible schemaVersion " + sv + " (supported " + SUPPORTED_SCHEMA_VERSION + ") — fail-closed, no render"
+      );
+    }
+  }
+
   /* ---------- data load ---------- */
   async function loadJSON(name) {
     const res = await fetch(DATA_BASE + "/" + name + "?t=" + Date.now());
@@ -414,6 +425,7 @@
       delete epsHistory._buildId;
     }
 
+    assertSchemaCompatible(meta || {});
     state.watchlist = (watchlist && watchlist.tickers) || Object.keys(companies || {});
     state.meta = meta || {};
     state.companies = companies || {};
