@@ -242,6 +242,8 @@ def restore_base_snapshot(fixture: Path) -> None:
     """Restore canonical non-future publishable snapshot (after destructive tests).
 
     Removes other dated snapshots so LKG comparisons do not mix synthetic fixtures.
+    Also drops CURRENT / materialization marker so a later reader rematerialize
+    cannot resurrect a previous ingest's snapshots as conflicting LKG.
     """
     snap_dir = fixture / "data" / "snapshots"
     snap_dir.mkdir(parents=True, exist_ok=True)
@@ -257,6 +259,15 @@ def restore_base_snapshot(fixture: Path) -> None:
         if lp.exists():
             try:
                 lp.unlink()
+            except Exception:
+                pass
+    for leftover in (
+        fixture / "data" / "CURRENT.json",
+        fixture / "data" / ".materialized_run_id",
+    ):
+        if leftover.exists():
+            try:
+                leftover.unlink()
             except Exception:
                 pass
     snap_path = snap_dir / "2026-09-15.json"
@@ -4491,13 +4502,13 @@ def test_materialization_retry_from_current(fixture: Path) -> None:
 
 def test_standalone_export_cannot_mutate_persistent_state(fixture: Path) -> None:
     """Default export_web_data.py must not mutate daily/revision/alert/checkpoint."""
+    import os
     restore_base_snapshot(fixture)
     before = _fingerprint_persistent(fixture)
     rev_before = (fixture / "data" / "revisions" / "history.jsonl").read_bytes() if (fixture / "data" / "revisions" / "history.jsonl").exists() else b""
     daily_before = (fixture / "data" / "daily_eps_snapshots" / "daily.jsonl").read_bytes() if (fixture / "data" / "daily_eps_snapshots" / "daily.jsonl").exists() else b""
     alerts_before = (fixture / "data" / "alerts" / "index.json").read_bytes() if (fixture / "data" / "alerts" / "index.json").exists() else b""
     cp_before = (fixture / "data" / "comparison_checkpoint.json").read_bytes() if (fixture / "data" / "comparison_checkpoint.json").exists() else b""
-    # Bump consensus so legacy mode WOULD mutate
     snap_path = fixture / "data" / "snapshots" / "2026-09-15.json"
     snap = json.loads(snap_path.read_text(encoding="utf-8"))
     if "NVDA" in snap.get("tickers", {}):
@@ -4506,11 +4517,20 @@ def test_standalone_export_cannot_mutate_persistent_state(fixture: Path) -> None
         snap["tickers"]["NVDA"]["eps"]["2027E"] = row
     snap["snapshot_utc"] = "2026-09-15T08:00:00Z"
     snap_path.write_text(json.dumps(snap, indent=2) + "\n", encoding="utf-8")
-    # Default = read-only (no --legacy-mutate)
-    rc = subprocess.call(
+    env = os.environ.copy()
+    for k in list(env):
+        if k.startswith("FAULT_INJECT") or k.startswith("INGEST_"):
+            env.pop(k, None)
+    env.pop("LEGACY_MUTATE", None)
+    env["PIPELINE_LOCK_HELD"] = "1"
+    proc = subprocess.run(
         [sys.executable, str(fixture / "tools" / "export_web_data.py")],
         cwd=str(fixture),
+        env=env,
+        capture_output=True,
+        text=True,
     )
+    rc = proc.returncode
     ok = rc == 0
     rev_after = (fixture / "data" / "revisions" / "history.jsonl").read_bytes() if (fixture / "data" / "revisions" / "history.jsonl").exists() else b""
     daily_after = (fixture / "data" / "daily_eps_snapshots" / "daily.jsonl").read_bytes() if (fixture / "data" / "daily_eps_snapshots" / "daily.jsonl").exists() else b""
@@ -4522,13 +4542,11 @@ def test_standalone_export_cannot_mutate_persistent_state(fixture: Path) -> None
     ok = ok and cp_after == cp_before
     src = (fixture / "tools" / "export_web_data.py").read_text(encoding="utf-8")
     ok = ok and "--legacy-mutate" in src
-    # Restore snap for later tests
     restore_base_snapshot(fixture)
-    record(
-        "standalone_export_cannot_mutate_persistent_state_test",
-        ok,
-        f"rc={rc} rev_same={rev_after==rev_before} daily_same={daily_after==daily_before}",
-    )
+    detail = f"rc={rc} rev_same={rev_after==rev_before} daily_same={daily_after==daily_before}"
+    if rc != 0:
+        detail += f" out={((proc.stdout or '') + (proc.stderr or ''))[-400:]}"
+    record("standalone_export_cannot_mutate_persistent_state_test", ok, detail)
 
 
 def test_standalone_publish_cannot_mutate_persistent_state(fixture: Path) -> None:
@@ -5331,31 +5349,41 @@ def main(suite: str = "all", unit_timeout_s: float = 25.0, integration_timeout_s
 
     test_client_stale_logic_legacy_note()
 
-    with tempfile.TemporaryDirectory(prefix="ai_eps_accept_fc_") as td:
-        fixture = build_fixture(Path(td) / "proj")
-        print(f"FIXTURE={fixture}")
-        run_export(fixture)
-
-        selected = []
-        for name, fn in _all_suite_tests():
-            is_integ = name in INTEGRATION_TEST_NAMES
-            if suite == "unit" and is_integ:
-                continue
-            if suite == "integration" and not is_integ:
-                continue
-            selected.append((name, fn, is_integ))
-
-        print(f"Selected tests: {len(selected)}")
+    def _run_phase(selected: list, fixture: Path) -> None:
+        print(f"Selected tests: {len(selected)} fixture={fixture}")
         for name, fn, is_integ in selected:
             timeout = integration_timeout_s if is_integ else unit_timeout_s
             try:
                 _run_one(name, fn, fixture, timeout)
             except Exception as exc:
                 rec_name = name if name.endswith("_test") else (name[5:] + "_test" if name.startswith("test_") else name)
-                # Avoid double-record if test already recorded FAIL
                 if not any(r[0] == rec_name for r in RESULTS):
                     record(rec_name, False, f"EXC {type(exc).__name__}: {exc}")
                 print(f"EXC in {name}: {exc}")
+
+    phases: list[tuple[str, str]]
+    if suite == "all":
+        # Isolated fixtures: ingest CURRENT from integration must not leak into unit tests.
+        phases = [("unit", "unit"), ("integration", "integration")]
+    else:
+        phases = [(suite, suite)]
+
+    for phase_name, phase_suite in phases:
+        unit_only = phase_suite == "unit"
+        integ_only = phase_suite == "integration"
+        with tempfile.TemporaryDirectory(prefix=f"ai_eps_accept_{phase_name}_") as td:
+            fixture = build_fixture(Path(td) / "proj")
+            print(f"FIXTURE[{phase_name}]={fixture}")
+            run_export(fixture)
+            selected = []
+            for name, fn in _all_suite_tests():
+                is_integ = name in INTEGRATION_TEST_NAMES
+                if unit_only and is_integ:
+                    continue
+                if integ_only and not is_integ:
+                    continue
+                selected.append((name, fn, is_integ))
+            _run_phase(selected, fixture)
 
     test_production_unmutated(before)
     elapsed = time.monotonic() - t0
