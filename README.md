@@ -7,3 +7,5 @@ Public static dashboard for the AI Investment EPS & Earnings Monitor.
 Data lives in `./data/*.json` (exported from the private monitor pipeline). Hash routes: `#/`, `#/valuation`, `#/revisions`, `#/earnings`, `#/companies`, `#/company/NVDA`.
 
 Do not commit Seeking Alpha sessions, cookies, tokens, or credentials.
+
+<!-- rebuild 20260915T062320Z -->
