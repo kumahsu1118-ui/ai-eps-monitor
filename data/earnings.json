@@ -5,7 +5,7 @@
     "reportDate": "2026-08-26",
     "periodLabel": "Q2 2027 (fiscal 2027)",
     "lastEarnings": "8/26/2026",
-    "nextEarnings": "11/25/2026 (Post-Market)",
+    "nextEarnings": "Nov 25, 2026 · Estimated",
     "revenue": [
       {
         "label": "Revenue",
@@ -47,79 +47,91 @@
     "positives": [
       {
         "text": "Record Q2 revenue of $96.22B more than doubled year-over-year; SA summary reports 105.85% Y/Y growth and an EPS/revenue beat.",
-        "source": "SA Q2 2027 earnings call transcript",
+        "source": "Seeking Alpha supplemental (earnings transcript)",
         "sourceDate": "2026-08-26",
-        "url": "https://seekingalpha.com/article/4940563-nvidia-corporation-nvda-q2-2027-earnings-call-transcript"
+        "url": "https://seekingalpha.com/article/4940563-nvidia-corporation-nvda-q2-2027-earnings-call-transcript",
+        "sourceTier": 4
       },
       {
         "text": "Data-center revenue reached $89B, up 18% sequentially; ACIE revenue was $40B, up 25% sequentially and 138% Y/Y.",
-        "source": "SA Q2 2027 earnings call transcript",
+        "source": "Seeking Alpha supplemental (earnings transcript)",
         "sourceDate": "2026-08-26",
-        "url": "https://seekingalpha.com/article/4940563-nvidia-corporation-nvda-q2-2027-earnings-call-transcript"
+        "url": "https://seekingalpha.com/article/4940563-nvidia-corporation-nvda-q2-2027-earnings-call-transcript",
+        "sourceTier": 4
       },
       {
         "text": "AWS is deploying an additional 2 million NVIDIA GPUs from Q2 FY27 through Q2 FY29; Vera Rubin production shipments commenced and are expected to be the fastest product ramp in company history.",
-        "source": "SA Q2 2027 earnings call transcript",
+        "source": "Seeking Alpha supplemental (earnings transcript)",
         "sourceDate": "2026-08-26",
-        "url": "https://seekingalpha.com/article/4940563-nvidia-corporation-nvda-q2-2027-earnings-call-transcript"
+        "url": "https://seekingalpha.com/article/4940563-nvidia-corporation-nvda-q2-2027-earnings-call-transcript",
+        "sourceTier": 4
       },
       {
         "text": "NVIDIA expects approximately 70% FY28 revenue growth; demand is described as higher, but the outlook is supply constrained.",
-        "source": "SA Q2 2027 earnings call transcript",
+        "source": "Seeking Alpha supplemental (earnings transcript)",
         "sourceDate": "2026-08-26",
-        "url": "https://seekingalpha.com/article/4940563-nvidia-corporation-nvda-q2-2027-earnings-call-transcript"
+        "url": "https://seekingalpha.com/article/4940563-nvidia-corporation-nvda-q2-2027-earnings-call-transcript",
+        "sourceTier": 4
       },
       {
         "text": "Vera CPU revenue is preliminarily expected to more than double in FY28; management sees approximately $20B total server-CPU demand.",
-        "source": "SA Q2 2027 earnings call transcript",
+        "source": "Seeking Alpha supplemental (earnings transcript)",
         "sourceDate": "2026-08-26",
-        "url": "https://seekingalpha.com/article/4940563-nvidia-corporation-nvda-q2-2027-earnings-call-transcript"
+        "url": "https://seekingalpha.com/article/4940563-nvidia-corporation-nvda-q2-2027-earnings-call-transcript",
+        "sourceTier": 4
       }
     ],
     "negatives": [
       {
         "text": "Memory pricing is rising sharply; management reset Q3 gross-margin expectations to 74% and expects a Q4 bottom at 71%-72%.",
-        "source": "SA Q2 2027 earnings call transcript",
+        "source": "Seeking Alpha supplemental (earnings transcript)",
         "sourceDate": "2026-08-26",
-        "url": "https://seekingalpha.com/article/4940563-nvidia-corporation-nvda-q2-2027-earnings-call-transcript"
+        "url": "https://seekingalpha.com/article/4940563-nvidia-corporation-nvda-q2-2027-earnings-call-transcript",
+        "sourceTier": 4
       },
       {
         "text": "Current Hopper shipments are dilutive to corporate gross margin, and the forward outlook contains no China data-center compute revenue due to geopolitical uncertainty.",
-        "source": "SA Q2 2027 earnings call transcript",
+        "source": "Seeking Alpha supplemental (earnings transcript)",
         "sourceDate": "2026-08-26",
-        "url": "https://seekingalpha.com/article/4940563-nvidia-corporation-nvda-q2-2027-earnings-call-transcript"
+        "url": "https://seekingalpha.com/article/4940563-nvidia-corporation-nvda-q2-2027-earnings-call-transcript",
+        "sourceTier": 4
       },
       {
         "text": "GAAP and non-GAAP operating expenses rose 10% and 11% sequentially; full-year FY27 OpEx is expected to grow in the low 50s.",
-        "source": "SA Q2 2027 earnings call transcript",
+        "source": "Seeking Alpha supplemental (earnings transcript)",
         "sourceDate": "2026-08-26",
-        "url": "https://seekingalpha.com/article/4940563-nvidia-corporation-nvda-q2-2027-earnings-call-transcript"
+        "url": "https://seekingalpha.com/article/4940563-nvidia-corporation-nvda-q2-2027-earnings-call-transcript",
+        "sourceTier": 4
       },
       {
         "text": "Inventory rose to $32B and days sales outstanding to 60 days, reflecting preparation for Vera Rubin and extended payment terms on large customer purchases.",
-        "source": "SA Q2 2027 earnings call transcript",
+        "source": "Seeking Alpha supplemental (earnings transcript)",
         "sourceDate": "2026-08-26",
-        "url": "https://seekingalpha.com/article/4940563-nvidia-corporation-nvda-q2-2027-earnings-call-transcript"
+        "url": "https://seekingalpha.com/article/4940563-nvidia-corporation-nvda-q2-2027-earnings-call-transcript",
+        "sourceTier": 4
       }
     ],
     "uncertainties": [
       {
         "text": "Supply is expected to remain a bottleneck through at least FY28, despite demand that management says is materially above the 70% outlook.",
-        "source": "SA Q2 2027 earnings call transcript",
+        "source": "Seeking Alpha supplemental (earnings transcript)",
         "sourceDate": "2026-08-26",
-        "url": "https://seekingalpha.com/article/4940563-nvidia-corporation-nvda-q2-2027-earnings-call-transcript"
+        "url": "https://seekingalpha.com/article/4940563-nvidia-corporation-nvda-q2-2027-earnings-call-transcript",
+        "sourceTier": 4
       },
       {
         "text": "NVIDIA has invested nearly $50B in frontier AI labs and may provide selective credit enhancement; management notes the scale and circular-financing criticism.",
-        "source": "SA Q2 2027 earnings call transcript",
+        "source": "Seeking Alpha supplemental (earnings transcript)",
         "sourceDate": "2026-08-26",
-        "url": "https://seekingalpha.com/article/4940563-nvidia-corporation-nvda-q2-2027-earnings-call-transcript"
+        "url": "https://seekingalpha.com/article/4940563-nvidia-corporation-nvda-q2-2027-earnings-call-transcript",
+        "sourceTier": 4
       },
       {
         "text": "AI-lab demand supported by NVIDIA balance-sheet leverage could represent roughly one-quarter of next year's business; customer payment terms have lengthened.",
-        "source": "SA Q2 2027 earnings call transcript",
+        "source": "Seeking Alpha supplemental (earnings transcript)",
         "sourceDate": "2026-08-26",
-        "url": "https://seekingalpha.com/article/4940563-nvidia-corporation-nvda-q2-2027-earnings-call-transcript"
+        "url": "https://seekingalpha.com/article/4940563-nvidia-corporation-nvda-q2-2027-earnings-call-transcript",
+        "sourceTier": 4
       }
     ],
     "commentary": "AI demand: Demand is broadening across hyperscalers, AI labs, neoclouds, enterprises and sovereigns; AI agents require materially more compute than conventional use cases. | Capacity: Neocloud partners are expected to exit the year with 8GW of installed capacity versus approximately 3GW at end-2025; Vera Rubin is expected to be about 20% of Q3 data-center revenue. | Gross margin: Memory scarcity is driven by the AI buildout; price increases are expected to be offset over time by executed customer price increases, but management expects margins to bottom in Q4. | Customers: AWS expansion, OpenAI commitments of approximately 12GW through 2030, and additional frontier-lab demand support future shipments, while China is excluded from forward data-center compute outlook.",
@@ -127,30 +139,34 @@
       {
         "topic": "AI demand",
         "text": "Demand is broadening across hyperscalers, AI labs, neoclouds, enterprises and sovereigns; AI agents require materially more compute than conventional use cases.",
-        "source": "SA Q2 2027 earnings call transcript",
+        "source": "Seeking Alpha supplemental (earnings transcript)",
         "url": "https://seekingalpha.com/article/4940563-nvidia-corporation-nvda-q2-2027-earnings-call-transcript",
-        "sourceDate": "2026-08-26"
+        "sourceDate": "2026-08-26",
+        "sourceTier": 4
       },
       {
         "topic": "Capacity",
         "text": "Neocloud partners are expected to exit the year with 8GW of installed capacity versus approximately 3GW at end-2025; Vera Rubin is expected to be about 20% of Q3 data-center revenue.",
-        "source": "SA Q2 2027 earnings call transcript",
+        "source": "Seeking Alpha supplemental (earnings transcript)",
         "url": "https://seekingalpha.com/article/4940563-nvidia-corporation-nvda-q2-2027-earnings-call-transcript",
-        "sourceDate": "2026-08-26"
+        "sourceDate": "2026-08-26",
+        "sourceTier": 4
       },
       {
         "topic": "Gross margin",
         "text": "Memory scarcity is driven by the AI buildout; price increases are expected to be offset over time by executed customer price increases, but management expects margins to bottom in Q4.",
-        "source": "SA Q2 2027 earnings call transcript",
+        "source": "Seeking Alpha supplemental (earnings transcript)",
         "url": "https://seekingalpha.com/article/4940563-nvidia-corporation-nvda-q2-2027-earnings-call-transcript",
-        "sourceDate": "2026-08-26"
+        "sourceDate": "2026-08-26",
+        "sourceTier": 4
       },
       {
         "topic": "Customers",
         "text": "AWS expansion, OpenAI commitments of approximately 12GW through 2030, and additional frontier-lab demand support future shipments, while China is excluded from forward data-center compute outlook.",
-        "source": "SA Q2 2027 earnings call transcript",
+        "source": "Seeking Alpha supplemental (earnings transcript)",
         "url": "https://seekingalpha.com/article/4940563-nvidia-corporation-nvda-q2-2027-earnings-call-transcript",
-        "sourceDate": "2026-08-26"
+        "sourceDate": "2026-08-26",
+        "sourceTier": 4
       }
     ],
     "qa": [
@@ -158,53 +174,88 @@
         "question": "Why guide to about 70% FY28 revenue growth when management says demand is higher?",
         "answer": "Management says supply, not demand, supports the 70% outlook; supply is expected to remain a bottleneck through FY28.",
         "whyMattersForEps": "2027E/2028E",
-        "source": "SA Q2 2027 earnings call transcript",
+        "source": "Seeking Alpha supplemental (earnings transcript)",
         "sourceDate": "2026-08-26",
-        "url": "https://seekingalpha.com/article/4940563-nvidia-corporation-nvda-q2-2027-earnings-call-transcript"
+        "url": "https://seekingalpha.com/article/4940563-nvidia-corporation-nvda-q2-2027-earnings-call-transcript",
+        "sourceTier": 4
       },
       {
         "question": "What is the near-term gross-margin path?",
         "answer": "Q3 GAAP and non-GAAP gross margin is guided to 74% +/- 50 bps; management expects Q4 at 71%-72% and FY28 at 72%-73%.",
         "whyMattersForEps": "2026E/2027E/2028E",
-        "source": "SA Q2 2027 earnings call transcript",
+        "source": "Seeking Alpha supplemental (earnings transcript)",
         "sourceDate": "2026-08-26",
-        "url": "https://seekingalpha.com/article/4940563-nvidia-corporation-nvda-q2-2027-earnings-call-transcript"
+        "url": "https://seekingalpha.com/article/4940563-nvidia-corporation-nvda-q2-2027-earnings-call-transcript",
+        "sourceTier": 4
       },
       {
         "question": "How material are frontier AI labs to future revenue and risk?",
         "answer": "Demand from labs for which NVIDIA may leverage its balance sheet could be roughly one-quarter of next year's business; NVIDIA has invested nearly $50B and may provide selective credit enhancement.",
         "whyMattersForEps": "2027E",
-        "source": "SA Q2 2027 earnings call transcript",
+        "source": "Seeking Alpha supplemental (earnings transcript)",
         "sourceDate": "2026-08-26",
-        "url": "https://seekingalpha.com/article/4940563-nvidia-corporation-nvda-q2-2027-earnings-call-transcript"
+        "url": "https://seekingalpha.com/article/4940563-nvidia-corporation-nvda-q2-2027-earnings-call-transcript",
+        "sourceTier": 4
       },
       {
         "question": "What customer capacity is already visible?",
         "answer": "AWS plans an additional 2M GPUs from this quarter through Q2 FY29; OpenAI's existing and planned commitments represent approximately 12GW of NVIDIA compute through 2030.",
         "whyMattersForEps": "2026E/2027E/2028E",
-        "source": "SA Q2 2027 earnings call transcript",
+        "source": "Seeking Alpha supplemental (earnings transcript)",
         "sourceDate": "2026-08-26",
-        "url": "https://seekingalpha.com/article/4940563-nvidia-corporation-nvda-q2-2027-earnings-call-transcript"
+        "url": "https://seekingalpha.com/article/4940563-nvidia-corporation-nvda-q2-2027-earnings-call-transcript",
+        "sourceTier": 4
       },
       {
         "question": "What is driving the mix beyond GPUs?",
         "answer": "Management expects Vera CPU revenue to more than double in FY28, with approximately $20B of total server-CPU demand; networking revenue also grew 18% sequentially in Q2.",
         "whyMattersForEps": "2027E/2028E",
-        "source": "SA Q2 2027 earnings call transcript",
+        "source": "Seeking Alpha supplemental (earnings transcript)",
         "sourceDate": "2026-08-26",
-        "url": "https://seekingalpha.com/article/4940563-nvidia-corporation-nvda-q2-2027-earnings-call-transcript"
+        "url": "https://seekingalpha.com/article/4940563-nvidia-corporation-nvda-q2-2027-earnings-call-transcript",
+        "sourceTier": 4
       }
     ],
     "sources": [
       {
+        "title": "Company IR earnings release",
+        "url": null,
+        "date": null,
+        "sourceTier": 1,
+        "attribution": "Company IR",
+        "note": "Primary link not yet attached"
+      },
+      {
+        "title": "SEC 10-Q / 10-K / 8-K",
+        "url": null,
+        "date": null,
+        "sourceTier": 2,
+        "attribution": "SEC",
+        "note": "Primary filing link not yet attached"
+      },
+      {
+        "title": "Official earnings transcript",
+        "url": null,
+        "date": null,
+        "sourceTier": 3,
+        "attribution": "Company / official transcript",
+        "note": "Official transcript link not yet attached; SA transcript used as supplemental"
+      },
+      {
         "title": "NVIDIA Corporation (NVDA) Q2 2027 Earnings Call Transcript",
         "url": "https://seekingalpha.com/article/4940563-nvidia-corporation-nvda-q2-2027-earnings-call-transcript",
-        "date": "2026-08-26"
+        "date": "2026-08-26",
+        "sourceTier": 4,
+        "attribution": "Seeking Alpha supplemental",
+        "note": "SA-hosted transcript — supplemental until official IR/SEC primary link attached"
       },
       {
         "title": "NVIDIA Q2 2027 Earnings Call Insights",
         "url": "https://seekingalpha.com/news/4637259-nvidia-expects-70-percent-fiscal-2028-revenue-growth-as-it-resets-gross-margin-outlook",
-        "date": "2026-08-26"
+        "date": "2026-08-26",
+        "sourceTier": 4,
+        "attribution": "Seeking Alpha supplemental",
+        "note": "Seeking Alpha supplemental coverage"
       }
     ],
     "dataGaps": [
@@ -212,10 +263,15 @@
       "operatingMargin not stated",
       "fcf not stated",
       "nextQuarterEps not stated",
-      "guidance operatingMargin not stated"
+      "guidance operatingMargin not stated",
+      "Company IR earnings release / SEC 10-Q/10-K/8-K primary links not yet attached; SA URLs kept as supplemental (tier 4)"
     ],
     "digestVersion": "investor-v1",
-    "updatedAt": "2026-09-15T02:50:00Z"
+    "updatedAt": "2026-09-15T02:50:00Z",
+    "sourceHierarchy": "Source hierarchy: (1) Company IR earnings release (2) SEC 10-Q/10-K/8-K (3) Official earnings transcript (4) Seeking Alpha supplemental",
+    "nextEarningsStatus": "estimated",
+    "nextEarningsSource": "Seeking Alpha",
+    "nextEarningsRaw": "11/25/2026 (Post-Market)"
   },
   "AVGO": {
     "ticker": "AVGO",
@@ -223,7 +279,7 @@
     "reportDate": "2026-09-02",
     "periodLabel": "Q3 2026 (fiscal 2026)",
     "lastEarnings": "9/2/2026",
-    "nextEarnings": "12/10/2026 (Post-Market)",
+    "nextEarnings": "Dec 10, 2026 · Estimated",
     "revenue": [
       {
         "label": "Revenue",
@@ -276,79 +332,91 @@
     "positives": [
       {
         "text": "Record Q3 revenue of $29.6B grew 86% Y/Y; operating income grew 92% Y/Y and operating margin reached a record 67.9%.",
-        "source": "SA Q3 2026 earnings call transcript",
+        "source": "Seeking Alpha supplemental (earnings transcript)",
         "sourceDate": "2026-09-02",
-        "url": "https://seekingalpha.com/article/4942557-broadcom-inc-avgo-q3-2026-earnings-call-transcript"
+        "url": "https://seekingalpha.com/article/4942557-broadcom-inc-avgo-q3-2026-earnings-call-transcript",
+        "sourceTier": 4
       },
       {
         "text": "AI semiconductor revenue reached $16.7B, up 221% Y/Y and 54% sequentially; Q4 AI revenue is guided to $21.7B, up 236% Y/Y.",
-        "source": "SA Q3 2026 earnings call transcript",
+        "source": "Seeking Alpha supplemental (earnings transcript)",
         "sourceDate": "2026-09-02",
-        "url": "https://seekingalpha.com/article/4942557-broadcom-inc-avgo-q3-2026-earnings-call-transcript"
+        "url": "https://seekingalpha.com/article/4942557-broadcom-inc-avgo-q3-2026-earnings-call-transcript",
+        "sourceTier": 4
       },
       {
         "text": "Management expects FY26 AI revenue of approximately $58B, FY27 AI revenue of approximately $115B, and FY28 AI semiconductor revenue of approximately $230B.",
-        "source": "SA Q3 2026 earnings call transcript",
+        "source": "Seeking Alpha supplemental (earnings transcript)",
         "sourceDate": "2026-09-02",
-        "url": "https://seekingalpha.com/article/4942557-broadcom-inc-avgo-q3-2026-earnings-call-transcript"
+        "url": "https://seekingalpha.com/article/4942557-broadcom-inc-avgo-q3-2026-earnings-call-transcript",
+        "sourceTier": 4
       },
       {
         "text": "Google agreement contemplates multi-tens of billions of dollars of TPUs annually over the next several years; Anthropic, OpenAI and Meta deployments provide multi-year XPU visibility.",
-        "source": "SA Q3 2026 earnings call transcript",
+        "source": "Seeking Alpha supplemental (earnings transcript)",
         "sourceDate": "2026-09-02",
-        "url": "https://seekingalpha.com/article/4942557-broadcom-inc-avgo-q3-2026-earnings-call-transcript"
+        "url": "https://seekingalpha.com/article/4942557-broadcom-inc-avgo-q3-2026-earnings-call-transcript",
+        "sourceTier": 4
       },
       {
         "text": "Q3 free cash flow was a record $13.7B, or 46% of revenue; management expects substantial operating leverage despite mix pressure.",
-        "source": "SA Q3 2026 earnings call transcript",
+        "source": "Seeking Alpha supplemental (earnings transcript)",
         "sourceDate": "2026-09-02",
-        "url": "https://seekingalpha.com/article/4942557-broadcom-inc-avgo-q3-2026-earnings-call-transcript"
+        "url": "https://seekingalpha.com/article/4942557-broadcom-inc-avgo-q3-2026-earnings-call-transcript",
+        "sourceTier": 4
       }
     ],
     "negatives": [
       {
         "text": "Consolidated gross margin was 75%, down 210 bps sequentially as AI semiconductor revenue became a larger mix; Q4 is guided to approximately 73% versus 78% a year ago.",
-        "source": "SA Q3 2026 earnings call transcript",
+        "source": "Seeking Alpha supplemental (earnings transcript)",
         "sourceDate": "2026-09-02",
-        "url": "https://seekingalpha.com/article/4942557-broadcom-inc-avgo-q3-2026-earnings-call-transcript"
+        "url": "https://seekingalpha.com/article/4942557-broadcom-inc-avgo-q3-2026-earnings-call-transcript",
+        "sourceTier": 4
       },
       {
         "text": "Increasing XPU memory content is diluting consolidated gross margin; management guides one quarter at a time for future margins.",
-        "source": "SA Q3 2026 earnings call transcript",
+        "source": "Seeking Alpha supplemental (earnings transcript)",
         "sourceDate": "2026-09-02",
-        "url": "https://seekingalpha.com/article/4942557-broadcom-inc-avgo-q3-2026-earnings-call-transcript"
+        "url": "https://seekingalpha.com/article/4942557-broadcom-inc-avgo-q3-2026-earnings-call-transcript",
+        "sourceTier": 4
       },
       {
         "text": "Non-AI semiconductor revenue was $4.2B, flat sequentially; wireless declined within the non-AI mix.",
-        "source": "SA Q3 2026 earnings call transcript",
+        "source": "Seeking Alpha supplemental (earnings transcript)",
         "sourceDate": "2026-09-02",
-        "url": "https://seekingalpha.com/article/4942557-broadcom-inc-avgo-q3-2026-earnings-call-transcript"
+        "url": "https://seekingalpha.com/article/4942557-broadcom-inc-avgo-q3-2026-earnings-call-transcript",
+        "sourceTier": 4
       },
       {
         "text": "Q4 CapEx is expected to be $1.4B as Broadcom invests in semiconductor capacity; deployment timing depends on land, power and data-center shells.",
-        "source": "SA Q3 2026 earnings call transcript",
+        "source": "Seeking Alpha supplemental (earnings transcript)",
         "sourceDate": "2026-09-02",
-        "url": "https://seekingalpha.com/article/4942557-broadcom-inc-avgo-q3-2026-earnings-call-transcript"
+        "url": "https://seekingalpha.com/article/4942557-broadcom-inc-avgo-q3-2026-earnings-call-transcript",
+        "sourceTier": 4
       }
     ],
     "uncertainties": [
       {
         "text": "Broadcom says demand exceeds the $115B FY27 and $230B FY28 AI outlooks, but supply and timely deployment of customer data centers constrain what can be shipped.",
-        "source": "SA Q3 2026 earnings call transcript",
+        "source": "Seeking Alpha supplemental (earnings transcript)",
         "sourceDate": "2026-09-02",
-        "url": "https://seekingalpha.com/article/4942557-broadcom-inc-avgo-q3-2026-earnings-call-transcript"
+        "url": "https://seekingalpha.com/article/4942557-broadcom-inc-avgo-q3-2026-earnings-call-transcript",
+        "sourceTier": 4
       },
       {
         "text": "The AI XPV platform uses third-party financing for Anthropic and OpenAI; future residual-value guarantees are deal-specific and no new maximum exposure was disclosed.",
-        "source": "SA Q3 2026 earnings call transcript",
+        "source": "Seeking Alpha supplemental (earnings transcript)",
         "sourceDate": "2026-09-02",
-        "url": "https://seekingalpha.com/article/4942557-broadcom-inc-avgo-q3-2026-earnings-call-transcript"
+        "url": "https://seekingalpha.com/article/4942557-broadcom-inc-avgo-q3-2026-earnings-call-transcript",
+        "sourceTier": 4
       },
       {
         "text": "Long-term XPU revenue depends on frontier-lab customer choices, land/power/shell readiness and continued supply of leading-edge wafers, substrates and HBM.",
-        "source": "SA Q3 2026 earnings call transcript",
+        "source": "Seeking Alpha supplemental (earnings transcript)",
         "sourceDate": "2026-09-02",
-        "url": "https://seekingalpha.com/article/4942557-broadcom-inc-avgo-q3-2026-earnings-call-transcript"
+        "url": "https://seekingalpha.com/article/4942557-broadcom-inc-avgo-q3-2026-earnings-call-transcript",
+        "sourceTier": 4
       }
     ],
     "commentary": "AI demand: Six XPU customers are accelerating custom-accelerator adoption; Q4 XPUs and AI networking are each expected to triple Y/Y. | Customers: Anthropic is expected to deploy 1GW of Ironwood in 2026, another 5GW in 2027 and 10GW in 2028; OpenAI is planned for 1.3GW in 2027 and over 5GW in 2028; Meta has line of sight to 3GW through 2028. | Networking: Tomahawk 6 is deployed across AI hyperscalers and Tomahawk Ultra is beginning scale-up deployments in Q3 and FY27; AI networking revenue is expected to grow as fast as XPU revenue over the next few years. | Gross margin: Mix is shifting toward XPUs with higher memory content, but management expects operating leverage to preserve approximately 66% Q4 operating margin even as gross margin declines.",
@@ -356,30 +424,34 @@
       {
         "topic": "AI demand",
         "text": "Six XPU customers are accelerating custom-accelerator adoption; Q4 XPUs and AI networking are each expected to triple Y/Y.",
-        "source": "SA Q3 2026 earnings call transcript",
+        "source": "Seeking Alpha supplemental (earnings transcript)",
         "url": "https://seekingalpha.com/article/4942557-broadcom-inc-avgo-q3-2026-earnings-call-transcript",
-        "sourceDate": "2026-09-02"
+        "sourceDate": "2026-09-02",
+        "sourceTier": 4
       },
       {
         "topic": "Customers",
         "text": "Anthropic is expected to deploy 1GW of Ironwood in 2026, another 5GW in 2027 and 10GW in 2028; OpenAI is planned for 1.3GW in 2027 and over 5GW in 2028; Meta has line of sight to 3GW through 2028.",
-        "source": "SA Q3 2026 earnings call transcript",
+        "source": "Seeking Alpha supplemental (earnings transcript)",
         "url": "https://seekingalpha.com/article/4942557-broadcom-inc-avgo-q3-2026-earnings-call-transcript",
-        "sourceDate": "2026-09-02"
+        "sourceDate": "2026-09-02",
+        "sourceTier": 4
       },
       {
         "topic": "Networking",
         "text": "Tomahawk 6 is deployed across AI hyperscalers and Tomahawk Ultra is beginning scale-up deployments in Q3 and FY27; AI networking revenue is expected to grow as fast as XPU revenue over the next few years.",
-        "source": "SA Q3 2026 earnings call transcript",
+        "source": "Seeking Alpha supplemental (earnings transcript)",
         "url": "https://seekingalpha.com/article/4942557-broadcom-inc-avgo-q3-2026-earnings-call-transcript",
-        "sourceDate": "2026-09-02"
+        "sourceDate": "2026-09-02",
+        "sourceTier": 4
       },
       {
         "topic": "Gross margin",
         "text": "Mix is shifting toward XPUs with higher memory content, but management expects operating leverage to preserve approximately 66% Q4 operating margin even as gross margin declines.",
-        "source": "SA Q3 2026 earnings call transcript",
+        "source": "Seeking Alpha supplemental (earnings transcript)",
         "url": "https://seekingalpha.com/article/4942557-broadcom-inc-avgo-q3-2026-earnings-call-transcript",
-        "sourceDate": "2026-09-02"
+        "sourceDate": "2026-09-02",
+        "sourceTier": 4
       }
     ],
     "qa": [
@@ -387,67 +459,110 @@
         "question": "Why should investors believe the $115B FY27 and $230B FY28 AI outlooks?",
         "answer": "Broadcom says demand is higher than the outlooks and supply has been secured for those targets, but actual shipment timing also depends on data-center deployment readiness.",
         "whyMattersForEps": "2027E/2028E",
-        "source": "SA Q3 2026 earnings call transcript",
+        "source": "Seeking Alpha supplemental (earnings transcript)",
         "sourceDate": "2026-09-02",
-        "url": "https://seekingalpha.com/article/4942557-broadcom-inc-avgo-q3-2026-earnings-call-transcript"
+        "url": "https://seekingalpha.com/article/4942557-broadcom-inc-avgo-q3-2026-earnings-call-transcript",
+        "sourceTier": 4
       },
       {
         "question": "What is the gross-margin risk from XPU mix?",
         "answer": "Consolidated Q3 gross margin was 75%, down 210 bps sequentially; Q4 is guided to approximately 73% as XPU memory content rises, while operating margin is guided to approximately 66%.",
         "whyMattersForEps": "2026E/2027E",
-        "source": "SA Q3 2026 earnings call transcript",
+        "source": "Seeking Alpha supplemental (earnings transcript)",
         "sourceDate": "2026-09-02",
-        "url": "https://seekingalpha.com/article/4942557-broadcom-inc-avgo-q3-2026-earnings-call-transcript"
+        "url": "https://seekingalpha.com/article/4942557-broadcom-inc-avgo-q3-2026-earnings-call-transcript",
+        "sourceTier": 4
       },
       {
         "question": "What financing risk is associated with Anthropic and OpenAI?",
         "answer": "Broadcom established an XPV platform with third-party capital; future residual-value guarantees will be evaluated deal by deal, and management disclosed no new maximum exposure.",
         "whyMattersForEps": "2027E/2028E",
-        "source": "SA Q3 2026 earnings call transcript",
+        "source": "Seeking Alpha supplemental (earnings transcript)",
         "sourceDate": "2026-09-02",
-        "url": "https://seekingalpha.com/article/4942557-broadcom-inc-avgo-q3-2026-earnings-call-transcript"
+        "url": "https://seekingalpha.com/article/4942557-broadcom-inc-avgo-q3-2026-earnings-call-transcript",
+        "sourceTier": 4
       },
       {
         "question": "How visible is customer-specific XPU demand?",
         "answer": "Anthropic has a stated 1GW/5GW/10GW path across 2026-2028; OpenAI is planned at 1.3GW in 2027 and over 5GW in 2028; Meta has line of sight to 3GW through 2028.",
         "whyMattersForEps": "2027E/2028E",
-        "source": "SA Q3 2026 earnings call transcript",
+        "source": "Seeking Alpha supplemental (earnings transcript)",
         "sourceDate": "2026-09-02",
-        "url": "https://seekingalpha.com/article/4942557-broadcom-inc-avgo-q3-2026-earnings-call-transcript"
+        "url": "https://seekingalpha.com/article/4942557-broadcom-inc-avgo-q3-2026-earnings-call-transcript",
+        "sourceTier": 4
       },
       {
         "question": "Can operating income grow despite lower gross margin?",
         "answer": "Management expects strong operating leverage: Q4 operating margin is guided to approximately 66%, flat Y/Y, despite Q4 gross margin guidance of approximately 73%.",
         "whyMattersForEps": "2026E",
-        "source": "SA Q3 2026 earnings call transcript",
+        "source": "Seeking Alpha supplemental (earnings transcript)",
         "sourceDate": "2026-09-02",
-        "url": "https://seekingalpha.com/article/4942557-broadcom-inc-avgo-q3-2026-earnings-call-transcript"
+        "url": "https://seekingalpha.com/article/4942557-broadcom-inc-avgo-q3-2026-earnings-call-transcript",
+        "sourceTier": 4
       }
     ],
     "sources": [
       {
+        "title": "Company IR earnings release",
+        "url": null,
+        "date": null,
+        "sourceTier": 1,
+        "attribution": "Company IR",
+        "note": "Primary link not yet attached"
+      },
+      {
+        "title": "SEC 10-Q / 10-K / 8-K",
+        "url": null,
+        "date": null,
+        "sourceTier": 2,
+        "attribution": "SEC",
+        "note": "Primary filing link not yet attached"
+      },
+      {
+        "title": "Official earnings transcript",
+        "url": null,
+        "date": null,
+        "sourceTier": 3,
+        "attribution": "Company / official transcript",
+        "note": "Official transcript link not yet attached; SA transcript used as supplemental"
+      },
+      {
         "title": "Broadcom Inc. (AVGO) Q3 2026 Earnings Call Transcript",
         "url": "https://seekingalpha.com/article/4942557-broadcom-inc-avgo-q3-2026-earnings-call-transcript",
-        "date": "2026-09-02"
+        "date": "2026-09-02",
+        "sourceTier": 4,
+        "attribution": "Seeking Alpha supplemental",
+        "note": "SA-hosted transcript — supplemental until official IR/SEC primary link attached"
       },
       {
         "title": "Broadcom Q3 2026 Earnings Call Insights",
         "url": "https://seekingalpha.com/news/4639799-broadcom-forecasts-58b-fiscal-2026-ai-revenue-and-outlines-115b-in-2027-230b-in-2028",
-        "date": "2026-09-02"
+        "date": "2026-09-02",
+        "sourceTier": 4,
+        "attribution": "Seeking Alpha supplemental",
+        "note": "Seeking Alpha supplemental coverage"
       }
     ],
     "dataGaps": [
       "revenueQoQ for consolidated revenue not stated on the transcript page",
-      "nextQuarterEps not stated"
+      "nextQuarterEps not stated",
+      "Company IR earnings release / SEC 10-Q/10-K/8-K primary links not yet attached; SA URLs kept as supplemental (tier 4)"
     ],
     "digestVersion": "investor-v1",
-    "updatedAt": "2026-09-15T02:50:00Z"
+    "updatedAt": "2026-09-15T02:50:00Z",
+    "sourceHierarchy": "Source hierarchy: (1) Company IR earnings release (2) SEC 10-Q/10-K/8-K (3) Official earnings transcript (4) Seeking Alpha supplemental",
+    "nextEarningsStatus": "estimated",
+    "nextEarningsSource": "Seeking Alpha",
+    "nextEarningsRaw": "12/10/2026 (Post-Market)"
   },
   "TSM": {
     "ticker": "TSM",
     "hasDigest": false,
     "lastEarnings": "7/16/2026",
-    "nextEarnings": "10/16/2026 (Estimated)",
+    "nextEarnings": "Oct 16, 2026 · Estimated",
+    "nextEarningsRaw": "10/16/2026 (Estimated)",
+    "nextEarningsStatus": "estimated",
+    "nextEarningsSource": "Seeking Alpha",
     "revenue": [],
     "eps": [],
     "margins": [],
@@ -465,7 +580,10 @@
     "ticker": "MSFT",
     "hasDigest": false,
     "lastEarnings": "7/29/2026",
-    "nextEarnings": "10/29/2026 (Post-Market)",
+    "nextEarnings": "Oct 29, 2026 · Estimated",
+    "nextEarningsRaw": "10/29/2026 (Post-Market)",
+    "nextEarningsStatus": "estimated",
+    "nextEarningsSource": "Seeking Alpha",
     "revenue": [],
     "eps": [],
     "margins": [],
@@ -483,7 +601,10 @@
     "ticker": "BE",
     "hasDigest": false,
     "lastEarnings": "7/28/2026",
-    "nextEarnings": "10/29/2026 (Post-Market)",
+    "nextEarnings": "Oct 29, 2026 · Estimated",
+    "nextEarningsRaw": "10/29/2026 (Post-Market)",
+    "nextEarningsStatus": "estimated",
+    "nextEarningsSource": "Seeking Alpha",
     "revenue": [],
     "eps": [],
     "margins": [],
@@ -502,6 +623,9 @@
     "hasDigest": false,
     "lastEarnings": "8/18/2026",
     "nextEarnings": null,
+    "nextEarningsRaw": null,
+    "nextEarningsStatus": null,
+    "nextEarningsSource": null,
     "revenue": [],
     "eps": [],
     "margins": [],

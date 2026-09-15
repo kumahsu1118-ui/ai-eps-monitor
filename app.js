@@ -77,6 +77,23 @@
     return sign + n.toFixed(2) + "%";
   }
 
+
+  function fmtDispersion(v) {
+    if (isMissing(v) || Number.isNaN(Number(v))) return null;
+    return Number(v).toFixed(3);
+  }
+
+  function nextEarningsLabel(c, e) {
+    const src = e || c || {};
+    const status = src.nextEarningsStatus || (c && c.nextEarningsStatus) || null;
+    const display = src.nextEarnings || (c && c.nextEarnings) || null;
+    if (isMissing(display)) return null;
+    // Already formatted by exporter as "Mon D, YYYY · Estimated|Confirmed"
+    if (String(display).indexOf(" · ") >= 0) return String(display);
+    const label = status === "confirmed" ? "Confirmed" : "Estimated";
+    return String(display) + " · " + label;
+  }
+
   function naCell(display) {
     const span = el("span", { className: "na", title: NA_TITLE, text: display == null ? "—" : display });
     return span;
@@ -502,8 +519,11 @@
       tr.appendChild(tdLast);
 
       const tdNext = el("td", { className: "left" });
-      if (isMissing(c.nextEarnings)) tdNext.appendChild(naCell());
-      else tdNext.textContent = c.nextEarnings;
+      {
+        const nxt = nextEarningsLabel(c, state.earnings[t]);
+        if (isMissing(nxt)) tdNext.appendChild(naCell());
+        else tdNext.textContent = nxt;
+      }
       tr.appendChild(tdNext);
 
       tbody.appendChild(tr);
@@ -997,50 +1017,62 @@
     root.appendChild(
       el("p", {
         className: "section-note",
-        text: "Investor digests from persistent data/earnings/{TICKER}.json. Missing digests show empty sections.",
+        text: "Compact calendar + digest status. Full positives / negatives / Q&A / sources live on each company page.",
       })
     );
 
-    const grid = el("div", { className: "earnings-grid" });
+    const tableWrap = el("div", { className: "table-wrap" });
+    const table = el("table", { className: "data" });
+    const thead = el("thead");
+    const hr = el("tr");
+    ["Ticker", "Last Earnings", "Next Earnings", "Vs Consensus", "Digest"].forEach((lab, i) => {
+      hr.appendChild(el("th", { className: i === 0 || i >= 3 ? "left" : "left", text: lab }));
+    });
+    thead.appendChild(hr);
+    table.appendChild(thead);
+    const tbody = el("tbody");
     state.watchlist.forEach((t) => {
       const e = state.earnings[t] || {};
       const c = state.companies[t] || {};
-      const card = el("div", { className: "earn-card" });
-      card.appendChild(
-        el("h3", null, [
-          el("a", { href: "#/company/" + t, text: t, style: "color:inherit;font-weight:700" }),
-        ])
-      );
-      const dates = el("div", { className: "dates" });
-      dates.appendChild(document.createTextNode("Last: "));
-      dates.appendChild(isMissing(e.lastEarnings || c.lastEarnings) ? naCell() : document.createTextNode(e.lastEarnings || c.lastEarnings));
-      dates.appendChild(document.createTextNode("  ·  Next: "));
-      dates.appendChild(isMissing(e.nextEarnings || c.nextEarnings) ? naCell() : document.createTextNode(e.nextEarnings || c.nextEarnings));
-      card.appendChild(dates);
+      const tr = el("tr");
+      const tdT = el("td", { className: "left" });
+      tdT.appendChild(el("a", { href: "#/company/" + t, text: t }));
+      tr.appendChild(tdT);
 
-      function stubSection(title, arr) {
-        card.appendChild(el("div", { className: "stub-note", text: title }));
-        const list = el("ul", { className: "earn-section-list" + (!arr || !arr.length ? " empty" : "") });
-        appendEarnItems(list, arr);
-        card.appendChild(list);
+      const tdLast = el("td", { className: "left" });
+      const last = e.lastEarnings || c.lastEarnings;
+      if (isMissing(last)) tdLast.appendChild(naCell());
+      else tdLast.textContent = last;
+      tr.appendChild(tdLast);
+
+      const tdNext = el("td", { className: "left" });
+      const nxt = nextEarningsLabel(c, e);
+      if (isMissing(nxt)) tdNext.appendChild(naCell());
+      else tdNext.textContent = nxt;
+      tr.appendChild(tdNext);
+
+      const tdVs = el("td", { className: "left" });
+      const vs =
+        e.comparison ||
+        (e.results && e.results.vsConsensus) ||
+        null;
+      if (isMissing(vs)) tdVs.appendChild(naCell());
+      else tdVs.textContent = String(vs);
+      tr.appendChild(tdVs);
+
+      const tdDig = el("td", { className: "left" });
+      const has = e.hasDigest === true || (e.positives && e.positives.length) || (e.qa && e.qa.length);
+      tdDig.textContent = has ? "Yes" : "No";
+      if (e.exportError) {
+        tdDig.appendChild(el("span", { className: "fy-sub", text: "export error" }));
       }
+      tr.appendChild(tdDig);
 
-      stubSection("Positives", e.positives);
-      stubSection("Negatives", e.negatives);
-      stubSection("Uncertainties", e.uncertainties);
-
-      if (e.guidance) {
-        card.appendChild(el("div", { className: "stub-note", text: "Guidance: " + e.guidance }));
-      } else {
-        card.appendChild(el("div", { className: "stub-note", text: "Guidance: —" }));
-      }
-      if (e.commentary) {
-        card.appendChild(el("div", { className: "stub-note", text: e.commentary }));
-      }
-
-      grid.appendChild(card);
+      tbody.appendChild(tr);
     });
-    root.appendChild(grid);
+    table.appendChild(tbody);
+    tableWrap.appendChild(table);
+    root.appendChild(tableWrap);
     return root;
   }
 
@@ -1174,7 +1206,15 @@
     kv("Last Close", isMissing(px) ? null : fmtNum(px, 2));
     kv("After Hours", isMissing(c.afterHours) ? null : fmtNum(c.afterHours, 2));
     kv("Last Earnings", isMissing(c.lastEarnings) ? null : c.lastEarnings);
-    kv("Next Earnings", isMissing(c.nextEarnings) ? null : c.nextEarnings);
+    {
+      const nxt = nextEarningsLabel(c, state.earnings[ticker]);
+      kv("Next Earnings", isMissing(nxt) ? null : nxt);
+      const st = c.nextEarningsStatus || (state.earnings[ticker] || {}).nextEarningsStatus;
+      const src = c.nextEarningsSource || (state.earnings[ticker] || {}).nextEarningsSource;
+      if (st || src) {
+        kv("Next Earnings Status", (st || "estimated") + (src ? " · " + src : ""));
+      }
+    }
     kv("FY Note", isMissing(c.fyNote) ? null : c.fyNote);
     ["2026E", "2027E", "2028E", "2029E"].forEach((y) => {
       const e = (c.eps && c.eps[y]) || {};
@@ -1192,6 +1232,14 @@
     });
     const pe27 = pe(px, ((c.eps || {})["2027E"] || {}).consensus);
     kv("2027E PE (Last Close)", pe27 == null ? null : fmtNum(pe27, 2));
+    ["2027E", "2028E"].forEach((y) => {
+      const e = (c.eps && c.eps[y]) || {};
+      kv(y + " Analyst Count", isMissing(e.analysts) ? null : fmtNum(e.analysts, 0));
+      kv(y + " Consensus Low", isMissing(e.low) ? null : fmtNum(e.low, 2));
+      kv(y + " Consensus High", isMissing(e.high) ? null : fmtNum(e.high, 2));
+      const disp = fmtDispersion(e.dispersion);
+      kv(y + " Dispersion (H−L)/Cons", disp);
+    });
     snap.appendChild(dl);
     grid.appendChild(snap);
 
@@ -1262,7 +1310,7 @@
           "Last: " +
           (earn.lastEarnings || c.lastEarnings || "—") +
           " · Next: " +
-          (earn.nextEarnings || c.nextEarnings || "—"),
+          (nextEarningsLabel(c, earn) || "—"),
       })
     );
     ["positives", "negatives", "uncertainties"].forEach((key) => {
@@ -1293,15 +1341,23 @@
       });
       earnPanel.appendChild(qlist);
     }
+    if (earn.sourceHierarchy) {
+      earnPanel.appendChild(el("p", { className: "section-note", text: earn.sourceHierarchy }));
+    }
     if (earn.sources && earn.sources.length) {
-      earnPanel.appendChild(el("div", { className: "stub-note", text: "Digest Sources" }));
+      earnPanel.appendChild(el("div", { className: "stub-note", text: "Digest Sources (by tier)" }));
       earn.sources.forEach((s) => {
-        if (s && s.url) {
+        if (!s) return;
+        const tier = s.sourceTier != null ? "T" + s.sourceTier + " · " : "";
+        const label = tier + (s.title || s.attribution || "source");
+        if (s.url) {
           earnPanel.appendChild(
             el("div", null, [
-              el("a", { className: "source-link", href: s.url, target: "_blank", rel: "noopener", text: s.title || s.url }),
+              el("a", { className: "source-link", href: s.url, target: "_blank", rel: "noopener", text: label }),
             ])
           );
+        } else {
+          earnPanel.appendChild(el("div", { className: "section-note", text: label + (s.note ? " — " + s.note : "") }));
         }
       });
     }
