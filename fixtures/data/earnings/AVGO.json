@@ -284,7 +284,7 @@
       "date": "2026-09-02",
       "sourceTier": 4,
       "attribution": "Seeking Alpha supplemental",
-      "note": "SA-hosted transcript — Q&A supplemental (tier 4)"
+      "note": "SA-hosted transcript — Q&A supplemental (tier 4) — SA supplemental for Q&A only; factual metrics prefer IR/SEC"
     },
     {
       "title": "Broadcom Q3 2026 Earnings Call Insights",
@@ -292,7 +292,7 @@
       "date": "2026-09-02",
       "sourceTier": 4,
       "attribution": "Seeking Alpha supplemental",
-      "note": "Seeking Alpha supplemental coverage"
+      "note": "Seeking Alpha supplemental coverage — SA supplemental for Q&A only; factual metrics prefer IR/SEC"
     }
   ],
   "dataGaps": [
@@ -301,9 +301,7 @@
   ],
   "digestVersion": "investor-v1",
   "updatedAt": "2026-09-15T05:30:00Z",
-  "sourceHierarchy": "Source hierarchy: (1) Company IR earnings release (2) SEC 10-Q/10-K/8-K (3) Official earnings transcript — none located on Broadcom IR for Q3 FY2026; (4) Seeking Alpha supplemental Q&A only. Factual metrics prefer IR/SEC.",
+  "sourceHierarchy": "Source hierarchy: (1) Company IR earnings release (2) SEC 10-Q/10-K/8-K (3) Official IR earnings call transcript (when available) (4) Seeking Alpha supplemental (Q&A only when no official transcript)",
   "nextEarningsStatus": "estimated",
-  "nextEarningsSource": "Seeking Alpha",
-  "officialTranscript": null,
-  "qaSourcePolicy": "SA supplemental Q&A only because no official IR/SEC transcript was located; revenue/EPS/margins remain IR/SEC."
+  "nextEarningsSource": "Seeking Alpha"
 }

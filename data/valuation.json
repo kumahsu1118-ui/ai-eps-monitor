@@ -11,38 +11,52 @@
           "pe": 22.659505907626208,
           "rev1M": 0.13,
           "reportedFiscalLabel": "Jan 2027",
-          "trueCalendarYearEps": null
+          "trueCalendarYearEps": null,
+          "growthFromPrior": null
         },
         "2027E": {
           "eps": 15.61,
           "pe": 13.514413837283794,
           "rev1M": 1.37,
           "reportedFiscalLabel": "Jan 2028",
-          "trueCalendarYearEps": null
+          "trueCalendarYearEps": null,
+          "growthFromPrior": 0.6766917293233081
         },
         "2028E": {
           "eps": 21.06,
           "pe": 10.017094017094019,
           "rev1M": 2.98,
           "reportedFiscalLabel": "Jan 2029",
-          "trueCalendarYearEps": null
+          "trueCalendarYearEps": null,
+          "growthFromPrior": 0.34913516976297243
         }
       },
-      "growth": {
-        "2027E": 0.6766917293233081,
-        "2028E": 0.34913516976297243
-      },
-      "cagr": 0.5040225333686903,
-      "cagrFrom": "2026E",
-      "cagrTo": "2028E",
-      "rev1M": 1.37,
-      "momentum": "Strong Positive",
-      "lastUpdated": "2026-09-15T01:36:00Z",
       "displayYears": [
         "2026E",
         "2027E",
         "2028E"
-      ]
+      ],
+      "cagrY0Y2": 0.5040225333686903,
+      "momentum": "Positive",
+      "lastUpdated": "2026-09-15T01:36:00Z",
+      "eps26": 9.31,
+      "pe26": 22.659505907626208,
+      "reportedFy26": "Jan 2027",
+      "trueCalendarYearEps26": null,
+      "eps27": 15.61,
+      "pe27": 13.514413837283794,
+      "reportedFy27": "Jan 2028",
+      "trueCalendarYearEps27": null,
+      "eps28": 21.06,
+      "pe28": 10.017094017094019,
+      "reportedFy28": "Jan 2029",
+      "trueCalendarYearEps28": null,
+      "rev1M": 1.37,
+      "rev1M28": 2.98,
+      "rev1M2028": 2.98,
+      "growth27": 0.6766917293233081,
+      "growth28": 0.34913516976297243,
+      "cagr2628": 0.5040225333686903
     },
     {
       "ticker": "AVGO",
@@ -55,38 +69,52 @@
           "pe": 29.564322469982848,
           "rev1M": 0.23,
           "reportedFiscalLabel": "Oct 2026",
-          "trueCalendarYearEps": null
+          "trueCalendarYearEps": null,
+          "growthFromPrior": null
         },
         "2027E": {
           "eps": 19.38,
           "pe": 17.787409700722396,
           "rev1M": -0.97,
           "reportedFiscalLabel": "Oct 2027",
-          "trueCalendarYearEps": null
+          "trueCalendarYearEps": null,
+          "growthFromPrior": 0.6620926243567752
         },
         "2028E": {
           "eps": 30.56,
           "pe": 11.280104712041886,
           "rev1M": 15.7,
           "reportedFiscalLabel": "Oct 2028",
-          "trueCalendarYearEps": null
+          "trueCalendarYearEps": null,
+          "growthFromPrior": 0.5768833849329206
         }
       },
-      "growth": {
-        "2027E": 0.6620926243567752,
-        "2028E": 0.5768833849329206
-      },
-      "cagr": 0.6189274979342814,
-      "cagrFrom": "2026E",
-      "cagrTo": "2028E",
-      "rev1M": -0.97,
-      "momentum": "Neutral",
-      "lastUpdated": "2026-09-15T01:36:00Z",
       "displayYears": [
         "2026E",
         "2027E",
         "2028E"
-      ]
+      ],
+      "cagrY0Y2": 0.6189274979342814,
+      "momentum": "Neutral",
+      "lastUpdated": "2026-09-15T01:36:00Z",
+      "eps26": 11.66,
+      "pe26": 29.564322469982848,
+      "reportedFy26": "Oct 2026",
+      "trueCalendarYearEps26": null,
+      "eps27": 19.38,
+      "pe27": 17.787409700722396,
+      "reportedFy27": "Oct 2027",
+      "trueCalendarYearEps27": null,
+      "eps28": 30.56,
+      "pe28": 11.280104712041886,
+      "reportedFy28": "Oct 2028",
+      "trueCalendarYearEps28": null,
+      "rev1M": -0.97,
+      "rev1M28": 15.7,
+      "rev1M2028": 15.7,
+      "growth27": 0.6620926243567752,
+      "growth28": 0.5768833849329206,
+      "cagr2628": 0.6189274979342814
     },
     {
       "ticker": "TSM",
@@ -99,38 +127,52 @@
           "pe": 24.690490253987004,
           "rev1M": 0.21,
           "reportedFiscalLabel": "Dec 2026",
-          "trueCalendarYearEps": null
+          "trueCalendarYearEps": null,
+          "growthFromPrior": null
         },
         "2027E": {
           "eps": 21.93,
           "pe": 19.06110351117191,
           "rev1M": 0.66,
           "reportedFiscalLabel": "Dec 2027",
-          "trueCalendarYearEps": null
+          "trueCalendarYearEps": null,
+          "growthFromPrior": 0.29533372711163614
         },
         "2028E": {
           "eps": 28.33,
           "pe": 14.755030003529827,
           "rev1M": 0.25,
           "reportedFiscalLabel": "Dec 2028",
-          "trueCalendarYearEps": null
+          "trueCalendarYearEps": null,
+          "growthFromPrior": 0.29183766529867755
         }
       },
-      "growth": {
-        "2027E": 0.29533372711163614,
-        "2028E": 0.29183766529867755
-      },
-      "cagr": 0.2935845151417553,
-      "cagrFrom": "2026E",
-      "cagrTo": "2028E",
-      "rev1M": 0.66,
-      "momentum": "Positive",
-      "lastUpdated": "2026-09-15T01:36:00Z",
       "displayYears": [
         "2026E",
         "2027E",
         "2028E"
-      ]
+      ],
+      "cagrY0Y2": 0.2935845151417553,
+      "momentum": "Neutral",
+      "lastUpdated": "2026-09-15T01:36:00Z",
+      "eps26": 16.93,
+      "pe26": 24.690490253987004,
+      "reportedFy26": "Dec 2026",
+      "trueCalendarYearEps26": null,
+      "eps27": 21.93,
+      "pe27": 19.06110351117191,
+      "reportedFy27": "Dec 2027",
+      "trueCalendarYearEps27": null,
+      "eps28": 28.33,
+      "pe28": 14.755030003529827,
+      "reportedFy28": "Dec 2028",
+      "trueCalendarYearEps28": null,
+      "rev1M": 0.66,
+      "rev1M28": 0.25,
+      "rev1M2028": 0.25,
+      "growth27": 0.29533372711163614,
+      "growth28": 0.29183766529867755,
+      "cagr2628": 0.2935845151417553
     },
     {
       "ticker": "MSFT",
@@ -143,38 +185,52 @@
           "pe": null,
           "rev1M": null,
           "reportedFiscalLabel": null,
-          "trueCalendarYearEps": null
+          "trueCalendarYearEps": null,
+          "growthFromPrior": null
         },
         "2027E": {
           "eps": 19.75,
           "pe": 25.590379746835445,
           "rev1M": 0.0,
           "reportedFiscalLabel": "Jun 2027",
-          "trueCalendarYearEps": null
+          "trueCalendarYearEps": null,
+          "growthFromPrior": null
         },
         "2028E": {
           "eps": 23.57,
           "pe": 21.442935935511244,
           "rev1M": -0.0,
           "reportedFiscalLabel": "Jun 2028",
-          "trueCalendarYearEps": null
+          "trueCalendarYearEps": null,
+          "growthFromPrior": 0.19341772151898737
         }
       },
-      "growth": {
-        "2027E": null,
-        "2028E": 0.19341772151898737
-      },
-      "cagr": null,
-      "cagrFrom": "2026E",
-      "cagrTo": "2028E",
-      "rev1M": 0.0,
-      "momentum": "Neutral",
-      "lastUpdated": "2026-09-15T01:36:00Z",
       "displayYears": [
         "2026E",
         "2027E",
         "2028E"
-      ]
+      ],
+      "cagrY0Y2": null,
+      "momentum": "Neutral",
+      "lastUpdated": "2026-09-15T01:36:00Z",
+      "eps26": null,
+      "pe26": null,
+      "reportedFy26": null,
+      "trueCalendarYearEps26": null,
+      "eps27": 19.75,
+      "pe27": 25.590379746835445,
+      "reportedFy27": "Jun 2027",
+      "trueCalendarYearEps27": null,
+      "eps28": 23.57,
+      "pe28": 21.442935935511244,
+      "reportedFy28": "Jun 2028",
+      "trueCalendarYearEps28": null,
+      "rev1M": 0.0,
+      "rev1M28": -0.0,
+      "rev1M2028": -0.0,
+      "growth27": null,
+      "growth28": 0.19341772151898737,
+      "cagr2628": null
     },
     {
       "ticker": "BE",
@@ -187,38 +243,52 @@
           "pe": 94.85239852398524,
           "rev1M": -0.01,
           "reportedFiscalLabel": "Dec 2026",
-          "trueCalendarYearEps": null
+          "trueCalendarYearEps": null,
+          "growthFromPrior": null
         },
         "2027E": {
           "eps": 4.93,
           "pe": 52.139959432048684,
           "rev1M": 0.17,
           "reportedFiscalLabel": "Dec 2027",
-          "trueCalendarYearEps": null
+          "trueCalendarYearEps": null,
+          "growthFromPrior": 0.8191881918819187
         },
         "2028E": {
           "eps": 7.79,
           "pe": 32.997432605905004,
           "rev1M": 0.65,
           "reportedFiscalLabel": "Dec 2028",
-          "trueCalendarYearEps": null
+          "trueCalendarYearEps": null,
+          "growthFromPrior": 0.5801217038539555
         }
       },
-      "growth": {
-        "2027E": 0.8191881918819187,
-        "2028E": 0.5801217038539555
-      },
-      "cagr": 0.6954464737606592,
-      "cagrFrom": "2026E",
-      "cagrTo": "2028E",
-      "rev1M": 0.17,
-      "momentum": "Positive",
-      "lastUpdated": "2026-09-15T01:36:00Z",
       "displayYears": [
         "2026E",
         "2027E",
         "2028E"
-      ]
+      ],
+      "cagrY0Y2": 0.6954464737606592,
+      "momentum": "Neutral",
+      "lastUpdated": "2026-09-15T01:36:00Z",
+      "eps26": 2.71,
+      "pe26": 94.85239852398524,
+      "reportedFy26": "Dec 2026",
+      "trueCalendarYearEps26": null,
+      "eps27": 4.93,
+      "pe27": 52.139959432048684,
+      "reportedFy27": "Dec 2027",
+      "trueCalendarYearEps27": null,
+      "eps28": 7.79,
+      "pe28": 32.997432605905004,
+      "reportedFy28": "Dec 2028",
+      "trueCalendarYearEps28": null,
+      "rev1M": 0.17,
+      "rev1M28": 0.65,
+      "rev1M2028": 0.65,
+      "growth27": 0.8191881918819187,
+      "growth28": 0.5801217038539555,
+      "cagr2628": 0.6954464737606592
     },
     {
       "ticker": "KEYS",
@@ -231,38 +301,52 @@
           "pe": 27.459459459459456,
           "rev1M": -0.22,
           "reportedFiscalLabel": "Oct 2026",
-          "trueCalendarYearEps": null
+          "trueCalendarYearEps": null,
+          "growthFromPrior": null
         },
         "2027E": {
           "eps": 13.87,
           "pe": 22.708002883922134,
           "rev1M": 1.62,
           "reportedFiscalLabel": "Oct 2027",
-          "trueCalendarYearEps": null
+          "trueCalendarYearEps": null,
+          "growthFromPrior": 0.20924149956408009
         },
         "2028E": {
           "eps": 15.69,
           "pe": 20.07393244104525,
           "rev1M": 16.31,
           "reportedFiscalLabel": "Oct 2028",
-          "trueCalendarYearEps": null
+          "trueCalendarYearEps": null,
+          "growthFromPrior": 0.13121845710165828
         }
       },
-      "growth": {
-        "2027E": 0.20924149956408009,
-        "2028E": 0.13121845710165828
-      },
-      "cagr": 0.16957954128831032,
-      "cagrFrom": "2026E",
-      "cagrTo": "2028E",
-      "rev1M": 1.62,
-      "momentum": "Strong Positive",
-      "lastUpdated": "2026-09-15T01:36:00Z",
       "displayYears": [
         "2026E",
         "2027E",
         "2028E"
-      ]
+      ],
+      "cagrY0Y2": 0.16957954128831032,
+      "momentum": "Positive",
+      "lastUpdated": "2026-09-15T01:36:00Z",
+      "eps26": 11.47,
+      "pe26": 27.459459459459456,
+      "reportedFy26": "Oct 2026",
+      "trueCalendarYearEps26": null,
+      "eps27": 13.87,
+      "pe27": 22.708002883922134,
+      "reportedFy27": "Oct 2027",
+      "trueCalendarYearEps27": null,
+      "eps28": 15.69,
+      "pe28": 20.07393244104525,
+      "reportedFy28": "Oct 2028",
+      "trueCalendarYearEps28": null,
+      "rev1M": 1.62,
+      "rev1M28": 16.31,
+      "rev1M2028": 16.31,
+      "growth27": 0.20924149956408009,
+      "growth28": 0.13121845710165828,
+      "cagr2628": 0.16957954128831032
     }
   ]
 }

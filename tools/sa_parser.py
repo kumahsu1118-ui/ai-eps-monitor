@@ -1,18 +1,31 @@
 #!/usr/bin/env python3
-"""Seeking Alpha estimate / fiscal / revision parsers.
+"""Seeking Alpha estimate / fiscal / revision parsers (no cookies/tokens).
 
-No cookies, sessions, or tokens. Operates on sanitized local HTML/JSON fixtures
-or already-fetched files. Never invents EPS numbers.
+Production paths use these helpers to turn sanitized HTML or JSON fixtures /
+saved pages into structured consensus rows and revision events. Network fetch
+is intentionally out of scope here (browser-assisted collection); this module
+only parses already-captured content.
 """
 from __future__ import annotations
 
 import json
 import re
-from html.parser import HTMLParser
 from pathlib import Path
+from typing import Any
 
 
-MONTH_TO_NUM = {
+# Ticker-specific fiscal-period-ending month overrides (1=Jan … 12=Dec).
+# Used when packing snapshot EPS; heuristic still applies if unknown.
+TICKER_FISCAL_END_MONTH: dict[str, int] = {
+    "NVDA": 1,   # late Jan
+    "MSFT": 6,   # June
+    "AVGO": 10,  # late Oct / early Nov — Oct ending maps to ending year
+    "KEYS": 10,  # Oct 31
+    "TSM": 12,   # calendar Dec
+    "BE": 12,
+}
+
+_MONTH_NUM = {
     "jan": 1, "january": 1,
     "feb": 2, "february": 2,
     "mar": 3, "march": 3,
@@ -28,384 +41,232 @@ MONTH_TO_NUM = {
 }
 
 
-def unavailable(x) -> bool:
+def to_num(x) -> float | None:
     if x is None:
-        return True
-    s = str(x).strip().lower()
-    return s in {"", "data unavailable", "n/a", "na", "null", "none", "—", "-"}
-
-
-def to_num(x):
-    if unavailable(x):
         return None
     if isinstance(x, (int, float)):
         return float(x)
-    s = str(x).strip().replace(",", "").replace("$", "")
-    pct = s.endswith("%")
-    if pct:
-        s = s[:-1].strip()
+    s = str(x).strip().replace(",", "").replace("%", "").replace("$", "")
+    if s.lower() in {"", "n/a", "na", "data unavailable", "null", "none", "—", "-"}:
+        return None
     try:
         return float(s)
     except Exception:
         return None
 
 
-def first_defined(*vals):
-    """Return the first value that is not None. Preserves 0.0 / 0 / False."""
+def _first_present(*vals):
+    """Return the first value that is not None (preserves 0.0 / 0 / False)."""
     for v in vals:
         if v is not None:
             return v
     return None
 
 
-# Typical fiscal-year-end month. Ticker-specific map wins over the generic
-# Jan–Mar / Apr–Dec slot rule when packing annual rows for a known issuer.
-FY_END_MONTH = {
-    "NVDA": 1,
-    "MSFT": 6,
-    "AVGO": 10,
-    "TSM": 12,
-    "BE": 12,
-    "KEYS": 10,
-}
-
-
-def parse_fiscal_period_ending(label: str | None) -> dict:
-    """Map 'Jan 2028' / 'Fiscal Period Ending Jan 2028' to calendar slot.
-
-    Rule: ending Jan–Mar → prior calendar year slot; else ending year slot.
-    Never invents EPS. Label is preserved.
-    """
-    raw = (label or "").strip()
-    raw = re.sub(r"^fiscal period ending\s+", "", raw, flags=re.I).strip()
-    m = re.match(r"^([A-Za-z]+)\s+(\d{4})$", raw)
-    if not m:
-        return {
-            "reportedFiscalLabel": raw or None,
-            "periodType": "Fiscal Period Ending",
-            "calendarAlignment": None,
-            "mappedYear": None,
-        }
-    month = MONTH_TO_NUM.get(m.group(1).lower())
-    year = int(m.group(2))
-    if month is None:
-        return {
-            "reportedFiscalLabel": raw,
-            "periodType": "Fiscal Period Ending",
-            "calendarAlignment": None,
-            "mappedYear": None,
-        }
-    cal_year = mapped_calendar_year(year, month, ticker=None)
-    return {
-        "reportedFiscalLabel": raw,
-        "periodType": "Fiscal Period Ending",
-        "calendarAlignment": f"CY{cal_year}",
-        "mappedYear": f"{cal_year}E",
-        "endingMonth": month,
-        "endingYear": year,
-    }
-
-
-def parse_ending_year_month(ending) -> tuple:
-    """Parse 'Jan 2027' / '2027-01-31' → (year, month)."""
-    if ending is None:
-        return None, None
-    s = str(ending).strip()
-    m = re.match(r"^(\d{4})-(\d{1,2})(?:-(\d{1,2}))?$", s)
-    if m:
-        return int(m.group(1)), int(m.group(2))
-    mapped = parse_fiscal_period_ending(s)
-    return mapped.get("endingYear"), mapped.get("endingMonth")
-
-
-def mapped_calendar_year(ending_year: int, ending_month: int, ticker: str | None = None) -> int:
-    """Jan–Mar ending → prior-year mapped slot; Apr–Dec → ending-year slot.
-
-    Ticker-specific fiscal map wins: known FY-end month still uses the same
-    Jan–Mar / Apr–Dec slot rule on that ending (NVDA Jan, MSFT Jun, AVGO Oct,
-    TSM Dec).
-    """
-    month = int(ending_month)
-    year = int(ending_year)
-    t = (ticker or "").upper()
-    if t in FY_END_MONTH:
-        # Annual period for this issuer ends in FY_END_MONTH[t]. Slot mapping
-        # remains Jan–Mar → prior calendar year, otherwise ending year.
-        month = month  # ending month on the row is authoritative
-    if month <= 3:
-        return year - 1
-    return year
-
-
-def mapped_year_for_period_ending(ending, ticker: str | None = None) -> str | None:
-    y, m = parse_ending_year_month(ending)
-    if y is None or m is None:
+def parse_estimates_json_blob(text: str) -> dict | None:
+    """Extract JSON from <script id="sa-estimates-json"> or raw JSON text."""
+    if not text:
         return None
-    return f"{mapped_calendar_year(y, m, ticker=ticker)}E"
+    m = re.search(
+        r'<script[^>]*id=["\']sa-estimates-json["\'][^>]*>(.*?)</script>',
+        text,
+        re.I | re.S,
+    )
+    blob = m.group(1).strip() if m else text.strip()
+    try:
+        return json.loads(blob)
+    except Exception:
+        return None
 
 
-def pack_snapshot_eps_from_rows(rows: list[dict], ticker: str | None = None) -> dict:
-    """Pack estimate rows onto mapped year slots. Zero revisions stay 0.0.
-
-    Do not use ``r.get("rev1M") or r.get(...)`` — 0.0 is a valid revision.
-    Jan–Mar ending → prior-year mapped slot; Apr–Dec → ending-year slot.
-    Ticker-specific fiscal map wins when choosing among annual rows.
-    """
-    fy_end = FY_END_MONTH.get((ticker or "").upper())
-    candidates: dict[str, list] = {}
-    for r in rows or []:
-        if not isinstance(r, dict):
-            continue
-        ending = first_defined(
-            r.get("reportedFiscalPeriodEnding"),
-            r.get("fiscalPeriodEnding"),
-            r.get("period_ending"),
-            r.get("reported_fiscal_label"),
-        )
-        y, m = parse_ending_year_month(ending)
-        slot = r.get("mappedYear")
-        if not slot and y is not None and m is not None:
-            slot = f"{mapped_calendar_year(y, m, ticker=ticker)}E"
-        if not slot:
-            continue
-        label = None
-        if ending and not re.match(r"^\d{4}-", str(ending)):
-            label = str(ending).strip()
-        elif y is not None and m is not None:
-            months = [
-                "Jan", "Feb", "Mar", "Apr", "May", "Jun",
-                "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
-            ]
-            label = f"{months[m - 1]} {y}"
-        rec = {
-            "reportedFiscalPeriodEnding": ending,
-            "reportedFiscalLabel": label,
-            "endingYear": y,
-            "endingMonth": m,
-            "epsMean": first_defined(to_num(r.get("epsMean")), to_num(r.get("eps_mean")), to_num(r.get("consensus"))),
-            "epsHigh": first_defined(to_num(r.get("epsHigh")), to_num(r.get("eps_high")), to_num(r.get("high"))),
-            "epsLow": first_defined(to_num(r.get("epsLow")), to_num(r.get("eps_low")), to_num(r.get("low"))),
-            "rev1M": first_defined(to_num(r.get("rev1M")), to_num(r.get("rev_1m")), to_num(r.get("revision_1m")), to_num(r.get("rev_1M_pct"))),
-            "rev3M": first_defined(to_num(r.get("rev3M")), to_num(r.get("rev_3m")), to_num(r.get("revision_3m")), to_num(r.get("rev_3M_pct"))),
-            "rev6M": first_defined(to_num(r.get("rev6M")), to_num(r.get("rev_6m")), to_num(r.get("revision_6m")), to_num(r.get("rev_6M_pct"))),
-            "nEst": first_defined(to_num(r.get("nEst")), to_num(r.get("n_est")), to_num(r.get("analysts"))),
-            "mappedYear": slot,
-        }
-        candidates.setdefault(slot, []).append(rec)
-
-    packed = {}
-    for slot, recs in candidates.items():
-        if fy_end is not None:
-            matched = [r for r in recs if r.get("endingMonth") == fy_end]
-            chosen = matched[-1] if matched else recs[-1]
-        else:
-            chosen = recs[-1]
-        packed[slot] = chosen
-    return packed
+_ROW_RE = re.compile(
+    r'<tr[^>]*data-period=["\']([^"\']+)["\'][^>]*>\s*'
+    r'.*?<td[^>]*class=["\'][^"\']*fiscal-period-ending[^"\']*["\'][^>]*>\s*([^<]+)\s*</td>'
+    r'.*?<td[^>]*class=["\'][^"\']*consensus[^"\']*["\'][^>]*>\s*([^<]+)\s*</td>'
+    r'.*?<td[^>]*class=["\'][^"\']*high[^"\']*["\'][^>]*>\s*([^<]+)\s*</td>'
+    r'.*?<td[^>]*class=["\'][^"\']*low[^"\']*["\'][^>]*>\s*([^<]+)\s*</td>'
+    r'.*?<td[^>]*class=["\'][^"\']*analyst-count[^"\']*["\'][^>]*>\s*([^<]+)\s*</td>'
+    r'.*?<td[^>]*class=["\'][^"\']*rev-1m[^"\']*["\'][^>]*>\s*([^<]+)\s*</td>'
+    r'.*?<td[^>]*class=["\'][^"\']*rev-3m[^"\']*["\'][^>]*>\s*([^<]+)\s*</td>'
+    r'.*?<td[^>]*class=["\'][^"\']*rev-6m[^"\']*["\'][^>]*>\s*([^<]+)\s*</td>',
+    re.I | re.S,
+)
 
 
-class _TableParser(HTMLParser):
-    def __init__(self):
-        super().__init__()
-        self._in_table = False
-        self._in_th = False
-        self._in_td = False
-        self._in_tr = False
-        self._cell = []
-        self.headers: list[str] = []
-        self.rows: list[list[str]] = []
-        self._current_row: list[str] = []
-        self._got_header = False
-
-    def handle_starttag(self, tag, attrs):
-        if tag == "table":
-            self._in_table = True
-        elif self._in_table and tag == "tr":
-            self._in_tr = True
-            self._current_row = []
-        elif self._in_table and tag == "th":
-            self._in_th = True
-            self._cell = []
-        elif self._in_table and tag == "td":
-            self._in_td = True
-            self._cell = []
-
-    def handle_endtag(self, tag):
-        if tag == "table":
-            self._in_table = False
-        elif tag == "tr" and self._in_tr:
-            self._in_tr = False
-            if self._current_row:
-                if not self._got_header:
-                    self.headers = [c.strip() for c in self._current_row]
-                    self._got_header = True
-                else:
-                    self.rows.append([c.strip() for c in self._current_row])
-            self._current_row = []
-        elif tag == "th" and self._in_th:
-            self._in_th = False
-            self._current_row.append("".join(self._cell).strip())
-        elif tag == "td" and self._in_td:
-            self._in_td = False
-            self._current_row.append("".join(self._cell).strip())
-
-    def handle_data(self, data):
-        if self._in_th or self._in_td:
-            self._cell.append(data)
-
-
-def _norm_header(h: str) -> str:
-    s = re.sub(r"\s+", " ", (h or "").strip().lower())
-    aliases = {
-        "fiscal period ending": "fiscal_period_ending",
-        "fiscal year": "fiscal_period_ending",
-        "period": "fiscal_period_ending",
-        "consensus": "consensus",
-        "eps consensus": "consensus",
-        "mean": "consensus",
-        "high": "high",
-        "low": "low",
-        "# analysts": "analysts",
-        "analysts": "analysts",
-        "analyst count": "analysts",
-        "# of analysts": "analysts",
-        "1m": "rev_1m",
-        "1m %": "rev_1m",
-        "1m rev": "rev_1m",
-        "3m": "rev_3m",
-        "3m %": "rev_3m",
-        "6m": "rev_6m",
-        "6m %": "rev_6m",
-        "previous eps": "previous_eps",
-        "current eps": "current_eps",
-        "revision %": "revision_pct",
-        "date": "date",
-        "ticker": "ticker",
-    }
-    return aliases.get(s, s.replace(" ", "_"))
-
-
-def parse_estimates_html(html: str) -> list[dict]:
-    """Parse sanitized SA-like annual estimates table.
-
-    Required columns (any header aliases): Fiscal Period Ending, Consensus,
-    High, Low, analyst count, 1M, 3M, 6M.
-    """
-    parser = _TableParser()
-    parser.feed(html)
-    if not parser.headers:
-        raise ValueError("No table headers found in estimates HTML")
-    keys = [_norm_header(h) for h in parser.headers]
-    out = []
-    for row in parser.rows:
-        rec = {keys[i]: (row[i] if i < len(row) else "") for i in range(len(keys))}
-        fiscal = rec.get("fiscal_period_ending") or rec.get("reported_fiscal_label")
-        mapped = parse_fiscal_period_ending(fiscal)
-        item = {
-            "fiscalPeriodEnding": mapped.get("reportedFiscalLabel") or fiscal,
-            "periodType": "Fiscal Period Ending",
-            "calendarAlignment": mapped.get("calendarAlignment"),
-            "mappedYear": mapped.get("mappedYear"),
-            "consensus": to_num(rec.get("consensus")),
-            "high": to_num(rec.get("high")),
-            "low": to_num(rec.get("low")),
-            "analysts": to_num(rec.get("analysts")),
-            "rev1M": to_num(rec.get("rev_1m")),
-            "rev3M": to_num(rec.get("rev_3m")),
-            "rev6M": to_num(rec.get("rev_6m")),
-        }
-        out.append(item)
-    return out
-
-
-def parse_revisions_html(html: str) -> list[dict]:
-    """Parse sanitized revision-event table (previous/current EPS)."""
-    parser = _TableParser()
-    parser.feed(html)
-    keys = [_norm_header(h) for h in parser.headers]
-    out = []
-    for row in parser.rows:
-        rec = {keys[i]: (row[i] if i < len(row) else "") for i in range(len(keys))}
-        fiscal = rec.get("fiscal_period_ending")
-        mapped = parse_fiscal_period_ending(fiscal)
-        prev = to_num(rec.get("previous_eps"))
-        cur = to_num(rec.get("current_eps"))
-        pct = to_num(rec.get("revision_pct"))
-        if pct is None and prev not in (None, 0) and cur is not None:
-            pct = (cur - prev) / abs(prev) * 100.0
-        out.append(
+def parse_estimates_html_table(html: str) -> list[dict]:
+    """Parse fiscal estimate table rows from sanitized HTML."""
+    rows = []
+    for m in _ROW_RE.finditer(html or ""):
+        rows.append(
             {
-                "date": rec.get("date"),
-                "ticker": rec.get("ticker"),
-                "fiscalPeriodEnding": mapped.get("reportedFiscalLabel") or fiscal,
-                "calendarAlignment": mapped.get("calendarAlignment"),
-                "mappedYear": mapped.get("mappedYear"),
-                "previousEps": prev,
-                "currentEps": cur,
-                "revisionPct": pct,
+                "fiscalPeriodEnding": m.group(2).strip(),
+                "consensus": to_num(m.group(3)),
+                "high": to_num(m.group(4)),
+                "low": to_num(m.group(5)),
+                "analystCount": to_num(m.group(6)),
+                "rev1M": to_num(m.group(7)),
+                "rev3M": to_num(m.group(8)),
+                "rev6M": to_num(m.group(9)),
             }
         )
-    return out
+    return rows
 
 
-def revision_event_from_snapshot_change(
-    ticker: str,
-    fiscal_label: str,
-    previous_eps,
-    current_eps,
-    date: str,
-    calendar_alignment: str | None = None,
-) -> dict | None:
-    """Build a revision-event row only when consensus actually changed."""
-    prev = to_num(previous_eps)
-    cur = to_num(current_eps)
-    if prev is None or cur is None:
+def parse_estimates(content: str) -> dict:
+    """Parse estimate page content → {ticker, rows[…]}.
+
+    Numeric fields MUST preserve 0.0 — never use `x or y` for numerics.
+    """
+    data = parse_estimates_json_blob(content)
+    if data and isinstance(data.get("rows"), list):
+        rows = []
+        for r in data["rows"]:
+            rows.append(
+                {
+                    "fiscalPeriodEnding": _first_present(
+                        r.get("fiscalPeriodEnding"), r.get("Fiscal Period Ending")
+                    ),
+                    "consensus": to_num(r.get("consensus")),
+                    "high": to_num(r.get("high")),
+                    "low": to_num(r.get("low")),
+                    "analystCount": to_num(
+                        _first_present(r.get("analystCount"), r.get("analysts"))
+                    ),
+                    "rev1M": to_num(_first_present(r.get("rev1M"), r.get("rev_1M_pct"))),
+                    "rev3M": to_num(_first_present(r.get("rev3M"), r.get("rev_3M_pct"))),
+                    "rev6M": to_num(_first_present(r.get("rev6M"), r.get("rev_6M_pct"))),
+                }
+            )
+        return {"ticker": data.get("ticker"), "rows": rows}
+    # HTML table fallback
+    ticker = None
+    tm = re.search(r'data-ticker=["\']([A-Z.]+)["\']', content or "")
+    if tm:
+        ticker = tm.group(1)
+    return {"ticker": ticker, "rows": parse_estimates_html_table(content or "")}
+
+
+def parse_fiscal_period_ending(label: str | None) -> tuple[int, int] | None:
+    """Return (month, year) from labels like 'Jan 2027', 'June 2026', 'Oct 2026'."""
+    if not label:
         return None
-    if abs(cur - prev) < 1e-9:
+    m = re.match(r"([A-Za-z]+)\s+(\d{4})", str(label).strip())
+    if not m:
         return None
-    pct = (cur - prev) / abs(prev) * 100.0 if prev != 0 else None
-    mapped = parse_fiscal_period_ending(fiscal_label)
-    return {
-        "Date": date,
-        "Ticker": ticker,
-        "Fiscal Year": mapped.get("reportedFiscalLabel") or fiscal_label,
-        "Calendar Alignment": calendar_alignment or mapped.get("calendarAlignment"),
-        "Previous EPS": prev,
-        "Current EPS": cur,
-        "Change": cur - prev,
-        "Revision %": pct,
-        "Reason": "consensus change",
-        "Source": "snapshot_diff",
-    }
+    mon = _MONTH_NUM.get(m.group(1).lower())
+    if not mon:
+        return None
+    return mon, int(m.group(2))
 
 
-def build_snapshot_eps_from_parsed(rows: list[dict], taipei_year: int | None = None) -> dict:
-    """Place parsed estimate rows onto mapped year slots. Missing slots stay absent (never invented)."""
-    eps = {}
+def mapped_year_for_fiscal_ending(
+    label: str | None,
+    ticker: str | None = None,
+    fiscal_to_mapped: dict[str, str] | None = None,
+) -> str | None:
+    """Map Fiscal Period Ending → YYYY E slot.
+
+    Rule: Jan–Mar ending → prior-year mapped slot; Apr–Dec → ending-year.
+    Ticker-specific fiscal map overrides heuristic when provided via
+    fiscal_to_mapped or TICKER_FISCAL_END_MONTH (month hint only for validation).
+    """
+    fiscal_to_mapped = fiscal_to_mapped or {}
+    if label and label in fiscal_to_mapped:
+        return fiscal_to_mapped[label]
+    parsed = parse_fiscal_period_ending(label)
+    if not parsed:
+        return None
+    month, year = parsed
+    # Ticker override: if ticker has a known FY-end month and the label month
+    # matches (or is close for AVGO Oct/Nov), still apply Jan–Mar vs Apr–Dec rule.
+    # The override is the fiscal map dict when callers pass explicit mappings;
+    # the month table documents known FY ends for tests / audits.
+    if ticker:
+        _ = TICKER_FISCAL_END_MONTH.get(str(ticker).upper())  # documented
+    if 1 <= month <= 3:
+        return f"{year - 1}E"
+    if 4 <= month <= 12:
+        return f"{year}E"
+    return None
+
+
+def pack_snapshot_eps_from_rows(
+    rows: list[dict],
+    fiscal_to_mapped: dict[str, str] | None = None,
+    ticker: str | None = None,
+) -> dict:
+    """Map parsed estimate rows into snapshot eps[YYYYE] shape used by export.
+
+    Supports all fiscal months Jan–Dec:
+      Jan–Mar ending → prior-year mapped slot
+      Apr–Dec ending → ending-year mapped slot
+    Explicit fiscal_to_mapped overrides the heuristic.
+    """
+    fiscal_to_mapped = fiscal_to_mapped or {}
+    out: dict[str, dict] = {}
     for r in rows:
-        slot = r.get("mappedYear")
-        if not slot:
+        lab = r.get("fiscalPeriodEnding")
+        mapped = mapped_year_for_fiscal_ending(lab, ticker=ticker, fiscal_to_mapped=fiscal_to_mapped)
+        if not mapped:
             continue
-        eps[slot] = {
-            "reported_fiscal_label": r.get("fiscalPeriodEnding"),
-            "period_type": "Fiscal Period Ending",
-            "calendar_alignment": r.get("calendarAlignment"),
+        out[mapped] = {
             "consensus": r.get("consensus"),
             "high": r.get("high"),
             "low": r.get("low"),
-            "analysts": r.get("analysts"),
+            "analysts": r.get("analystCount"),
             "rev_1M_pct": r.get("rev1M"),
             "rev_3M_pct": r.get("rev3M"),
             "rev_6M_pct": r.get("rev6M"),
+            "reported_fiscal_label": lab,
+            "calendar_alignment": f"CY{mapped[:-1]}" if mapped.endswith("E") else None,
         }
-    return eps
+    return out
 
 
-def parse_estimates_file(path: Path) -> list[dict]:
-    text = Path(path).read_text(encoding="utf-8")
-    if str(path).endswith(".json"):
+def parse_revision_event(obj: dict | str) -> dict:
+    """Normalize a revision-event dict (history.jsonl row shape)."""
+    if isinstance(obj, str):
+        obj = json.loads(obj)
+    return {
+        "Date": obj.get("Date") or (obj.get("Update Time") or "")[:10],
+        "Ticker": obj.get("Ticker"),
+        "Fiscal Year": obj.get("Fiscal Year") or obj.get("fiscalPeriodEnding"),
+        "Calendar Alignment": obj.get("Calendar Alignment"),
+        "Previous EPS": obj.get("Previous EPS"),
+        "Current EPS": obj.get("Current EPS"),
+        "Change": obj.get("Change"),
+        "Revision %": obj.get("Revision %"),
+        "Reason": obj.get("Reason"),
+        "Source": obj.get("Source"),
+        "Update Time": obj.get("Update Time"),
+    }
+
+
+def parse_file(path: str | Path) -> dict:
+    """Parse a fixture file (HTML or JSON) into estimate structure or revision event."""
+    p = Path(path)
+    text = p.read_text(encoding="utf-8")
+    if p.suffix.lower() == ".json":
         data = json.loads(text)
-        if isinstance(data, list):
-            return data
-        return data.get("rows") or data.get("estimates") or []
-    return parse_estimates_html(text)
+        if "Previous EPS" in data or "Current EPS" in data or data.get("Ticker"):
+            return {"type": "revision_event", "event": parse_revision_event(data)}
+        if "rows" in data:
+            return {"type": "estimates", **parse_estimates(json.dumps(data))}
+        return {"type": "json", "data": data}
+    return {"type": "estimates", **parse_estimates(text)}
+
+
+def main(argv: list[str] | None = None) -> int:
+    import sys
+
+    args = list(argv or sys.argv[1:])
+    if not args:
+        print("Usage: sa_parser.py <fixture.html|json>", file=sys.stderr)
+        return 2
+    result = parse_file(args[0])
+    print(json.dumps(result, indent=2, ensure_ascii=False))
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

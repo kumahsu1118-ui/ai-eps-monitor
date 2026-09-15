@@ -4,22 +4,28 @@
 Rules (documented, no ML / no invented thresholds beyond these):
   1. Single consensus EPS revision |revisionPct| > 2% (from revision events;
      baselines / n/a skipped). Computes pct from previous→current when missing.
-  2. Cumulative internal-history revision for a fiscal slot > 5% over a TRUE
-     30-day window. If fewer than 2 points fall in that window → insufficient
-     history (never fall back to all-history and label it 30D).
-  3. results_vs_consensus when resultsVsConsensus is above/below.
-     guidance_vs_consensus ONLY when guidanceDetail.vsConsensus is above/below;
-     unknown → no guidance alert.
-  4. gross_margin_guidance_revision requires Previous Guidance AND Current
-     Guidance and |change| > 200 bps. gross_margin_pressure covers GM stress
-     without a dual-guidance pair.
-  5. Material driver status → improving/deteriorating with reason.
+  2. Cumulative 30D revision > 5% from daily.jsonl (same ticker +
+     reportedFiscalPeriodEnding): nearest valid obs at window start vs latest.
+     Single-point revisions >2% remain rule 1 (revision events).
+     If <2 usable daily points in window → alertDiagnostics only (NOT alertHistory).
+  3. Results vs consensus (resultsVsConsensus) and guidance vs consensus
+     (guidanceVsConsensus) are separate. Guidance alert ONLY when
+     guidanceDetail.vsConsensus in {above, below}; unknown → no guidance alert.
+  4. gross_margin_pressure (result/pressure) vs gross_margin_guidance_revision
+     (requires previousGuidance + currentGuidance). Legacy GM >200bps pressure
+     when parsable.
+  5. Driver status → improving/deteriorating with reason.
 
-Alert id = rule + ticker + fiscalPeriod/eventPeriod + eventDate + driverName/eventKey
+Alert ID = rule + ticker + fiscalPeriod/eventPeriod + eventDate + driverName/eventKey
+(stable, unique — never collapse multiple drivers onto :na).
 
-Writes data/alerts/index.json:
-  { activeAlerts, alertHistory, alerts (alias of active),
-    alertEngineLastEvaluated, alertEngineStatus, alertEngineError }
+Lifecycle:
+  - One-shot events expire from activeAlerts after ONE_SHOT_ACTIVE_DAYS (21).
+  - alertHistory retains material evaluated alerts (long retention).
+  - insufficient-history records go to alertDiagnostics only (no history/daily pollution).
+  - activeAlerts = history items still within active window.
+
+Writes data/alerts/index.json with activeAlerts + alertHistory (+ legacy alerts alias).
 """
 from __future__ import annotations
 
@@ -34,7 +40,7 @@ ROOT = _here.parent
 if not (ROOT / "data" / "snapshots").exists():
     cand = Path(__file__).resolve().parent
     for _ in range(5):
-        if (cand / "data" / "snapshots").exists() or (cand / "tests" / "fixtures" / "data" / "snapshots").exists():
+        if (cand / "data" / "snapshots").exists():
             ROOT = cand
             break
         cand = cand.parent
@@ -47,25 +53,14 @@ UNIVERSE_PATH = ROOT / "data" / "universe.json"
 DAILY_JSONL = ROOT / "data" / "daily_eps_snapshots" / "daily.jsonl"
 
 TICKERS_DEFAULT = ["NVDA", "AVGO", "TSM", "MSFT", "BE", "KEYS"]
-HOMEPAGE_TTL_DAYS = 30
-ONE_SHOT_RULES = {
-    "single_revision_gt_2pct",
-    "cumulative_revision_gt_5pct",
-    "results_vs_consensus",
-    "guidance_vs_consensus",
-    "gross_margin_pressure",
-    "gross_margin_guidance_revision",
-    "driver_status_change",
-}
-SEV_RANK = {"high": 0, "medium": 1, "low": 2}
 
-
-def now_utc() -> datetime:
-    return datetime.now(timezone.utc)
+# One-shot homepage window (within 14–30 days). Documented choice: 21 days.
+ONE_SHOT_ACTIVE_DAYS = 21
+CUMULATIVE_LOOKBACK_DAYS = 30
 
 
 def now_utc_iso() -> str:
-    return now_utc().strftime("%Y-%m-%dT%H:%M:%SZ")
+    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def to_num(x):
@@ -110,92 +105,30 @@ def load_json(path: Path) -> dict | None:
         return None
 
 
-def preserve_corrupt_file(path: Path) -> Path | None:
-    """Keep original bytes; write sibling .corrupt-backup. Never overwrite path."""
-    bak = path.with_name(path.name + ".corrupt-backup")
-    try:
-        raw = path.read_bytes()
-        if not bak.exists():
-            bak.write_bytes(raw)
-        return bak
-    except Exception:
-        return None
-
-
-def load_driver_file(path: Path) -> tuple[dict | None, dict | None]:
-    """Return (data, error). On parse/schema failure preserve original + backup."""
-    if not path.exists():
-        return None, None
-    raw_text = path.read_text(encoding="utf-8")
-    try:
-        data = json.loads(raw_text)
-        if not isinstance(data, dict) or "drivers" not in data:
-            raise ValueError("invalid driver schema (missing drivers)")
-        return data, None
-    except Exception as exc:
-        bak = preserve_corrupt_file(path)
-        return None, {
-            "ticker": path.stem,
-            "error": f"{type(exc).__name__}: {exc}",
-            "backup": bak.name if bak else None,
-            "originalPreserved": True,
-            "path": str(path.name),
-        }
-
-
 def parse_date(s: str | None) -> datetime | None:
     if not s:
         return None
     s = str(s).strip()
+    for fmt in ("%Y-%m-%d", "%Y-%m-%dT%H:%M:%SZ", "%Y-%m-%dT%H:%M:%S%z"):
+        try:
+            if fmt.endswith("%z") and s.endswith("Z"):
+                s2 = s[:-1] + "+0000"
+                return datetime.strptime(s2[:19] + "+0000", "%Y-%m-%dT%H:%M:%S%z")
+            return datetime.strptime(
+                s[: len("2026-09-15T01:36:00") if "T" in fmt else 10],
+                fmt.replace("%z", ""),
+            ).replace(tzinfo=timezone.utc)
+        except Exception:
+            continue
     try:
         if s.endswith("Z"):
             s = s[:-1] + "+00:00"
         dt = datetime.fromisoformat(s)
         if dt.tzinfo is None:
             dt = dt.replace(tzinfo=timezone.utc)
-        return dt.astimezone(timezone.utc)
+        return dt
     except Exception:
-        pass
-    for fmt in ("%Y-%m-%d", "%Y-%m-%dT%H:%M:%SZ"):
-        try:
-            if fmt == "%Y-%m-%d":
-                return datetime.strptime(s[:10], fmt).replace(tzinfo=timezone.utc)
-            return datetime.strptime(s[:19], "%Y-%m-%dT%H:%M:%S").replace(tzinfo=timezone.utc)
-        except Exception:
-            continue
-    return None
-
-
-def iso_z(dt: datetime) -> str:
-    return dt.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-
-
-def date_key(s: str | None) -> str:
-    dt = parse_date(s)
-    if dt:
-        return dt.strftime("%Y-%m-%d")
-    if s:
-        return str(s)[:10]
-    return "na"
-
-
-def norm_id_part(x) -> str:
-    if x is None or str(x).strip() == "":
-        return "na"
-    return re.sub(r"[:/]+", "_", str(x).strip())
-
-
-def make_alert_id(rule: str, ticker: str, period: str | None, event_date: str | None, event_key: str | None) -> str:
-    """ID = rule + ticker + fiscalPeriod/eventPeriod + eventDate + driverName/eventKey."""
-    return ":".join(
-        [
-            norm_id_part(rule),
-            norm_id_part(ticker),
-            norm_id_part(period),
-            norm_id_part(date_key(event_date) if event_date else None),
-            norm_id_part(event_key),
-        ]
-    )
+        return None
 
 
 def is_baseline(row: dict) -> bool:
@@ -221,35 +154,34 @@ def revision_pct_of(row: dict) -> float | None:
     return (cur - prev) / abs(prev) * 100.0
 
 
-def vs_consensus_label(raw) -> str | None:
-    if not isinstance(raw, str):
-        return None
-    c = raw.strip().lower()
-    if c in {"above", "below"}:
-        return "Above" if c == "above" else "Below"
-    return None
+def _sanitize_id_part(x) -> str:
+    if x is None:
+        return "na"
+    s = str(x).strip()
+    if not s:
+        return "na"
+    s = re.sub(r"\s+", "_", s)
+    s = s.replace(":", "_").replace("/", "-")
+    return s[:80] or "na"
 
 
-def digest_results_vs_consensus(dig: dict) -> str | None:
-    results = dig.get("results") or {}
-    if isinstance(results, dict):
-        lab = vs_consensus_label(results.get("vsConsensus") or results.get("resultsVsConsensus"))
-        if lab:
-            return lab
-    return vs_consensus_label(dig.get("resultsVsConsensus"))
-
-
-def digest_guidance_vs_consensus(dig: dict) -> str | None:
-    gd = dig.get("guidanceDetail") or {}
-    if isinstance(gd, dict):
-        lab = vs_consensus_label(gd.get("vsConsensus") or gd.get("guidanceVsConsensus"))
-        if lab:
-            return lab
-        # explicit unknown / in-line → no guidance alert
-        raw = gd.get("vsConsensus")
-        if isinstance(raw, str) and raw.strip().lower() in {"unknown", "n/a", "na", ""}:
-            return None
-    return vs_consensus_label(dig.get("guidanceVsConsensus"))
+def make_alert_id(
+    rule_id: str,
+    ticker: str,
+    period: str | None = None,
+    event_date: str | None = None,
+    event_key: str | None = None,
+) -> str:
+    """Stable unique id: rule + ticker + fiscalPeriod/eventPeriod + eventDate + driverName/eventKey."""
+    return ":".join(
+        [
+            _sanitize_id_part(rule_id),
+            _sanitize_id_part(ticker),
+            _sanitize_id_part(period),
+            _sanitize_id_part(event_date),
+            _sanitize_id_part(event_key),
+        ]
+    )
 
 
 def alert(
@@ -261,28 +193,74 @@ def alert(
     period: str | None = None,
     event_date: str | None = None,
     event_key: str | None = None,
+    event_at: str | None = None,
+    oneshot: bool = True,
     **extra,
 ) -> dict:
-    period_val = period or extra.get("fiscalPeriod") or extra.get("eventPeriod") or extra.get("fiscal") or extra.get("slot")
-    date_val = event_date or extra.get("eventDate") or extra.get("date") or extra.get("changedAt")
-    key_val = event_key or extra.get("driverName") or extra.get("eventKey") or extra.get("driver") or rule_id
+    """Build alert with unique id and lifecycle fields."""
+    # Prefer explicit fiscal/period from extra
+    fiscal = period or extra.get("fiscal") or extra.get("slot") or extra.get("eventPeriod")
+    date_part = event_date or extra.get("date") or (event_at or "")[:10] or None
+    key_part = event_key or extra.get("driver") or extra.get("driverName") or extra.get("eventKey")
+    aid = make_alert_id(rule_id, ticker, fiscal, date_part, key_part)
+
+    created = now_utc_iso()
+    # NEVER substitute today as a business eventAt when the caller marked missingEventDate
+    # or explicitly passed event_at=None with no date_part.
+    if extra.get("missingEventDate") and not date_part and not event_at:
+        ev_at = None
+    else:
+        ev_at = event_at or (f"{date_part}T00:00:00Z" if date_part else created)
+    # Lifecycle clock may use created when business eventAt is missing
+    ev_dt = parse_date(ev_at) or parse_date(created) or datetime.now(timezone.utc)
+    expires = None
+    if oneshot:
+        expires = (ev_dt + timedelta(days=ONE_SHOT_ACTIVE_DAYS)).strftime("%Y-%m-%dT%H:%M:%SZ")
+
     out = {
-        "id": make_alert_id(rule_id, ticker, period_val, date_val, key_val),
+        "id": aid,
         "rule": rule_id,
         "severity": severity,
         "ticker": ticker,
         "message": message,
         "title": message,
-        "fiscalPeriod": period_val,
-        "eventPeriod": period_val,
-        "eventDate": date_key(date_val) if date_val else None,
-        "eventKey": key_val,
-        "driverName": extra.get("driverName") or extra.get("driver"),
+        "fiscalPeriod": fiscal,
+        "eventPeriod": fiscal,
+        "eventDate": date_part,
+        "eventKey": key_part,
+        "eventAt": ev_at,
+        "createdAt": created,
+        "expiresAt": expires,
+        "activeUntil": expires,
+        "oneshot": oneshot,
     }
     for k, v in extra.items():
         if v is not None and k not in out:
             out[k] = v
     return out
+
+
+def age_days(alert_obj: dict, now: datetime | None = None) -> int:
+    now = now or datetime.now(timezone.utc)
+    ev = parse_date(alert_obj.get("eventAt") or alert_obj.get("eventDate") or alert_obj.get("createdAt"))
+    if ev is None:
+        return 0
+    return max(0, int((now - ev).total_seconds() // 86400))
+
+
+def is_active(alert_obj: dict, now: datetime | None = None) -> bool:
+    now = now or datetime.now(timezone.utc)
+    until = parse_date(alert_obj.get("expiresAt") or alert_obj.get("activeUntil"))
+    if until is not None:
+        return now <= until
+    # Non-expiring (should be rare): keep active
+    if alert_obj.get("oneshot") is False:
+        return True
+    # Legacy alerts without eventAt/createdAt cannot prove freshness → not active
+    if not (alert_obj.get("eventAt") or alert_obj.get("eventDate") or alert_obj.get("createdAt")):
+        return False
+    # Fallback: age-based
+    return age_days(alert_obj, now) <= ONE_SHOT_ACTIVE_DAYS
 
 
 def rule1_single_revision(history: list[dict]) -> list[dict]:
@@ -300,7 +278,7 @@ def rule1_single_revision(history: list[dict]) -> list[dict]:
         if abs(pct) > 2.0:
             direction = "upgrade" if pct > 0 else "downgrade"
             fiscal = row.get("Fiscal Year") or row.get("Calendar Alignment")
-            event_date = row.get("Date") or row.get("Update Time")
+            date = row.get("Date") or (row.get("Update Time") or "")[:10]
             out.append(
                 alert(
                     "single_revision_gt_2pct",
@@ -308,328 +286,301 @@ def rule1_single_revision(history: list[dict]) -> list[dict]:
                     ticker,
                     f"{ticker} {fiscal}: single consensus EPS {direction} {pct:+.2f}% (>2%)",
                     period=fiscal,
-                    event_date=event_date,
-                    event_key="eps_revision",
+                    event_date=date,
+                    event_key=f"rev_{pct:+.2f}",
+                    event_at=row.get("Update Time") or (f"{date}T00:00:00Z" if date else None),
                     revisionPct=pct,
-                    date=event_date,
-                    oneShot=True,
+                    date=date,
+                    fiscal=fiscal,
                 )
             )
     return out
 
 
-def cumulative_30d_status(points: list[tuple], now: datetime, lookback_days: int = 30) -> dict:
-    """Return window stats. Never substitutes all-history for a 30D label."""
-    window = []
-    for dt, cur, row in points:
-        if dt is None:
-            continue
-        if (now - dt) <= timedelta(days=lookback_days):
-            window.append((dt, cur, row))
-    if len(window) < 2:
-        return {
-            "status": "insufficient_history",
-            "windowPoints": len(window),
-            "lookbackDays": lookback_days,
-            "cumulativePct": None,
-            "labeled30D": False,
-        }
-    first = window[0][1]
-    last = window[-1][1]
-    if first is None or last is None or first == 0:
-        return {
-            "status": "insufficient_history",
-            "windowPoints": len(window),
-            "lookbackDays": lookback_days,
-            "cumulativePct": None,
-            "labeled30D": False,
-        }
-    cum_pct = (last - first) / abs(first) * 100.0
-    return {
-        "status": "ok",
-        "windowPoints": len(window),
-        "lookbackDays": lookback_days,
-        "cumulativePct": cum_pct,
-        "labeled30D": True,
-        "first": first,
-        "last": last,
-        "firstDate": window[0][0],
-        "lastDate": window[-1][0],
-    }
 
-
-def rule2_cumulative(history: list[dict], lookback_days: int = 30, now: datetime | None = None) -> list[dict]:
-    """Legacy revision-history cumulative (kept for unit tests). Production uses daily.jsonl."""
-    groups: dict[tuple, list] = {}
-    for row in history:
-        ticker = row.get("Ticker")
-        fiscal = row.get("Fiscal Year") or row.get("Calendar Alignment")
-        if not ticker or not fiscal:
+def load_daily_jsonl() -> list[dict]:
+    """Load append-only daily consensus observations."""
+    if not DAILY_JSONL.exists():
+        return []
+    rows = []
+    for line in DAILY_JSONL.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line:
             continue
-        cur = to_num(row.get("Current EPS"))
-        if cur is None:
-            continue
-        dt = parse_date(row.get("Date") or row.get("Update Time"))
-        groups.setdefault((ticker, fiscal), []).append((dt, cur, row))
-
-    out = []
-    now = now or now_utc()
-    for (ticker, fiscal), pts in groups.items():
-        pts_sorted = sorted(pts, key=lambda x: x[0] or datetime.min.replace(tzinfo=timezone.utc))
-        stats = cumulative_30d_status(pts_sorted, now, lookback_days=lookback_days)
-        if stats["status"] != "ok":
-            continue
-        cum_pct = stats["cumulativePct"]
-        if cum_pct is None or abs(cum_pct) <= 5.0:
-            continue
-        direction = "upgrade" if cum_pct > 0 else "downgrade"
-        last_dt = stats.get("lastDate")
-        event_date = iso_z(last_dt) if isinstance(last_dt, datetime) else None
-        out.append(
-            alert(
-                "cumulative_revision_gt_5pct",
-                "high",
-                ticker,
-                f"{ticker} {fiscal}: cumulative internal revision {direction} {cum_pct:+.2f}% (>5%) over 30D window",
-                period=fiscal,
-                event_date=event_date,
-                event_key="cumulative_30d",
-                cumulativePct=cum_pct,
-                lookbackDays=lookback_days,
-                windowPoints=stats["windowPoints"],
-                windowLabel="30D",
-                oneShot=True,
-            )
-        )
-    return out
-
-
-def load_daily_eps_snapshots() -> list[dict]:
-    """Load append-only daily consensus rows (shared jsonl + per-ticker files)."""
-    rows: list[dict] = []
-    paths: list[Path] = []
-    daily_dir = ROOT / "data" / "daily_eps_snapshots"
-    if DAILY_JSONL.exists():
-        paths.append(DAILY_JSONL)
-    if daily_dir.exists():
-        for p in sorted(daily_dir.glob("*/daily.jsonl")):
-            paths.append(p)
-    seen = set()
-    for path in paths:
-        key = str(path.resolve()) if path.exists() else str(path)
-        if key in seen:
-            continue
-        seen.add(key)
         try:
-            text = path.read_text(encoding="utf-8")
+            rows.append(json.loads(line))
         except Exception:
             continue
-        for line in text.splitlines():
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                rec = json.loads(line)
-            except Exception:
-                continue
-            if isinstance(rec, dict):
-                rows.append(rec)
     return rows
 
 
-def _daily_eps_value(row: dict):
-    return to_num(row.get("epsMean") if row.get("epsMean") is not None else row.get("consensus"))
-
-
-def _daily_period_key(row: dict) -> str | None:
-    return (
-        row.get("reportedFiscalPeriodEnding")
-        or row.get("reportedFiscalLabel")
-        or row.get("fiscalKey")
-    )
-
-
-def rule2_cumulative_from_daily(
-    lookback_days: int = 30, now: datetime | None = None
+def rule2_cumulative(
+    history: list[dict] | None = None,
+    lookback_days: int = CUMULATIVE_LOOKBACK_DAYS,
+    daily_rows: list[dict] | None = None,
+    now: datetime | None = None,
 ) -> tuple[list[dict], list[dict]]:
-    """Cumulative 30D >5% from daily.jsonl: nearest valid obs at window start vs latest.
+    """Cumulative first→last revision in TRUE lookback window > 5%.
 
-    Same ticker + reportedFiscalPeriodEnding. Insufficient history → diagnostics
-    only (never Alert History, never daily.jsonl writes).
+    Primary source: data/daily_eps_snapshots/daily.jsonl grouped by
+    (ticker, reportedFiscalPeriodEnding). Uses nearest valid observation at
+    or before window start vs the latest observation in the window.
+
+    Returns (alerts, diagnostics). Diagnostics carry insufficient-history
+    status and must NOT enter alertHistory / activeAlerts / daily pollution.
+    NEVER fall back to all-history while claiming a 30D window.
     """
-    now = now or now_utc()
+    now = now or datetime.now(timezone.utc)
+    if now.tzinfo is None:
+        now = now.replace(tzinfo=timezone.utc)
     window_start = now - timedelta(days=lookback_days)
+
+    rows = daily_rows if daily_rows is not None else load_daily_jsonl()
     groups: dict[tuple, list] = {}
-    for row in load_daily_eps_snapshots():
-        ticker = row.get("ticker")
-        ending = _daily_period_key(row)
-        eps = _daily_eps_value(row)
-        dt = parse_date(row.get("date") or row.get("asOf") or row.get("updateTime"))
-        if not ticker or not ending or eps is None or dt is None:
+    for row in rows:
+        ticker = row.get("ticker") or row.get("Ticker")
+        fiscal = (
+            row.get("reportedFiscalLabel")
+            or row.get("reportedFiscalPeriodEnding")
+            or row.get("fiscalKey")
+            or row.get("Fiscal Year")
+        )
+        if not ticker or not fiscal:
             continue
-        groups.setdefault((ticker, ending), []).append((dt, eps, row))
+        cons = to_num(row.get("consensus") if "consensus" in row else row.get("Current EPS"))
+        if cons is None:
+            continue
+        dt = parse_date(row.get("date") or row.get("Date") or row.get("updateTime") or row.get("Update Time"))
+        if dt is None:
+            continue
+        groups.setdefault((ticker, fiscal), []).append((dt, cons, row))
+
+    # Fallback: if no daily rows at all, derive sparse points from revision history
+    # (still require >=2 points inside the TRUE window — never all-history as 30D).
+    if not groups and history:
+        for row in history:
+            ticker = row.get("Ticker")
+            fiscal = row.get("Fiscal Year") or row.get("Calendar Alignment")
+            if not ticker or not fiscal:
+                continue
+            cur = to_num(row.get("Current EPS"))
+            if cur is None:
+                continue
+            dt = parse_date(row.get("Date") or row.get("Update Time"))
+            if dt is None:
+                continue
+            groups.setdefault((ticker, fiscal), []).append((dt, cur, row))
 
     out: list[dict] = []
     diagnostics: list[dict] = []
-    for (ticker, ending), pts in groups.items():
+    for (ticker, fiscal), pts in groups.items():
         pts_sorted = sorted(pts, key=lambda x: x[0])
-        on_or_before = [p for p in pts_sorted if p[0] <= window_start]
-        latest = pts_sorted[-1]
-        if not on_or_before:
+        # Candidates at or before window_start (nearest = last of these)
+        before = [p for p in pts_sorted if p[0] <= window_start]
+        in_or_after_start = [p for p in pts_sorted if p[0] >= window_start]
+        latest_candidates = [p for p in pts_sorted if p[0] <= now]
+        if not latest_candidates:
+            continue
+        latest = latest_candidates[-1]
+
+        start_pt = before[-1] if before else None
+        # Start anchor must be near window start (not a 60d-old stale point claiming to be 30D).
+        # Slack: at most 2 days before window_start.
+        MAX_START_SLACK_DAYS = 2
+        if start_pt is not None and (window_start - start_pt[0]).days > MAX_START_SLACK_DAYS:
+            start_pt = None
+        if start_pt is None:
             diagnostics.append(
                 {
-                    "kind": "insufficient_history",
-                    "rule": "cumulative_revision_gt_5pct",
+                    "rule": "cumulative_revision_insufficient_history",
+                    "severity": "info",
                     "ticker": ticker,
-                    "reportedFiscalPeriodEnding": ending,
-                    "reason": "no daily EPS observation at or before the 30D window start",
-                    "windowPoints": len(pts_sorted),
+                    "period": fiscal,
+                    "message": (
+                        f"{ticker} {fiscal}: insufficient history for {lookback_days}D cumulative "
+                        "(no valid observation at/before window start)"
+                    ),
                     "lookbackDays": lookback_days,
-                    "labeled30D": False,
+                    "windowPointCount": len([p for p in pts_sorted if window_start <= p[0] <= now]),
+                    "status": "insufficient history",
+                    "eventAt": now_utc_iso(),
+                    "diagnostic": True,
                 }
             )
             continue
-        start = on_or_before[-1]
-        if start[0] == latest[0]:
+
+        # Need a later observation distinct from start
+        if latest[0] <= start_pt[0] or latest[1] is None:
             diagnostics.append(
                 {
-                    "kind": "insufficient_history",
-                    "rule": "cumulative_revision_gt_5pct",
+                    "rule": "cumulative_revision_insufficient_history",
+                    "severity": "info",
                     "ticker": ticker,
-                    "reportedFiscalPeriodEnding": ending,
-                    "reason": "fewer than 2 distinct daily EPS observations spanning the 30D window",
-                    "windowPoints": 1,
+                    "period": fiscal,
+                    "message": (
+                        f"{ticker} {fiscal}: insufficient history for {lookback_days}D cumulative "
+                        "(<2 distinct points spanning window)"
+                    ),
                     "lookbackDays": lookback_days,
-                    "labeled30D": False,
+                    "windowPointCount": 1,
+                    "status": "insufficient history",
+                    "eventAt": now_utc_iso(),
+                    "diagnostic": True,
                 }
             )
             continue
-        first, last = start[1], latest[1]
+
+        first = start_pt[1]
+        last = latest[1]
         if first is None or last is None or first == 0:
-            diagnostics.append(
-                {
-                    "kind": "insufficient_history",
-                    "rule": "cumulative_revision_gt_5pct",
-                    "ticker": ticker,
-                    "reportedFiscalPeriodEnding": ending,
-                    "reason": "invalid EPS at window start or latest observation",
-                    "windowPoints": len(pts_sorted),
-                    "lookbackDays": lookback_days,
-                    "labeled30D": False,
-                }
-            )
             continue
         cum_pct = (last - first) / abs(first) * 100.0
-        if abs(cum_pct) <= 5.0:
-            continue
-        direction = "upgrade" if cum_pct > 0 else "downgrade"
-        event_date = iso_z(latest[0])
-        out.append(
-            alert(
-                "cumulative_revision_gt_5pct",
-                "high",
-                ticker,
-                f"{ticker} {ending}: cumulative 30D EPS {direction} {cum_pct:+.2f}% (>5%) from daily snapshots",
-                period=ending,
-                event_date=event_date,
-                event_key="cumulative_30d",
-                cumulativePct=cum_pct,
-                lookbackDays=lookback_days,
-                windowPoints=2,
-                windowLabel="30D",
-                startEps=first,
-                latestEps=last,
-                startDate=start[0].strftime("%Y-%m-%d"),
-                oneShot=True,
+        if abs(cum_pct) > 5.0:
+            direction = "upgrade" if cum_pct > 0 else "downgrade"
+            last_date = latest[0].strftime("%Y-%m-%d")
+            out.append(
+                alert(
+                    "cumulative_revision_gt_5pct",
+                    "high",
+                    ticker,
+                    f"{ticker} {fiscal}: cumulative {lookback_days}D revision {direction} {cum_pct:+.2f}% (>5%)",
+                    period=fiscal,
+                    event_date=last_date,
+                    event_key=f"cum_{cum_pct:+.2f}",
+                    event_at=latest[0].strftime("%Y-%m-%dT%H:%M:%SZ"),
+                    cumulativePct=cum_pct,
+                    lookbackDays=lookback_days,
+                    fiscal=fiscal,
+                    startEps=first,
+                    endEps=last,
+                    startDate=start_pt[0].strftime("%Y-%m-%d"),
+                )
             )
-        )
     return out, diagnostics
 
 
-def consensus_comparison_source(dig: dict) -> tuple[str | None, int | None]:
-    """resultsVsConsensus provenance: consensus comparison source, never IR actuals."""
-    cc = dig.get("consensusComparison") if isinstance(dig.get("consensusComparison"), dict) else {}
-    url = cc.get("sourceUrl")
-    tier = cc.get("sourceTier")
-    if url:
-        return url, int(tier) if tier is not None else 4
-    results = dig.get("results") if isinstance(dig.get("results"), dict) else {}
-    # Prefer SA / Tier 4 notes over IR (Tier 1) actuals URL
-    if results.get("sourceTier") not in (1, 2, 3) and results.get("sourceUrl"):
-        return results.get("sourceUrl"), int(results.get("sourceTier") or 4)
-    for bucket in ("positives", "negatives", "uncertainties", "sources"):
-        for item in dig.get(bucket) or []:
-            if not isinstance(item, dict):
-                continue
-            item_url = item.get("url") or item.get("sourceUrl")
-            item_tier = item.get("sourceTier")
-            if item_url and (item_tier is None or int(item_tier) >= 4):
-                return item_url, int(item_tier) if item_tier is not None else 4
-    qa = dig.get("qaSupplemental") if isinstance(dig.get("qaSupplemental"), dict) else {}
-    if qa.get("sourceUrl"):
-        return qa.get("sourceUrl"), int(qa.get("sourceTier") or 4)
-    return None, None
+def _norm_vs(val) -> str | None:
+    if not isinstance(val, str):
+        return None
+    c = val.strip().lower()
+    if c in {"above", "below"}:
+        return c
+    return None
 
 
-def actuals_source(dig: dict) -> tuple[str | None, int | None]:
-    act = dig.get("actuals") if isinstance(dig.get("actuals"), dict) else {}
-    if act.get("sourceUrl"):
-        return act.get("sourceUrl"), act.get("sourceTier")
-    results = dig.get("results") if isinstance(dig.get("results"), dict) else {}
-    if results.get("sourceTier") in (1, 2, 3) or (
-        isinstance(results.get("sourceUrl"), str) and "investor." in results.get("sourceUrl", "")
-    ):
-        return results.get("sourceUrl"), results.get("sourceTier")
+
+def _consensus_comparison_source(dig: dict) -> tuple[str | None, int | None]:
+    """Field-level provenance for results-vs-consensus.
+
+    Prefer consensusComparison.sourceUrl/sourceTier (e.g. SA Tier 4),
+    NOT actuals / results IR release URLs.
+    """
+    cc = dig.get("consensusComparison")
+    if isinstance(cc, dict):
+        url = cc.get("sourceUrl") or cc.get("url")
+        tier = cc.get("sourceTier") if cc.get("sourceTier") is not None else cc.get("tier")
+        if url or tier is not None:
+            return url, tier
+    # Heuristic: Seeking Alpha sources in digest.sources list
+    for s in dig.get("sources") or []:
+        if not isinstance(s, dict):
+            continue
+        tier = s.get("sourceTier") if s.get("sourceTier") is not None else s.get("tier")
+        attr = str(s.get("attribution") or s.get("title") or "").lower()
+        url = s.get("url") or s.get("sourceUrl")
+        if tier == 4 or "seeking alpha" in attr or (url and "seekingalpha.com" in str(url).lower()):
+            return url, tier if tier is not None else 4
+    # results.notes often cite SA beat/miss — still do not use results.sourceUrl (IR)
+    notes = str(((dig.get("results") or {}) if isinstance(dig.get("results"), dict) else {}).get("notes") or "")
+    if "seeking alpha" in notes.lower() or "sa earnings" in notes.lower():
+        # Find any SA URL in sources; else leave url None but tier 4
+        for s in dig.get("sources") or []:
+            if isinstance(s, dict) and s.get("url") and "seekingalpha.com" in str(s.get("url")).lower():
+                return s.get("url"), 4
+        return None, 4
     return None, None
 
 
 def rule3_results_and_guidance(tickers: list[str]) -> list[dict]:
+    """Split resultsVsConsensus vs guidanceVsConsensus.
+
+    Guidance alert ONLY if guidanceDetail.vsConsensus in {above, below}.
+    results_vs_consensus alert carries consensusComparison provenance (SA Tier 4),
+    not company IR actuals source.
+    """
     out = []
     for t in tickers:
         dig = load_json(EARNINGS_DIR / f"{t}.json")
         if not dig or not dig.get("hasDigest"):
             continue
-        period = dig.get("periodLabel")
-        event_date = dig.get("reportDate") or dig.get("lastEarnings")
-        results_vs = digest_results_vs_consensus(dig)
-        if not results_vs:
-            cc = dig.get("consensusComparison") if isinstance(dig.get("consensusComparison"), dict) else {}
-            results_vs = vs_consensus_label(cc.get("vsConsensus"))
-        guidance_vs = digest_guidance_vs_consensus(dig)
-        if results_vs:
-            src_url, src_tier = consensus_comparison_source(dig)
+        period = dig.get("periodLabel") or "na"
+        report_date = dig.get("reportDate") or (dig.get("updatedAt") or "")[:10]
+
+        results_vs = _norm_vs(
+            (dig.get("results") or {}).get("vsConsensus")
+            or dig.get("resultsVsConsensus")
+            or ((dig.get("consensusComparison") or {}) if isinstance(dig.get("consensusComparison"), dict) else {}).get("vsConsensus")
+        )
+        # Legacy dig.comparison often meant results; keep as results fallback only
+        if results_vs is None:
+            results_vs = _norm_vs(dig.get("comparison"))
+
+        if results_vs in {"above", "below"}:
+            label = "Above" if results_vs == "above" else "Below"
+            src_url, src_tier = _consensus_comparison_source(dig)
+            kwargs = dict(
+                comparison=label,
+                resultsVsConsensus=label,
+            )
+            if src_url:
+                kwargs["sourceUrl"] = src_url
+            if src_tier is not None:
+                kwargs["sourceTier"] = src_tier
+            # Explicitly avoid leaking actuals/IR URL onto this alert
+            actuals = dig.get("actuals") if isinstance(dig.get("actuals"), dict) else None
+            results = dig.get("results") if isinstance(dig.get("results"), dict) else None
+            if actuals:
+                kwargs["actualsSourceUrl"] = actuals.get("sourceUrl")
+                if actuals.get("sourceTier") is not None:
+                    kwargs["actualsSourceTier"] = actuals.get("sourceTier")
+            elif results and results.get("sourceUrl"):
+                kwargs["actualsSourceUrl"] = results.get("sourceUrl")
+                if results.get("sourceTier") is not None:
+                    kwargs["actualsSourceTier"] = results.get("sourceTier")
             out.append(
                 alert(
                     "results_vs_consensus",
                     "medium",
                     t,
-                    f"{t}: results vs consensus marked {results_vs}",
+                    f"{t}: results vs consensus marked {label}",
                     period=period,
-                    event_date=event_date,
-                    event_key="results",
-                    comparison=results_vs,
-                    resultsVsConsensus=results_vs,
-                    sourceUrl=src_url,
-                    sourceTier=src_tier,
-                    provenanceField="consensusComparison",
-                    oneShot=True,
+                    event_date=report_date,
+                    event_key=f"results_{results_vs}",
+                    event_at=f"{report_date}T00:00:00Z" if report_date else None,
+                    **kwargs,
                 )
             )
-        if guidance_vs:
+
+        gd = dig.get("guidanceDetail") or {}
+        guidance_vs = _norm_vs(gd.get("vsConsensus") if isinstance(gd, dict) else None)
+        guidance_vs = guidance_vs or _norm_vs(dig.get("guidanceVsConsensus"))
+        if guidance_vs in {"above", "below"}:
+            label = "Above" if guidance_vs == "above" else "Below"
             out.append(
                 alert(
                     "guidance_vs_consensus",
                     "medium",
                     t,
-                    f"{t}: guidance vs consensus marked {guidance_vs}",
+                    f"{t}: guidance vs consensus marked {label}",
                     period=period,
-                    event_date=event_date,
-                    event_key="guidance",
-                    comparison=guidance_vs,
-                    guidanceVsConsensus=guidance_vs,
-                    oneShot=True,
+                    event_date=report_date,
+                    event_key=f"guidance_{guidance_vs}",
+                    event_at=f"{report_date}T00:00:00Z" if report_date else None,
+                    comparison=label,
+                    guidanceVsConsensus=label,
                 )
             )
+        # unknown / missing → no guidance alert
     return out
 
 
@@ -659,337 +610,339 @@ def _extract_bps_change(text: str) -> float | None:
     return None
 
 
-def _guidance_pair(dig: dict) -> tuple[float | None, float | None]:
-    """Return (previous_guidance, current_guidance) GM % if both present."""
-    gd = dig.get("guidanceDetail") if isinstance(dig.get("guidanceDetail"), dict) else {}
-    prev = to_num(gd.get("previousGuidance") or gd.get("previousGrossMargin") or gd.get("previousGm"))
-    cur = to_num(gd.get("currentGuidance") or gd.get("currentGrossMargin") or gd.get("currentGm"))
-    if prev is None:
-        nums = _extract_gm_numbers(str(gd.get("previousGuidance") or ""))
-        prev = nums[0] if nums else None
-    if cur is None:
-        nums = _extract_gm_numbers(str(gd.get("currentGuidance") or gd.get("grossMargin") or ""))
-        # only accept current from grossMargin field when previous is also explicit
-        if gd.get("currentGuidance") or gd.get("currentGrossMargin") or gd.get("currentGm"):
-            cur = nums[0] if nums else cur
-        elif gd.get("previousGuidance") or gd.get("previousGrossMargin"):
-            cur = nums[0] if nums else cur
-    return prev, cur
-
-
 def rule4_gm(tickers: list[str]) -> list[dict]:
-    """gross_margin_guidance_revision vs gross_margin_pressure."""
+    """gross_margin_pressure vs gross_margin_guidance_revision.
+
+    Guidance revision requires previousGuidance + currentGuidance.
+    Pressure uses parsable bps / reported-vs-guide deltas > 200 bps.
+    """
     out = []
     for t in tickers:
         dig = load_json(EARNINGS_DIR / f"{t}.json")
         if not dig or not dig.get("hasDigest"):
             continue
-        period = dig.get("periodLabel")
-        event_date = dig.get("reportDate") or dig.get("lastEarnings")
+        period = dig.get("periodLabel") or "na"
+        report_date = dig.get("reportDate") or (dig.get("updatedAt") or "")[:10]
         gd = dig.get("guidanceDetail") if isinstance(dig.get("guidanceDetail"), dict) else {}
-        has_prev = bool(gd.get("previousGuidance") or gd.get("previousGrossMargin") or gd.get("previousGm"))
-        has_cur = bool(gd.get("currentGuidance") or gd.get("currentGrossMargin") or gd.get("currentGm"))
-        prev, cur = _guidance_pair(dig)
-        if has_prev and has_cur and prev is not None and cur is not None:
-            delta_bps = (cur - prev) * 100.0
-            if abs(delta_bps) > 200:
-                out.append(
-                    alert(
-                        "gross_margin_guidance_revision",
-                        "high",
-                        t,
-                        f"{t}: GM guidance revision {prev:.1f}% → {cur:.1f}% ({delta_bps:+.0f} bps, >200)",
-                        period=period,
-                        event_date=event_date,
-                        event_key="gm_guidance",
-                        bpsChange=delta_bps,
-                        previousGuidance=prev,
-                        currentGuidance=cur,
-                        oneShot=True,
-                    )
+
+        prev_g = gd.get("previousGuidance") or dig.get("previousGuidance")
+        cur_g = gd.get("currentGuidance") or gd.get("grossMargin") or dig.get("currentGuidance")
+        if prev_g and cur_g and str(prev_g).strip() != str(cur_g).strip():
+            # Explicit guidance revision path
+            prev_nums = _extract_gm_numbers(str(prev_g))
+            cur_nums = _extract_gm_numbers(str(cur_g))
+            bps = None
+            if prev_nums and cur_nums:
+                bps = (cur_nums[0] - prev_nums[0]) * 100.0
+            out.append(
+                alert(
+                    "gross_margin_guidance_revision",
+                    "high" if bps is not None and abs(bps) > 200 else "medium",
+                    t,
+                    f"{t}: GM guidance revision (previous → current)",
+                    period=period,
+                    event_date=report_date,
+                    event_key="gm_guidance_rev",
+                    event_at=f"{report_date}T00:00:00Z" if report_date else None,
+                    previousGuidance=prev_g,
+                    currentGuidance=cur_g,
+                    bpsChange=bps,
                 )
-            continue
+            )
 
         blob_parts = [
             dig.get("guidance") or "",
-            json.dumps(gd),
-            " ".join((n.get("text") if isinstance(n, dict) else str(n)) for n in (dig.get("negatives") or [])),
+            json.dumps(gd or {}),
+            " ".join(
+                (n.get("text") if isinstance(n, dict) else str(n))
+                for n in (dig.get("negatives") or [])
+            ),
+            " ".join(
+                (p.get("text") if isinstance(p, dict) else str(p))
+                for p in (dig.get("positives") or [])
+            ),
         ]
         text = " ".join(str(x) for x in blob_parts)
         bps = _extract_bps_change(text)
-        pressure = False
-        bps_val = None
-        if bps is not None and bps < -200:
-            pressure = True
-            bps_val = bps
-        else:
-            margins = dig.get("margins") or []
-            reported = None
-            for m in margins:
-                if isinstance(m, dict) and "gross" in str(m.get("label") or "").lower():
-                    nums = _extract_gm_numbers(str(m.get("value") or ""))
-                    if nums:
-                        reported = nums[0]
-                        break
-            guide_nums = _extract_gm_numbers(str(gd.get("grossMargin") or dig.get("guidance") or ""))
-            if reported is not None and guide_nums:
-                guided = guide_nums[0]
-                delta_bps = (guided - reported) * 100.0
-                if delta_bps < -200:
-                    pressure = True
-                    bps_val = delta_bps
-        if pressure:
+        if bps is not None and abs(bps) > 200:
             out.append(
                 alert(
                     "gross_margin_pressure",
                     "high",
                     t,
-                    f"{t}: gross margin pressure {bps_val:+.0f} bps" if bps_val is not None else f"{t}: gross margin pressure",
+                    f"{t}: GM pressure {bps:+.0f} bps (>200 bps)",
                     period=period,
-                    event_date=event_date,
-                    event_key="gm_pressure",
-                    bpsChange=bps_val,
-                    oneShot=True,
+                    event_date=report_date,
+                    event_key=f"gm_pressure_{bps:+.0f}",
+                    event_at=f"{report_date}T00:00:00Z" if report_date else None,
+                    bpsChange=bps,
                 )
             )
+            continue
+        margins = dig.get("margins") or []
+        reported = None
+        for m in margins:
+            if isinstance(m, dict) and "gross" in str(m.get("label") or "").lower():
+                nums = _extract_gm_numbers(str(m.get("value") or ""))
+                if nums:
+                    reported = nums[0]
+                    break
+        guide_nums = _extract_gm_numbers(str(gd.get("grossMargin") or dig.get("guidance") or ""))
+        if reported is not None and guide_nums:
+            guided = guide_nums[0]
+            delta_bps = (guided - reported) * 100.0
+            if abs(delta_bps) > 200:
+                out.append(
+                    alert(
+                        "gross_margin_pressure",
+                        "high",
+                        t,
+                        f"{t}: GM guide {guided:.1f}% vs reported {reported:.1f}% ({delta_bps:+.0f} bps, >200)",
+                        period=period,
+                        event_date=report_date,
+                        event_key=f"gm_pressure_{delta_bps:+.0f}",
+                        event_at=f"{report_date}T00:00:00Z" if report_date else None,
+                        bpsChange=delta_bps,
+                        reportedGm=reported,
+                        guidedGm=guided,
+                    )
+                )
     return out
 
 
-def driver_event_date(d: dict, drv: dict) -> tuple[str | None, str | None]:
-    """Business event date. NEVER today.
 
-    Priority: driver.changedAt → driver.eventDate → driver.asOf → file.updated → file.updatedAt.
+def _driver_event_date(driver: dict, file_obj: dict) -> tuple[str | None, bool]:
+    """Event date priority: driver.changedAt → driver.eventDate → driver.asOf
+    → file.updated → file.updatedAt.
+
+    Returns (date_yyyy_mm_dd_or_None, missing_event_date).
+    NEVER falls back to today as a business eventAt.
     """
-    chain = [
-        (d.get("changedAt"), "driver.changedAt"),
-        (d.get("eventDate"), "driver.eventDate"),
-        (d.get("asOf"), "driver.asOf"),
-        (drv.get("updated"), "file.updated"),
-        (drv.get("updatedAt"), "file.updatedAt"),
-    ]
-    for val, src in chain:
-        if val:
-            return str(val), src
-    return None, None
+    for key in ("changedAt", "eventDate", "asOf"):
+        v = driver.get(key) if isinstance(driver, dict) else None
+        if v:
+            s = str(v).strip()
+            if s and s.lower() not in {"null", "none", "n/a", "na"}:
+                return s[:10], False
+    for key in ("updated", "updatedAt", "asOf"):
+        v = file_obj.get(key) if isinstance(file_obj, dict) else None
+        if v:
+            s = str(v).strip()
+            if s and s.lower() not in {"null", "none", "n/a", "na"}:
+                return s[:10], False
+    return None, True
 
 
-def rule5_driver_or_digest_flags(tickers: list[str]) -> tuple[list[dict], list[dict], list[dict]]:
-    """Driver status changed to improving/deteriorating with reason — unique per driver.
-
-    Returns (alerts, missing_event_date_diagnostics, driver_load_errors).
-    """
+def rule5_driver_or_digest_flags(tickers: list[str]) -> list[dict]:
+    """Driver status changed to improving/deteriorating with reason — unique per driver."""
     out = []
-    missing = []
-    load_errors = []
     for t in tickers:
-        path = DRIVERS_DIR / f"{t}.json"
-        drv, err = load_driver_file(path)
-        if err:
-            load_errors.append(err)
-            continue
+        drv = load_json(DRIVERS_DIR / f"{t}.json")
         if not drv:
             continue
-        earn = load_json(EARNINGS_DIR / f"{t}.json") or {}
-        default_period = earn.get("periodLabel") or drv.get("periodLabel")
         for d in drv.get("drivers") or []:
             if not isinstance(d, dict):
                 continue
             cur = str(d.get("currentStatus") or d.get("status") or "").lower()
             prev = str(d.get("previousStatus") or "").lower()
             reason = d.get("reason") or d.get("note")
-            name = d.get("name") or "driver"
-            event_date, date_src = driver_event_date(d, drv)
-            period = d.get("eventPeriod") or d.get("fiscalPeriod") or default_period
-            if cur not in {"improving", "deteriorating"} or not reason:
-                continue
-            fire = False
-            if prev and prev != cur:
-                fire = True
-                msg = f"{t} driver '{name}': {prev} → {cur} — {reason}"
-            elif not prev:
-                fire = True
-                msg = f"{t} driver '{name}': {cur} — {reason}"
-            elif prev == "unchanged" and cur in {"improving", "deteriorating"}:
-                fire = True
-                msg = f"{t} driver '{name}': {prev} → {cur} — {reason}"
-            if not fire:
-                continue
-            if not event_date or parse_date(event_date) is None:
-                missing.append(
-                    {
-                        "kind": "missing_event_date",
-                        "rule": "driver_status_change",
-                        "ticker": t,
-                        "driverName": name,
-                        "reason": "no changedAt/eventDate/asOf/file.updated/file.updatedAt; never using today",
-                    }
-                )
-                continue
-            extra_gm = {}
-            lname = str(name).lower()
-            if "gross margin" in lname or lname in {"gm", "gross_margin"}:
-                extra_gm["gmKind"] = "gross_margin_pressure"
-            out.append(
-                alert(
-                    "driver_status_change",
-                    "medium",
-                    t,
-                    msg,
-                    period=period,
-                    event_date=event_date,
-                    event_key=name,
-                    driverName=name,
-                    driver=name,
-                    previousStatus=prev or None,
-                    currentStatus=cur,
-                    sourceUrl=d.get("sourceUrl"),
-                    reason=reason,
-                    eventDateSource=date_src,
-                    oneShot=True,
-                    **extra_gm,
-                )
-            )
-    return out, missing, load_errors
+            name = d.get("name") or "unnamed"
+            event_date, missing = _driver_event_date(d, drv)
+            # NEVER use today as business eventAt
+            event_at = f"{event_date}T00:00:00Z" if event_date else None
+            if cur in {"improving", "deteriorating"} and reason:
+                extra = {}
+                if missing:
+                    extra["missingEventDate"] = True
+                if prev and prev != cur:
+                    out.append(
+                        alert(
+                            "driver_status_change",
+                            "medium",
+                            t,
+                            f"{t} driver '{name}': {prev} → {cur} — {reason}",
+                            period=d.get("fiscalPeriod") or "na",
+                            event_date=event_date,
+                            event_key=name,
+                            event_at=event_at,
+                            driver=name,
+                            driverName=name,
+                            previousStatus=prev,
+                            currentStatus=cur,
+                            sourceUrl=d.get("sourceUrl"),
+                            **extra,
+                        )
+                    )
+                elif not prev and cur in {"improving", "deteriorating"}:
+                    out.append(
+                        alert(
+                            "driver_status_change",
+                            "medium",
+                            t,
+                            f"{t} driver '{name}': {cur} — {reason}",
+                            period=d.get("fiscalPeriod") or "na",
+                            event_date=event_date,
+                            event_key=name,
+                            event_at=event_at,
+                            driver=name,
+                            driverName=name,
+                            currentStatus=cur,
+                            sourceUrl=d.get("sourceUrl"),
+                            **extra,
+                        )
+                    )
+    return out
 
 
-def enrich_lifecycle(a: dict, now: datetime, prior_by_id: dict) -> dict | None:
-    """Stamp lifecycle fields. NEVER use today as a business event date."""
-    prior = prior_by_id.get(a.get("id")) or {}
-    event_raw = a.get("eventAt") or a.get("eventDate") or a.get("date") or a.get("changedAt")
-    event_dt = parse_date(event_raw) or parse_date(prior.get("eventAt")) or parse_date(prior.get("eventDate"))
-    if event_dt is None:
-        return None
-    created_raw = prior.get("createdAt") or a.get("createdAt")
-    created_dt = parse_date(created_raw) or now
-    age_days = max(0, int((now - event_dt).total_seconds() // 86400))
-    ttl = int(a.get("ttlDays") or HOMEPAGE_TTL_DAYS)
-    expires_dt = event_dt + timedelta(days=ttl)
-    a["eventAt"] = iso_z(event_dt)
-    a["createdAt"] = iso_z(created_dt)
-    a["expiresAt"] = iso_z(expires_dt)
-    a["activeUntil"] = iso_z(expires_dt)
-    a["ageDays"] = age_days
-    a["oneShot"] = bool(a.get("oneShot", a.get("rule") in ONE_SHOT_RULES))
-    a["ttlDays"] = ttl
-    return a
+# Material rules shown on homepage (exclude informational insufficient-history)
+HOMEPAGE_RULES = {
+    "single_revision_gt_2pct",
+    "cumulative_revision_gt_5pct",
+    "results_vs_consensus",
+    "guidance_vs_consensus",
+    "gross_margin_pressure",
+    "gross_margin_guidance_revision",
+    "driver_status_change",
+    # legacy name kept if any residual
+    "gm_guidance_change_gt_200bps",
+}
 
+SEVERITY_RANK = {"high": 0, "medium": 1, "low": 2, "info": 3}
 
-def is_homepage_active(a: dict, now: datetime) -> bool:
-    exp = parse_date(a.get("expiresAt") or a.get("activeUntil"))
-    if exp is not None:
-        return now < exp
-    age = a.get("ageDays")
-    if isinstance(age, (int, float)):
-        return age < HOMEPAGE_TTL_DAYS
-    return True
-
-
-def _index_prior(payload: dict | None) -> dict:
-    prior = {}
-    if not isinstance(payload, dict):
-        return prior
-    for bucket in ("activeAlerts", "alertHistory", "alerts"):
-        for a in payload.get(bucket) or []:
-            if isinstance(a, dict) and a.get("id"):
-                prior[a["id"]] = a
-    return prior
 
 
 def evaluate_alerts(now: datetime | None = None) -> dict:
+    now = now or datetime.now(timezone.utc)
     tickers = load_tickers()
     history = load_history()
-    now = now or now_utc()
-    alerts: list[dict] = []
+    daily_rows = load_daily_jsonl()
+    generated: list[dict] = []
     diagnostics: list[dict] = []
-    alerts.extend(rule1_single_revision(history))
-    daily_alerts, daily_diag = rule2_cumulative_from_daily(now=now)
-    alerts.extend(daily_alerts)
-    diagnostics.extend(daily_diag)
-    alerts.extend(rule3_results_and_guidance(tickers))
-    alerts.extend(rule4_gm(tickers))
-    driver_alerts, missing_dates, driver_errors = rule5_driver_or_digest_flags(tickers)
-    alerts.extend(driver_alerts)
-    diagnostics.extend(missing_dates)
+    generated.extend(rule1_single_revision(history))
+    cum_alerts, cum_diag = rule2_cumulative(history, daily_rows=daily_rows, now=now)
+    generated.extend(cum_alerts)
+    diagnostics.extend(cum_diag)
+    generated.extend(rule3_results_and_guidance(tickers))
+    generated.extend(rule4_gm(tickers))
+    generated.extend(rule5_driver_or_digest_flags(tickers))
 
-    prior_payload = load_json(ALERTS_PATH) or {}
-    prior_by_id = _index_prior(prior_payload)
-
+    # Deduplicate by id (keep first)
     seen = set()
     uniq = []
-    for a in alerts:
+    for a in generated:
         aid = a.get("id")
         if aid in seen:
             continue
         seen.add(aid)
-        enriched = enrich_lifecycle(a, now, prior_by_id)
-        if enriched is None:
-            diagnostics.append(
-                {
-                    "kind": "missing_event_date",
-                    "rule": a.get("rule"),
-                    "ticker": a.get("ticker"),
-                    "id": aid,
-                    "reason": "unparseable event date; never using today as business event date",
-                }
-            )
+        uniq.append(a)
+
+    # Merge with prior history (long retention) — exclude diagnostics / insufficient-history
+    prior = load_json(ALERTS_PATH) or {}
+    prior_hist = prior.get("alertHistory") or prior.get("alerts") or []
+    hist_by_id = {}
+    for a in prior_hist:
+        if not isinstance(a, dict) or not a.get("id"):
             continue
-        uniq.append(enriched)
+        # Drop any previously-stored insufficient-history rows from history
+        if a.get("rule") == "cumulative_revision_insufficient_history" or a.get("diagnostic"):
+            continue
+        if a.get("status") == "insufficient history":
+            continue
+        hist_by_id[a.get("id")] = a
+    for a in uniq:
+        if a.get("diagnostic") or a.get("rule") == "cumulative_revision_insufficient_history":
+            continue
+        aid = a.get("id")
+        if aid in hist_by_id:
+            old = hist_by_id[aid]
+            if old.get("createdAt"):
+                a["createdAt"] = old["createdAt"]
+            if old.get("expiresAt") and not a.get("expiresAt"):
+                a["expiresAt"] = old["expiresAt"]
+                a["activeUntil"] = old.get("activeUntil") or old["expiresAt"]
+        hist_by_id[aid] = a
+
+    history_all = list(hist_by_id.values())
+
+    # Collapse duplicate driver_status_change rows for same ticker+driver:
+    # prefer alert whose eventDate matches driver.changedAt (not a legacy "today" stamp).
+    def _driver_dedupe_key(a: dict):
+        if a.get("rule") != "driver_status_change":
+            return None
+        return (a.get("ticker"), a.get("eventKey") or a.get("driver") or a.get("driverName"))
+
+    by_drv: dict = {}
+    drop_ids = set()
+    for a in history_all:
+        key = _driver_dedupe_key(a)
+        if not key:
+            continue
+        prev = by_drv.get(key)
+        if prev is None:
+            by_drv[key] = a
+            continue
+        # Prefer the one that is NOT missingEventDate and has the earlier business date
+        def score(x):
+            miss = 1 if x.get("missingEventDate") else 0
+            dt = parse_date(x.get("eventAt") or x.get("eventDate"))
+            # earlier event date preferred (true changedAt), missing sorts last
+            ts = dt.timestamp() if dt else float("inf")
+            return (miss, ts)
+
+        winner, loser = (a, prev) if score(a) < score(prev) else (prev, a)
+        by_drv[key] = winner
+        drop_ids.add(loser.get("id"))
+    if drop_ids:
+        history_all = [a for a in history_all if a.get("id") not in drop_ids]
+
+    # Stamp ageDays (operational — UI may also compute from eventAt)
+    for a in history_all:
+        a["ageDays"] = age_days(a, now)
 
     active = []
-    history_out = []
-    current_ids = {a["id"] for a in uniq}
-    for a in uniq:
-        if a.get("oneShot") and not is_homepage_active(a, now):
-            history_out.append(a)
-        else:
+    for a in history_all:
+        if a.get("rule") not in HOMEPAGE_RULES and a.get("severity") == "info":
+            continue
+        if a.get("diagnostic"):
+            continue
+        if is_active(a, now) and a.get("rule") in HOMEPAGE_RULES:
+            a["ageDays"] = age_days(a, now)
             active.append(a)
 
-    for old in (prior_payload.get("alertHistory") or []) + (prior_payload.get("activeAlerts") or []):
-        if not isinstance(old, dict) or not old.get("id"):
-            continue
-        if old["id"] in current_ids:
-            continue
-        # Do not promote diagnostics into history
-        if old.get("kind") in {"insufficient_history", "missing_event_date"}:
-            continue
-        old_e = enrich_lifecycle(dict(old), now, prior_by_id)
-        if old_e is None:
-            continue
-        if old_e["id"] not in {h.get("id") for h in history_out}:
-            history_out.append(old_e)
-
     active.sort(
-        key=lambda a: (
-            SEV_RANK.get(str(a.get("severity") or "").lower(), 9),
-            -(parse_date(a.get("eventAt")) or datetime.min.replace(tzinfo=timezone.utc)).timestamp(),
+        key=lambda x: (
+            SEVERITY_RANK.get(str(x.get("severity") or "").lower(), 9),
+            -(parse_date(x.get("eventAt")) or datetime.min.replace(tzinfo=timezone.utc)).timestamp(),
         )
     )
 
-    engine_status = "ok"
-    engine_error = None
-    if driver_errors:
-        engine_status = "error"
-        engine_error = "; ".join(
-            f"{e.get('ticker')}: {e.get('error')}" for e in driver_errors
-        )
+    # Merge prior diagnostics (keep recent) + new
+    prior_diag = prior.get("alertDiagnostics") or []
+    diag_by_key = {}
+    for d in list(prior_diag) + diagnostics:
+        if not isinstance(d, dict):
+            continue
+        key = (d.get("rule"), d.get("ticker"), d.get("period"), d.get("status"))
+        diag_by_key[key] = d
+    alert_diagnostics = list(diag_by_key.values())
 
     return {
-        "alerts": active,  # homepage alias
         "activeAlerts": active,
-        "alertHistory": history_out,
-        "alertDiagnostics": diagnostics,
-        "driverLoadErrors": driver_errors,
-        "alertEngineLastEvaluated": iso_z(now),
-        "alertEngineStatus": engine_status,
-        "alertEngineError": engine_error,
+        "alertHistory": history_all,
+        "alertDiagnostics": alert_diagnostics,
+        # Legacy alias for older consumers during transition
+        "alerts": active,
+        "alertEngineLastEvaluated": now.strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "alertEngineStatus": "ok",
+        "alertEngineError": None,
+        "oneShotActiveDays": ONE_SHOT_ACTIVE_DAYS,
         "rules": [
-            "single_revision_gt_2pct: |revisionPct| > 2% from revision events",
-            "cumulative_revision_gt_5pct: nearest daily.jsonl obs at 30D window start vs latest, same ticker+reportedFiscalPeriodEnding; else insufficient history (diagnostics only)",
-            "results_vs_consensus: results vs consensus Above/Below (consensusComparison source, not IR actuals)",
-            "guidance_vs_consensus: guidanceDetail.vsConsensus Above/Below only (unknown → none)",
-            "gross_margin_guidance_revision: Previous+Current Guidance and |Δ| > 200 bps",
-            "gross_margin_pressure: GM stress without dual guidance pair",
-            "driver_status_change: improving/deteriorating with reason; eventAt from changedAt (never today)",
+            "single_revision_gt_2pct: |revisionPct| > 2% (revision events)",
+            "cumulative_revision_gt_5pct: daily.jsonl nearest@D-30 vs latest > 5%; else alertDiagnostics insufficient history",
+            "results_vs_consensus / guidance_vs_consensus: split; guidance only if above/below; results uses consensusComparison provenance",
+            "gross_margin_pressure / gross_margin_guidance_revision (prev+current guidance)",
+            "driver_status_change: improving/deteriorating with reason (unique per driver); eventAt from changedAt priority",
+            f"lifecycle: one-shot active {ONE_SHOT_ACTIVE_DAYS}d; history retained; diagnostics excluded from history",
         ],
     }
 
@@ -1005,20 +958,20 @@ def main() -> int:
         payload = evaluate_alerts()
         write_alerts(payload)
         print(
-            f"Wrote {ALERTS_PATH}: {len(payload['activeAlerts'])} active / "
-            f"{len(payload['alertHistory'])} history, status={payload['alertEngineStatus']}"
+            f"Wrote {ALERTS_PATH}: active={len(payload['activeAlerts'])} "
+            f"history={len(payload['alertHistory'])} status={payload['alertEngineStatus']} "
+            f"oneShotActiveDays={ONE_SHOT_ACTIVE_DAYS}"
         )
         return 0
     except Exception as exc:
         err = {
-            "alerts": [],
             "activeAlerts": [],
             "alertHistory": [],
-            "alertDiagnostics": [],
-            "driverLoadErrors": [],
+            "alerts": [],
             "alertEngineLastEvaluated": now_utc_iso(),
             "alertEngineStatus": "error",
             "alertEngineError": f"{type(exc).__name__}: {exc}",
+            "oneShotActiveDays": ONE_SHOT_ACTIVE_DAYS,
         }
         try:
             write_alerts(err)

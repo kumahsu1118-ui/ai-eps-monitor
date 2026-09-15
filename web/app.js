@@ -21,9 +21,8 @@
     sort: { key: "ticker", dir: "asc" },
     revFilters: { ticker: "", year: "", date: "" },
     chartTicker: null,
-    chartYear: null,
+    chartYear: null, /* set from meta.displayMappedYears on load */
     chartMode: "absolute", /* absolute | index */
-    alertsViewAll: false,
   };
 
   /* ---------- utils ---------- */
@@ -49,18 +48,11 @@
     return node;
   }
 
-  function isNm(v) {
-    if (v == null) return false;
-    const s = String(v);
-    return s === "N/M" || s === "n/m" || s === "Turn profitable" || s === "Turn loss";
-  }
-
   function isMissing(v) {
     return v === null || v === undefined || v === "" || v === "Data unavailable";
   }
 
   function fmtNum(v, digits) {
-    if (isNm(v)) return String(v);
     if (isMissing(v) || Number.isNaN(Number(v))) return null;
     const n = Number(v);
     const d = digits == null ? 2 : digits;
@@ -71,7 +63,6 @@
   }
 
   function fmtPct(v, digits, alreadyPercent) {
-    if (isNm(v)) return String(v);
     if (isMissing(v) || Number.isNaN(Number(v))) return null;
     const n = Number(v);
     const pct = alreadyPercent ? n : n * 100;
@@ -90,7 +81,6 @@
 
 
   function fmtDispersion(v) {
-    if (isNm(v)) return String(v);
     /* dispersion stored as fraction (H-L)/Cons — display as percent e.g. 57.3% */
     if (isMissing(v) || Number.isNaN(Number(v))) return null;
     const n = Number(v);
@@ -101,86 +91,76 @@
   function displayYearKeys() {
     const m = state.meta || {};
     if (Array.isArray(m.displayMappedYears) && m.displayMappedYears.length) {
-      return m.displayMappedYears.slice();
+      return m.displayMappedYears;
     }
-    if (Array.isArray(m.chartYears) && m.chartYears.length) {
-      return m.chartYears.slice();
-    }
-    /* Fallback: Taipei calendar year derived from consensus timestamp — never hard-coded years */
+    /* Fallback: Taipei calendar year derived from consensus timestamp or local */
     let y = null;
     const iso = m.consensusDataAsOf || m.lastUpdated;
     if (iso) {
       const d = new Date(iso);
       if (!Number.isNaN(d.getTime())) {
+        /* approximate Taipei = UTC+8 */
         const taipei = new Date(d.getTime() + 8 * 3600 * 1000);
         y = taipei.getUTCFullYear();
       }
     }
-    if (y == null) {
-      const now = new Date();
-      y = new Date(now.getTime() + 8 * 3600 * 1000).getUTCFullYear();
-    }
-    return [y + "E", (y + 1) + "E", (y + 2) + "E"];
+    if (y == null) y = new Date().getFullYear();
+    return [y + "E", (y + 1) + "E", (y + 2) + "E", (y + 3) + "E"];
   }
 
-  function chartYearKeys() {
-    const m = state.meta || {};
-    if (Array.isArray(m.chartYears) && m.chartYears.length) return m.chartYears.slice(0, 3);
-    return displayYearKeys().slice(0, 3);
-  }
+  /* Schedule-aware freshness — mirrors export_web_data.compute_freshness
+     Weekday 08:00 Taipei + grace; Friday success → Sat/Sun NOT stale. */
+  const COLLECTION_HOUR_TAIPEI = 8;
+  const DEFAULT_GRACE_HOURS = 6;
 
-  function defaultChartYear() {
-    const ys = chartYearKeys();
-    return ys[1] || ys[0] || null;
-  }
-
-  function periodOf(row, yk) {
-    if (!row) return {};
-    if (row.periods && row.periods[yk]) return row.periods[yk];
-    return {};
-  }
-
-  /* Weekday 08:00 Taipei schedule; Friday success keeps Sat/Sun fresh. */
-  const GRACE_MS = 2 * 3600 * 1000;
-
-  function toTaipeiParts(ms) {
+  function taipeiParts(ms) {
+    /* Approximate Taipei = UTC+8 for schedule math */
     const d = new Date(ms + 8 * 3600 * 1000);
     return {
       y: d.getUTCFullYear(),
-      mo: d.getUTCMonth(),
+      m: d.getUTCMonth(),
       day: d.getUTCDate(),
       h: d.getUTCHours(),
-      mi: d.getUTCMinutes(),
-      wd: d.getUTCDay(), /* 0=Sun */
+      weekday: d.getUTCDay(), /* 0=Sun … 6=Sat */
+      ms: Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), d.getUTCHours(), d.getUTCMinutes(), d.getUTCSeconds()) - 8 * 3600 * 1000,
     };
   }
 
-  function taipeiMs(y, mo, day, h, mi) {
-    return Date.UTC(y, mo, day, h - 8, mi, 0, 0);
+  function mostRecentDueCollectionStart(nowMs, graceHours) {
+    const graceMs = (graceHours == null ? DEFAULT_GRACE_HOURS : graceHours) * 3600 * 1000;
+    for (let i = 0; i < 12; i++) {
+      const probe = nowMs - i * 86400000;
+      const p = taipeiParts(probe);
+      if (p.weekday === 0 || p.weekday === 6) continue;
+      /* weekday 08:00 Taipei as UTC ms */
+      const startUtc = Date.UTC(p.y, p.m, p.day, COLLECTION_HOUR_TAIPEI, 0, 0) - 8 * 3600 * 1000;
+      /* Recompute using the calendar day in Taipei of (now - i days) at 08:00 */
+      const dayProbe = new Date(nowMs + 8 * 3600 * 1000 - i * 86400000);
+      const y = dayProbe.getUTCFullYear();
+      const m = dayProbe.getUTCMonth();
+      const day = dayProbe.getUTCDate();
+      const wd = dayProbe.getUTCDay();
+      if (wd === 0 || wd === 6) continue;
+      const start = Date.UTC(y, m, day, COLLECTION_HOUR_TAIPEI, 0, 0) - 8 * 3600 * 1000;
+      if (nowMs >= start + graceMs) return start;
+    }
+    return null;
   }
 
-  function lastScheduledDueMs(nowMs) {
-    const p = toTaipeiParts(nowMs);
-    const at8 = (y, mo, day) => taipeiMs(y, mo, day, 8, 0);
-    if (p.wd === 0 || p.wd === 6) {
-      const back = p.wd === 6 ? 1 : 2; /* Sat→Fri, Sun→Fri */
-      const fri = new Date(Date.UTC(p.y, p.mo, p.day) - back * 86400000);
-      return at8(fri.getUTCFullYear(), fri.getUTCMonth(), fri.getUTCDate());
-    }
-    const today8 = at8(p.y, p.mo, p.day);
-    if (nowMs < today8 + GRACE_MS) {
-      const prev = new Date(Date.UTC(p.y, p.mo, p.day) - (p.wd === 1 ? 3 : 1) * 86400000);
-      return at8(prev.getUTCFullYear(), prev.getUTCMonth(), prev.getUTCDate());
-    }
-    return today8;
-  }
-
-  function isScheduleStale(iso, nowMs) {
+  function isScheduleStale(iso, nowMs, graceHours) {
     if (!iso) return true;
-    const t = Date.parse(iso);
-    if (Number.isNaN(t)) return true;
+    const last = Date.parse(iso);
+    if (Number.isNaN(last)) return true;
     const now = nowMs == null ? Date.now() : nowMs;
-    return t < lastScheduledDueMs(now);
+    const grace = graceHours != null ? graceHours : ((state.meta && state.meta.graceHours) != null ? Number(state.meta.graceHours) : DEFAULT_GRACE_HOURS);
+    /* Prefer server-exported staleAfter / nextExpected when present */
+    const m = state.meta || {};
+    if (m.staleAfter && m.nextExpected) {
+      /* If server already computed dataStale with same lastSuccessfulCollection, trust combined OR */
+    }
+    const due = mostRecentDueCollectionStart(now, grace);
+    if (due == null) return false;
+    return last < due;
   }
 
   function isClientStale(iso) {
@@ -190,13 +170,12 @@
   function companyIsStale(c) {
     if (!c) return true;
     if (c.collectionFailed === true) return true;
-    if (c.scheduleStale === true || c.dataStale === true) return true;
     const asOf = c.lastSuccessfulCollection || c.collectionAsOf || c.dataAsOf || (state.meta || {}).consensusDataAsOf;
-    return isScheduleStale(asOf);
+    return isClientStale(asOf);
   }
 
   function rangeBar(low, cons, high) {
-    /* Low — marker — High (not a progress bar) */
+    /* Low — Consensus marker — High (not a progress bar) */
     if (isMissing(low) || isMissing(high) || isMissing(cons)) return null;
     const l = Number(low), h = Number(high), c = Number(cons);
     if (!(h > l)) return null;
@@ -207,11 +186,14 @@
     });
     wrap.appendChild(el("span", { className: "cr-low", text: fmtNum(l, 2) }));
     wrap.appendChild(el("span", { className: "cr-sep", text: "—" }));
-    const track = el("div", { className: "cr-track" });
-    const marker = el("div", { className: "cr-marker" });
+    const mid = el("span", { className: "cr-mid" });
+    const track = el("span", { className: "cr-track" });
+    const marker = el("span", { className: "cr-marker", title: "Consensus " + fmtNum(c, 2) });
     marker.style.left = pct.toFixed(1) + "%";
     track.appendChild(marker);
-    wrap.appendChild(track);
+    mid.appendChild(track);
+    mid.appendChild(el("span", { className: "cr-cons-label", text: fmtNum(c, 2) }));
+    wrap.appendChild(mid);
     wrap.appendChild(el("span", { className: "cr-sep", text: "—" }));
     wrap.appendChild(el("span", { className: "cr-high", text: fmtNum(h, 2) }));
     return wrap;
@@ -234,7 +216,6 @@
   }
 
   function numCell(v, digits) {
-    if (isNm(v)) return document.createTextNode(String(v));
     const s = fmtNum(v, digits);
     if (s == null) return naCell();
     return document.createTextNode(s);
@@ -249,10 +230,14 @@
   }
 
   function growthCell(v) {
-    if (isNm(v)) return el("span", { className: "na", text: String(v) });
-    /* ratio 0.67 → +67.67% */
+    /* ratio 0.67 → +67.67%; string sentinels for zero-crossing / N/M */
+    if (typeof v === "string") {
+      const cls = /profit/i.test(v) ? "pos" : /loss/i.test(v) ? "neg" : "";
+      return el("span", { className: cls || "na", text: v, title: v });
+    }
+    if (v === null || v === undefined) return naCell("N/M");
     const s = fmtPct(v, 2, false);
-    if (s == null) return naCell();
+    if (s == null) return naCell("N/M");
     const n = Number(v);
     const cls = n > 0 ? "pos" : n < 0 ? "neg" : "";
     return el("span", { className: cls, text: s });
@@ -285,8 +270,7 @@
   }
 
   function pe(price, eps) {
-    if (isMissing(price) || isMissing(eps)) return null;
-    if (isNm(eps) || Number(eps) <= 0) return "N/M";
+    if (isMissing(price) || isMissing(eps) || Number(eps) <= 0) return null;
     return Number(price) / Number(eps);
   }
 
@@ -362,23 +346,16 @@
     state.epsHistory = epsHistory || {};
     state.earnings = earnings || {};
     state.alerts = (alerts && (alerts.activeAlerts || alerts.alerts)) || [];
-    state.alertHistory = (alerts && alerts.alertHistory) || [];
+    state.alertHistory = (alerts && alerts.alertHistory) || state.alerts;
     state.alertEngineStatus = (alerts && alerts.alertEngineStatus) || (meta && meta.alertEngineStatus) || null;
     state.alertEngineError = (alerts && alerts.alertEngineError) || (meta && meta.alertEngineError) || null;
     state.ready = true;
     if (!state.chartTicker && state.watchlist.length) {
       state.chartTicker = state.watchlist[0];
     }
-    if (!state.chartYear) {
-      state.chartYear = defaultChartYear();
-    }
-    const ys = chartYearKeys();
-    if (state.chartYear && ys.length && ys.indexOf(state.chartYear) < 0) {
-      state.chartYear = defaultChartYear();
-    }
-    const peKey = "pe:" + (ys[1] || ys[0] || "");
-    if (!state.sort || !state.sort.key || String(state.sort.key).indexOf("pe:") === 0) {
-      state.sort = { key: peKey, dir: "asc" };
+    const dy = displayYearKeys();
+    if (!state.chartYear || dy.indexOf(state.chartYear) < 0) {
+      state.chartYear = dy[1] || dy[0] || null;
     }
   }
 
@@ -422,7 +399,6 @@
     if (parts[0] === "earnings") return { name: "earnings" };
     if (parts[0] === "companies") return { name: "companies" };
     if (parts[0] === "company" && parts[1]) return { name: "company", ticker: parts[1].toUpperCase() };
-    if (parts[0] === "alerts") return { name: "alerts" };
     return { name: "overview" };
   }
 
@@ -457,19 +433,21 @@
     );
     set("#meta-published", m.sitePublishedDisplay || m.sitePublished);
     set("#meta-source", m.primarySource);
-    const collStatusEl = $("#meta-collection-status");
-    if (collStatusEl && m.successfulCount != null && m.totalCount != null) {
-      /* e.g. PARTIAL · 5/6 */
-      const label = String(m.collectionStatus || "complete").toUpperCase();
-      collStatusEl.textContent = label + " · " + m.successfulCount + "/" + m.totalCount;
-    }
-    const collStatusRow = $("#meta-collection-status-row");
-    if (collStatusRow) {
-      const st = String(m.collectionStatus || "").toLowerCase();
-      if (st && st !== "complete") {
-        collStatusRow.removeAttribute("hidden");
+    const collEl = $("#meta-collection-status");
+    if (collEl) {
+      const label = m.collectionStatusLabel || m.collectionStatus;
+      if (label && String(m.collectionStatus || "").toLowerCase() === "partial") {
+        collEl.textContent = String(label);
+        collEl.removeAttribute("hidden");
+        collEl.style.display = "";
+      } else if (label && String(m.collectionStatus || "").toLowerCase() === "failed") {
+        collEl.textContent = String(label);
+        collEl.removeAttribute("hidden");
+        collEl.style.display = "";
       } else {
-        collStatusRow.setAttribute("hidden", "");
+        collEl.textContent = "";
+        collEl.setAttribute("hidden", "");
+        collEl.style.display = "none";
       }
     }
     const staleRow = $("#meta-stale-row");
@@ -499,9 +477,15 @@
   }
 
   /* ---------- summary cards ---------- */
+  function periodOf(row, yearKey) {
+    if (!row) return {};
+    if (row.periods && row.periods[yearKey]) return row.periods[yearKey];
+    return {};
+  }
+
   function computeSummaries() {
     const rows = state.valuation || [];
-    const years = chartYearKeys();
+    const years = displayYearKeys();
     const y0 = years[0];
     const y1 = years[1];
     const y2 = years[2];
@@ -514,26 +498,33 @@
     rows.forEach((r) => {
       const p1 = periodOf(r, y1);
       const p2 = periodOf(r, y2);
-      const p0 = periodOf(r, y0);
-      if (p1.rev1M != null && !Number.isNaN(Number(p1.rev1M))) {
-        if (Number(p1.rev1M) > 0 && (!largestUp || Number(p1.rev1M) > Number(periodOf(largestUp, y1).rev1M))) {
-          largestUp = r;
+      const rev1 = p1.rev1M != null ? p1.rev1M : r.rev1M;
+      const rev2 = p2.rev1M != null ? p2.rev1M : r.rev1M28;
+      const pe1 = p1.pe != null ? p1.pe : r.pe27;
+      const cagr = r.cagrY0Y2 != null ? r.cagrY0Y2 : r.cagr2628;
+      const eps0 = (periodOf(r, y0).eps != null ? periodOf(r, y0).eps : r.eps26);
+
+      if (rev1 != null && !Number.isNaN(Number(rev1))) {
+        if (Number(rev1) > 0 && (!largestUp || Number(rev1) > Number(largestUp._rev))) {
+          largestUp = Object.assign({}, r, { _rev: rev1 });
         }
-        if (Number(p1.rev1M) < 0 && (!largestDown || Number(p1.rev1M) < Number(periodOf(largestDown, y1).rev1M))) {
-          largestDown = r;
+        if (Number(rev1) < 0 && (!largestDown || Number(rev1) < Number(largestDown._rev))) {
+          largestDown = Object.assign({}, r, { _rev: rev1 });
         }
       }
-      if (p2.rev1M != null && !Number.isNaN(Number(p2.rev1M))) {
-        if (Number(p2.rev1M) > 0 && (!largestUpY2 || Number(p2.rev1M) > Number(periodOf(largestUpY2, y2).rev1M))) {
-          largestUpY2 = r;
+      if (rev2 != null && !Number.isNaN(Number(rev2))) {
+        if (Number(rev2) > 0 && (!largestUpY2 || Number(rev2) > Number(largestUpY2._rev))) {
+          largestUpY2 = Object.assign({}, r, { _rev: rev2 });
         }
       }
-      if (p1.pe != null && !isNm(p1.pe) && !Number.isNaN(Number(p1.pe)) && Number(p1.pe) > 0) {
-        if (!lowestPe || Number(p1.pe) < Number(periodOf(lowestPe, y1).pe)) lowestPe = r;
+      if (pe1 != null && !Number.isNaN(Number(pe1))) {
+        if (!lowestPe || Number(pe1) < Number(lowestPe._pe)) {
+          lowestPe = Object.assign({}, r, { _pe: pe1 });
+        }
       }
-      if (r.cagr != null && !isNm(r.cagr) && p0.eps != null && !Number.isNaN(Number(r.cagr))) {
-        if (!fastestCagr || Number(r.cagr) > Number(fastestCagr.cagr)) {
-          fastestCagr = r;
+      if (cagr != null && eps0 != null && !Number.isNaN(Number(cagr))) {
+        if (!fastestCagr || Number(cagr) > Number(fastestCagr._cagr)) {
+          fastestCagr = Object.assign({}, r, { _cagr: cagr });
         }
       }
     });
@@ -569,94 +560,66 @@
       return c;
     }
 
+    const y0 = s.y0 || "Y0";
+    const y1 = s.y1 || "Y1";
+    const y2 = s.y2 || "Y2";
     grid.appendChild(
       card(
-        "Largest " + s.y1 + " EPS Upgrade (1M)",
+        "Largest " + y1 + " EPS Upgrade (1M)",
         s.largestUp && s.largestUp.ticker,
-        s.largestUp ? revCell(periodOf(s.largestUp, s.y1).rev1M) : null
+        s.largestUp ? revCell(s.largestUp._rev) : null
       )
     );
     grid.appendChild(
       card(
-        "Largest " + s.y1 + " EPS Downgrade (1M)",
+        "Largest " + y1 + " EPS Downgrade (1M)",
         s.largestDown && s.largestDown.ticker,
-        s.largestDown ? revCell(periodOf(s.largestDown, s.y1).rev1M) : null
+        s.largestDown ? revCell(s.largestDown._rev) : null
       )
     );
     grid.appendChild(
       card(
-        "Largest " + s.y2 + " EPS Upgrade (1M)",
+        "Largest " + y2 + " EPS Upgrade (1M)",
         s.largestUpY2 && s.largestUpY2.ticker,
-        s.largestUpY2 ? revCell(periodOf(s.largestUpY2, s.y2).rev1M) : null
+        s.largestUpY2 ? revCell(s.largestUpY2._rev) : null
       )
     );
     grid.appendChild(
       card(
-        "Lowest Mapped " + s.y1 + " P/E",
+        "Lowest Mapped " + y1 + " P/E",
         s.lowestPe && s.lowestPe.ticker,
-        s.lowestPe ? (isNm(periodOf(s.lowestPe, s.y1).pe) ? "N/M" : fmtNum(periodOf(s.lowestPe, s.y1).pe, 2) + "x") : null
+        s.lowestPe ? fmtNum(s.lowestPe._pe, 2) + "x" : null
       )
     );
     grid.appendChild(
       card(
-        "Fastest Mapped " + String(s.y0 || "").replace("E", "") + "–" + String(s.y2 || "").replace("E", "") + " EPS CAGR",
+        "Fastest Mapped " + y0.replace("E","") + "–" + y2 + " EPS CAGR",
         s.fastestCagr && s.fastestCagr.ticker,
-        s.fastestCagr ? growthCell(s.fastestCagr.cagr) : null
+        s.fastestCagr ? growthCell(s.fastestCagr._cagr) : null
       )
     );
 
     parent.appendChild(grid);
   }
 
+  /* ---------- alerts ---------- */
   function alertAgeLabel(a) {
-    const eventAt = a && (a.eventAt || a.eventDate);
-    if (eventAt) {
-      const t = Date.parse(String(eventAt).length <= 10 ? String(eventAt) + "T00:00:00Z" : String(eventAt));
-      if (!Number.isNaN(t)) {
-        const d = Math.max(0, Math.floor((Date.now() - t) / 86400000));
-        return d + "d ago";
-      }
+    let days = a && a.ageDays;
+    if (days == null && a && (a.eventAt || a.eventDate || a.createdAt)) {
+      const t = Date.parse(a.eventAt || a.eventDate || a.createdAt);
+      if (!Number.isNaN(t)) days = Math.max(0, Math.floor((Date.now() - t) / 86400000));
     }
-    const days = a && a.ageDays != null ? Number(a.ageDays) : null;
-    if (days == null || Number.isNaN(days)) return "";
-    return days + "d ago";
-  }
-
-  function alertPriority(a) {
-    const sev = String((a && a.severity) || "").toLowerCase();
-    if (sev === "high") return 0;
-    if (sev === "medium") return 1;
-    return 2;
-  }
-
-  function homepageAlerts(limit) {
-    const list = (state.alerts || []).slice().sort((a, b) => {
-      const pd = alertPriority(a) - alertPriority(b);
-      if (pd) return pd;
-      const ta = Date.parse(a.eventAt || a.eventDate || "") || 0;
-      const tb = Date.parse(b.eventAt || b.eventDate || "") || 0;
-      return tb - ta;
-    });
-    const n = limit == null ? 5 : limit;
-    return list.slice(0, Math.min(5, Math.max(3, n === 5 ? Math.min(5, Math.max(3, list.length || 3)) : n)));
-  }
-
-  function renderAlertItem(a) {
-    const msg = typeof a === "string" ? a : a.message || a.title || JSON.stringify(a);
-    const row = el("div", { className: "alert-item" });
-    const main = el("div", { className: "alert-main", text: msg });
-    row.appendChild(main);
-    const age = alertAgeLabel(typeof a === "string" ? {} : a);
-    if (age) row.appendChild(el("span", { className: "alert-age", text: age }));
-    return row;
+    if (days == null || Number.isNaN(Number(days))) return "";
+    const n = Number(days);
+    if (n <= 0) return "today";
+    return n + "d ago";
   }
 
   function renderAlerts(parent) {
     const box = el("div", { className: "alerts-box section" });
-    const head = el("div", { className: "alerts-head" });
-    head.appendChild(el("h2", { className: "section-title", text: "Important Alerts" }));
-    head.appendChild(el("a", { className: "view-all-link", href: "#/alerts", text: "View All" }));
-    box.appendChild(head);
+    const titleRow = el("div", { className: "alerts-title-row" });
+    titleRow.appendChild(el("h2", { className: "section-title", text: "Important Alerts", style: "margin:0" }));
+    box.appendChild(titleRow);
     const status = state.alertEngineStatus || (state.meta && state.meta.alertEngineStatus);
     if (status !== "ok") {
       box.appendChild(
@@ -676,37 +639,34 @@
     } else if (!state.alerts || !state.alerts.length) {
       box.appendChild(el("div", { className: "alerts-empty", text: "No material alerts" }));
     } else {
-      const top = homepageAlerts(5);
-      top.forEach((a) => box.appendChild(renderAlertItem(a)));
+      const TOP_N = 5;
+      const top = state.alerts.slice(0, TOP_N);
+      const rest = state.alerts.slice(TOP_N);
+      top.forEach((a) => {
+        const msg = typeof a === "string" ? a : a.message || a.title || JSON.stringify(a);
+        const item = el("div", { className: "alert-item" });
+        const age = typeof a === "object" ? alertAgeLabel(a) : "";
+        item.appendChild(el("span", { className: "alert-msg", text: msg }));
+        if (age) item.appendChild(el("span", { className: "alert-age", text: age }));
+        box.appendChild(item);
+      });
+      if (rest.length) {
+        const details = el("details", { className: "alerts-view-all" });
+        details.appendChild(
+          el("summary", { text: "View All (" + state.alerts.length + " active)" })
+        );
+        rest.forEach((a) => {
+          const msg = typeof a === "string" ? a : a.message || a.title || JSON.stringify(a);
+          const item = el("div", { className: "alert-item" });
+          item.appendChild(el("span", { className: "alert-msg", text: msg }));
+          const age = typeof a === "object" ? alertAgeLabel(a) : "";
+          if (age) item.appendChild(el("span", { className: "alert-age", text: age }));
+          details.appendChild(item);
+        });
+        box.appendChild(details);
+      }
     }
     parent.appendChild(box);
-  }
-
-  function renderAlertsPage() {
-    const root = el("div", { className: "section" });
-    root.appendChild(el("h2", { className: "section-title", text: "All Active Alerts" }));
-    root.appendChild(
-      el("p", { className: "section-note" }, [
-        el("a", { href: "#/", text: "← Overview" }),
-        document.createTextNode(" · One-shot alerts leave the homepage after their window; history is retained."),
-      ])
-    );
-    const status = state.alertEngineStatus || (state.meta && state.meta.alertEngineStatus);
-    if (status !== "ok") {
-      root.appendChild(el("div", { className: "alerts-engine-error", text: "ALERT ENGINE NOT UPDATED" }));
-      return root;
-    }
-    const list = state.alerts || [];
-    if (!list.length) {
-      root.appendChild(el("div", { className: "alerts-empty", text: "No material alerts" }));
-    } else {
-      list.forEach((a) => root.appendChild(renderAlertItem(a)));
-    }
-    if (state.alertHistory && state.alertHistory.length) {
-      root.appendChild(el("h3", { className: "section-title", text: "Alert History" }));
-      state.alertHistory.slice(0, 50).forEach((a) => root.appendChild(renderAlertItem(a)));
-    }
-    return root;
   }
 
   /* ---------- overview table ---------- */
@@ -716,14 +676,14 @@
     wrap.appendChild(
       el("p", {
         className: "section-note",
-        text: "FY-mapped calendar slots (not true CY EPS); Reported Fiscal Period Ending shown under consensus. 1M rev = Seeking Alpha short-window proxy on Mapped " + (chartYearKeys()[1] || chartYearKeys()[0] || "Y+1") + ".",
+        text: "FY-mapped calendar slots (not true CY EPS); Reported Fiscal Period Ending shown under consensus. 1M rev = Seeking Alpha short-window proxy on the primary forward mapped year (meta.displayMappedYears[1]).",
       })
     );
 
-    const years = chartYearKeys();
-    const y0 = years[0];
-    const y1 = years[1];
-    const y2 = years[2];
+    const years = displayYearKeys();
+    const y0 = years[0] || "";
+    const y1 = years[1] || "";
+    const y2 = years[2] || "";
 
     const tableWrap = el("div", { className: "table-wrap" });
     const table = el("table", { className: "data" });
@@ -750,18 +710,18 @@
     state.watchlist.forEach((t) => {
       const c = state.companies[t];
       if (!c) return;
-      const e0 = (c.eps && c.eps[y0]) || {};
-      const e1 = (c.eps && c.eps[y1]) || {};
-      const e2 = (c.eps && c.eps[y2]) || {};
+      const e26 = (c.eps && c.eps[y0]) || {};
+      const e27 = (c.eps && c.eps[y1]) || {};
+      const e28 = (c.eps && c.eps[y2]) || {};
       const px = companyPrice(c);
-      const peMid = pe(px, e1.consensus);
+      const peY1 = pe(px, e27.consensus);
       const stale = companyIsStale(c);
       const tr = el("tr", { className: stale ? "ticker-stale" : "" });
 
       const tdT = el("td", { className: "ticker left" });
       tdT.appendChild(el("a", { href: "#/company/" + t, text: t }));
       if (stale) {
-        tdT.appendChild(el("span", { className: "stale-ticker-badge", text: "STALE", title: "Per-ticker data missed the last weekday 08:00 Taipei collection (plus grace) or collection failed" }));
+        tdT.appendChild(el("span", { className: "stale-ticker-badge", text: "STALE", title: "Per-ticker past weekday 08:00 Taipei collection+grace without success, or collection failed" }));
       }
       tr.appendChild(tdT);
 
@@ -781,16 +741,16 @@
         return td;
       }
 
-      tr.appendChild(epsTd(e0));
-      tr.appendChild(epsTd(e1));
-      tr.appendChild(epsTd(e2));
+      tr.appendChild(epsTd(e26));
+      tr.appendChild(epsTd(e27));
+      tr.appendChild(epsTd(e28));
 
       const tdPe = el("td");
-      tdPe.appendChild(numCell(peMid, 2));
+      tdPe.appendChild(numCell(peY1, 2));
       tr.appendChild(tdPe);
 
       const tdRev = el("td");
-      tdRev.appendChild(revCell(e1.rev1M));
+      tdRev.appendChild(revCell(e27.rev1M));
       tr.appendChild(tdRev);
 
       const tdMom = el("td");
@@ -831,8 +791,8 @@
     const { key, dir } = state.sort;
     const mul = dir === "asc" ? 1 : -1;
     return rows.slice().sort((a, b) => {
-      const va = valuationCellValue(a, key);
-      const vb = valuationCellValue(b, key);
+      let va = a[key];
+      let vb = b[key];
       if (va == null && vb == null) return 0;
       if (va == null) return 1;
       if (vb == null) return -1;
@@ -841,48 +801,85 @@
     });
   }
 
-  function valuationCellValue(row, key) {
-    if (!key) return null;
-    if (key.indexOf("eps:") === 0) return periodOf(row, key.slice(4)).eps;
-    if (key.indexOf("pe:") === 0) return periodOf(row, key.slice(3)).pe;
-    if (key.indexOf("growth:") === 0) return (row.growth || {})[key.slice(7)];
-    if (key === "rev1M") {
-      const y1 = chartYearKeys()[1];
-      return y1 ? periodOf(row, y1).rev1M : row.rev1M;
-    }
-    if (key === "cagr") return row.cagr;
-    return row[key];
-  }
-
   function renderValuation() {
     const root = el("div", { className: "section" });
     root.appendChild(el("h2", { className: "section-title", text: "Valuation" }));
+    const years = displayYearKeys().slice(0, 3);
+    const y0 = years[0] || "";
+    const y1 = years[1] || "";
+    const y2 = years[2] || "";
     root.appendChild(
       el("p", {
         className: "section-note",
         text:
-          "Forward PE = Last Close / Mapped Consensus EPS. Mapped CAGR uses first→third display years. FY labels under EPS/PE. Click headers to sort. Years from meta.displayMappedYears.",
+          "Forward PE = Last Close / Mapped Consensus EPS. Mapped CAGR " +
+          y0 +
+          "–" +
+          y2 +
+          " = (EPS" +
+          y2 +
+          "/EPS" +
+          y0 +
+          ")^(1/2)−1. FY labels under EPS/PE. Click headers to sort. Years from meta.displayMappedYears.",
       })
     );
 
-    const years = chartYearKeys();
-    const cols = [{ key: "ticker", label: "Ticker", align: "left" }, { key: "lastClose", label: "Last Close" }];
-    years.forEach((y) => cols.push({ key: "eps:" + y, label: "Mapped " + y, year: y, kind: "eps" }));
-    years.forEach((y) => cols.push({ key: "pe:" + y, label: y + " PE", year: y, kind: "pe" }));
-    years.slice(1).forEach((y) => cols.push({ key: "growth:" + y, label: y + " Growth", year: y, kind: "growth" }));
-    if (years.length >= 3) {
-      cols.push({
-        key: "cagr",
-        label: "Mapped CAGR " + String(years[0]).replace("E", "") + "–" + String(years[2]).replace("E", ""),
-        kind: "cagr",
-      });
-    }
-    cols.push({ key: "rev1M", label: "1M Rev " + (years[1] || ""), year: years[1], kind: "rev" });
-    cols.push({ key: "momentum", label: "Momentum", align: "left" });
+    const cols = [
+      { key: "ticker", label: "Ticker", align: "left" },
+      { key: "lastClose", label: "Last Close" },
+      { key: "eps:" + y0, label: "Mapped " + y0, year: y0, field: "eps" },
+      { key: "eps:" + y1, label: "Mapped " + y1, year: y1, field: "eps" },
+      { key: "eps:" + y2, label: "Mapped " + y2, year: y2, field: "eps" },
+      { key: "pe:" + y0, label: y0 + " PE", year: y0, field: "pe" },
+      { key: "pe:" + y1, label: y1 + " PE", year: y1, field: "pe" },
+      { key: "pe:" + y2, label: y2 + " PE", year: y2, field: "pe" },
+      { key: "growth:" + y1, label: y1 + " Growth", year: y1, field: "growthFromPrior" },
+      { key: "growth:" + y2, label: y2 + " Growth", year: y2, field: "growthFromPrior" },
+      { key: "cagrY0Y2", label: "Mapped CAGR " + y0.replace("E", "") + "–" + y2.replace("E", "") },
+      { key: "rev1M:" + y1, label: "1M Rev " + y1, year: y1, field: "rev1M" },
+      { key: "momentum", label: "Momentum", align: "left" },
+    ];
 
-    const defaultPeKey = "pe:" + (years[1] || years[0] || "");
-    if (!state.sort.key) {
-      state.sort = { key: defaultPeKey, dir: "asc" };
+    if (!state.sort.key || String(state.sort.key).indexOf("pe27") >= 0 || state.sort.key === "pe27") {
+      state.sort = { key: "pe:" + y1, dir: "asc" };
+    }
+
+    function cellValue(r, c) {
+      if (c.year && c.field) {
+        const p = periodOf(r, c.year);
+        if (p && p[c.field] != null) return p[c.field];
+        /* legacy flat fallback */
+        if (c.field === "eps") {
+          if (c.year === y0) return r.eps26;
+          if (c.year === y1) return r.eps27;
+          if (c.year === y2) return r.eps28;
+        }
+        if (c.field === "pe") {
+          if (c.year === y0) return r.pe26;
+          if (c.year === y1) return r.pe27;
+          if (c.year === y2) return r.pe28;
+        }
+        if (c.field === "rev1M") {
+          if (c.year === y1) return r.rev1M;
+          if (c.year === y2) return r.rev1M28;
+        }
+        if (c.field === "growthFromPrior") {
+          if (c.year === y1) return r.growth27;
+          if (c.year === y2) return r.growth28;
+        }
+        return null;
+      }
+      if (c.key === "cagrY0Y2") return r.cagrY0Y2 != null ? r.cagrY0Y2 : r.cagr2628;
+      return r[c.key];
+    }
+
+    function fyLabel(r, year) {
+      const p = periodOf(r, year);
+      if (p && p.reportedFiscalLabel) return p.reportedFiscalLabel;
+      if (year === y0) return r.reportedFy26;
+      if (year === y1) return r.reportedFy27;
+      if (year === y2) return r.reportedFy28;
+      return null;
     }
 
     const tableWrap = el("div", { className: "table-wrap" });
@@ -901,7 +898,7 @@
             state.sort.dir = state.sort.dir === "asc" ? "desc" : "asc";
           } else {
             state.sort.key = c.key;
-            state.sort.dir = c.key === "ticker" || c.key === "momentum" ? "asc" : "asc";
+            state.sort.dir = "asc";
           }
           route();
         },
@@ -912,19 +909,30 @@
     table.appendChild(thead);
 
     const tbody = el("tbody");
-    const rows = sortValuation(state.valuation);
+    const rows = state.valuation.slice().sort((a, b) => {
+      const { key, dir } = state.sort;
+      const mul = dir === "asc" ? 1 : -1;
+      const ca = cols.find((x) => x.key === key) || { key: key };
+      let va = cellValue(a, ca);
+      let vb = cellValue(b, ca);
+      if (va == null && vb == null) return 0;
+      if (va == null) return 1;
+      if (vb == null) return -1;
+      if (typeof va === "string") return mul * va.localeCompare(vb);
+      return mul * (Number(va) - Number(vb));
+    });
     rows.forEach((r) => {
       const tr = el("tr");
       cols.forEach((c) => {
         const td = el("td", { className: c.align === "left" ? "left" : "" });
-        const v = valuationCellValue(r, c.key);
+        const v = cellValue(r, c);
         if (c.key === "ticker") {
           td.classList.add("ticker");
           td.appendChild(el("a", { href: "#/company/" + r.ticker, text: r.ticker }));
-        } else if (c.kind === "rev" || c.key === "rev1M") {
+        } else if (c.field === "rev1M") {
           td.appendChild(revCell(v));
-        } else if (c.kind === "growth" || c.kind === "cagr") {
-          td.appendChild(growthCell(v));
+        } else if (c.field === "growthFromPrior" || c.key === "cagrY0Y2") {
+          td.appendChild(c.key === "cagrY0Y2" ? cagrCell(v) : growthCell(v));
         } else if (c.key === "momentum") {
           td.appendChild(momentumCell(v));
         } else if (c.key === "lastClose" || c.key === "price") {
@@ -933,10 +941,8 @@
           if (!isMissing(r.afterHours)) {
             td.appendChild(el("span", { className: "price-sub", text: "AH " + fmtNum(r.afterHours, 2) }));
           }
-        } else if (c.kind === "eps") {
-          td.appendChild(valueWithFy(numCell(v, 2), periodOf(r, c.year).reportedFiscalLabel));
-        } else if (c.kind === "pe") {
-          td.appendChild(valueWithFy(numCell(v, 2), periodOf(r, c.year).reportedFiscalLabel));
+        } else if (c.field === "eps" || c.field === "pe") {
+          td.appendChild(valueWithFy(numCell(v, 2), fyLabel(r, c.year)));
         } else {
           td.appendChild(numCell(v, 2));
         }
@@ -949,6 +955,7 @@
     root.appendChild(tableWrap);
     return root;
   }
+
 
   /* ---------- revisions / charts ---------- */
   function destroyChart() {
@@ -975,7 +982,7 @@
     if (!canvas || typeof Chart === "undefined") return;
     destroyChart();
     const ticker = state.chartTicker || state.watchlist[0];
-    const year = state.chartYear || defaultChartYear();
+    const year = state.chartYear || displayYearKeys()[1] || displayYearKeys()[0];
     const mode = state.chartMode || "absolute";
     const series = ((state.epsHistory[ticker] || {})[year] || []).filter((p) => p && !isMissing(p.eps));
     const colors = chartColors();
@@ -1081,7 +1088,7 @@
     const yearWrap = el("div");
     yearWrap.appendChild(el("span", { className: "section-note", text: "Year  ", style: "margin:0" }));
     const btnGroup = el("div", { className: "btn-group" });
-    chartYearKeys().forEach((y) => {
+    (state.meta && state.meta.chartYears ? state.meta.chartYears : displayYearKeys().slice(0, 3)).forEach((y) => {
       btnGroup.appendChild(
         el("button", {
           type: "button",
@@ -1159,7 +1166,7 @@
       },
     });
     selY.appendChild(el("option", { value: "", text: "All" }));
-    chartYearKeys().forEach((y) => {
+    displayYearKeys().slice(0, 3).forEach((y) => {
       selY.appendChild(
         el("option", { value: y, text: y, selected: state.revFilters.year === y })
       );
@@ -1348,13 +1355,12 @@
       tr.appendChild(tdNext);
 
       const tdVs = el("td", { className: "left" });
-      const vsResults = e.resultsVsConsensus || (e.results && e.results.vsConsensus) || null;
-      const vsGuide = e.guidanceVsConsensus || (e.guidanceDetail && e.guidanceDetail.vsConsensus) || null;
-      const vsBits = [];
-      if (!isMissing(vsResults)) vsBits.push("Results " + vsResults);
-      if (!isMissing(vsGuide) && String(vsGuide).toLowerCase() !== "unknown") vsBits.push("Guidance " + vsGuide);
-      if (!vsBits.length) tdVs.appendChild(naCell());
-      else tdVs.textContent = vsBits.join(" · ");
+      const vs =
+        e.comparison ||
+        (e.results && e.results.vsConsensus) ||
+        null;
+      if (isMissing(vs)) tdVs.appendChild(naCell());
+      else tdVs.textContent = String(vs);
       tr.appendChild(tdVs);
 
       const tdDig = el("td", { className: "left" });
@@ -1406,7 +1412,7 @@
     const hist = state.epsHistory[ticker] || {};
     const colors = chartColors();
     const palette = ["#58a6ff", "#3fb950", "#d29922", "#f778ba"];
-    const years = chartYearKeys();
+    const years = (state.meta && state.meta.chartYears) ? state.meta.chartYears : displayYearKeys().slice(0, 3);
     const mode = state.chartMode || "absolute";
 
     const labels = Array.from(
@@ -1528,10 +1534,10 @@
       }
       kv(y + " 1M Rev", revCell(e.rev1M));
     });
-    const y1 = years[1];
-    const y2 = years[2];
+    const y1 = years[1] || "";
+    const y2 = years[2] || "";
     const peY1 = pe(px, ((c.eps || {})[y1] || {}).consensus);
-    if (y1) kv(y1 + " PE (Last Close)", peY1 == null ? null : fmtNum(peY1, 2));
+    kv(y1 + " PE (Last Close)", peY1 == null ? null : fmtNum(peY1, 2));
     [y1, y2].forEach((y) => {
       const e = (c.eps && c.eps[y]) || {};
       kv(y + " Analyst Count", isMissing(e.analysts) ? null : fmtNum(e.analysts, 0));
@@ -1558,38 +1564,44 @@
       ul.appendChild(el("li", { text: "No drivers on file" }));
     } else {
       drivers.forEach((d) => {
-        const li = el("li", { className: "driver-row" });
-        const top = el("button", { type: "button", className: "driver-toggle" });
+        const li = el("li", { className: "driver-item" });
+        const row = el("button", {
+          type: "button",
+          className: "driver-row",
+          onClick: (ev) => {
+            ev.preventDefault();
+            li.classList.toggle("expanded");
+          },
+        });
         const left = el("span", { className: "driver-name" });
         left.textContent = d.name || "—";
-        top.appendChild(left);
+        row.appendChild(left);
         const statusVal = d.currentStatus || d.status;
         const st = driverLabel(statusVal);
-        top.appendChild(el("span", { className: "driver-status " + st.cls, text: st.text }));
-        li.appendChild(top);
+        row.appendChild(el("span", { className: "driver-status " + st.cls, text: st.text }));
+        li.appendChild(row);
         const detail = el("div", { className: "driver-detail" });
-        const reason = d.reason || d.note;
-        if (reason) detail.appendChild(el("p", { className: "driver-reason", text: reason }));
-        if (d.sourceUrl) {
-          detail.appendChild(
-            el("a", {
-              className: "source-link",
-              href: d.sourceUrl,
-              target: "_blank",
-              rel: "noopener",
-              text: "source",
-            })
-          );
+        const tip = d.reason || d.note;
+        if (tip) detail.appendChild(el("div", { className: "driver-reason", text: tip }));
+        if (d.sourceUrl || d.source) {
+          if (d.sourceUrl) {
+            detail.appendChild(
+              el("a", {
+                className: "source-link",
+                href: d.sourceUrl,
+                target: "_blank",
+                rel: "noopener",
+                text: d.source || "Source",
+              })
+            );
+          } else {
+            detail.appendChild(el("div", { className: "driver-source", text: String(d.source) }));
+          }
         }
-        if (!reason && !d.sourceUrl) {
-          detail.appendChild(el("p", { className: "driver-reason", text: "No reason/source on file" }));
+        if (!tip && !d.sourceUrl && !d.source) {
+          detail.appendChild(el("div", { className: "driver-reason", text: "No reason on file" }));
         }
         li.appendChild(detail);
-        top.addEventListener("click", () => {
-          const open = li.classList.toggle("expanded");
-          top.setAttribute("aria-expanded", open ? "true" : "false");
-        });
-        top.setAttribute("aria-expanded", "false");
         ul.appendChild(li);
       });
     }
@@ -1650,21 +1662,8 @@
       earnPanel.appendChild(el("div", { className: "stub-note", text: "Guidance" }));
       earnPanel.appendChild(el("p", { className: "section-note", text: String(earn.guidance) }));
     }
-    if (earn.resultsVsConsensus || (earn.results && earn.results.vsConsensus) || earn.comparison || (earn.consensusComparison && earn.consensusComparison.vsConsensus)) {
-      const rv = earn.resultsVsConsensus || (earn.consensusComparison && earn.consensusComparison.vsConsensus) || (earn.results && earn.results.vsConsensus) || earn.comparison;
-      const cc = earn.consensusComparison || {};
-      const tier = cc.sourceTier != null ? " Tier " + cc.sourceTier : "";
-      earnPanel.appendChild(el("div", { className: "stub-note", text: "Results vs consensus: " + String(rv) + (tier ? " (" + (cc.source || "Seeking Alpha") + tier + ")" : "") }));
-      if (cc.sourceUrl) {
-        earnPanel.appendChild(el("a", { className: "source-link", href: cc.sourceUrl, target: "_blank", rel: "noopener", text: cc.sourceUrl }));
-      }
-    }
-    if (earn.actuals && (earn.actuals.sourceUrl || earn.actuals.sourceTier)) {
-      earnPanel.appendChild(el("div", { className: "stub-note", text: "Actuals source: " + (earn.actuals.source || "Company IR") + (earn.actuals.sourceTier != null ? " Tier " + earn.actuals.sourceTier : "") }));
-    }
-    if (earn.guidanceVsConsensus || (earn.guidanceDetail && earn.guidanceDetail.vsConsensus)) {
-      const gv = earn.guidanceVsConsensus || (earn.guidanceDetail && earn.guidanceDetail.vsConsensus);
-      earnPanel.appendChild(el("div", { className: "stub-note", text: "Guidance vs consensus: " + String(gv) }));
+    if (earn.comparison) {
+      earnPanel.appendChild(el("div", { className: "stub-note", text: "Results vs consensus: " + String(earn.comparison) }));
     }
     if (earn.commentary) {
       earnPanel.appendChild(el("div", { className: "stub-note", text: "Management Commentary" }));
@@ -1772,12 +1771,14 @@
     let view;
     try {
       if (r.name === "valuation") {
+        if (!state.sort.key || state.sort.key === "ticker") {
+          /* keep user sort; default pe27 asc on first visit via flag */
+        }
         view = renderValuation();
       } else if (r.name === "revisions") view = renderRevisions();
       else if (r.name === "earnings") view = renderEarnings();
       else if (r.name === "companies") view = renderCompanies();
       else if (r.name === "company") view = renderCompany(r.ticker);
-      else if (r.name === "alerts") view = renderAlertsPage();
       else view = renderOverview();
     } catch (err) {
       console.error(err);
@@ -1789,8 +1790,7 @@
   async function boot() {
     initTheme();
     // default valuation sort
-    // default valuation sort: PE of second mapped year (from displayMappedYears)
-    state.sort = { key: null, dir: "asc" };
+    state.sort = { key: "pe:" + (displayYearKeys()[1] || ""), dir: "asc" };
     const app = $("#app");
     try {
       await loadAll();

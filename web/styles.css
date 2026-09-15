@@ -61,7 +61,6 @@
 
 html {
   font-size: 13px;
-  overflow-x: hidden;
 }
 
 body {
@@ -71,8 +70,6 @@ body {
   color: var(--text);
   line-height: 1.45;
   min-height: 100vh;
-  overflow-x: hidden;
-  max-width: 100%;
 }
 
 a {
@@ -146,10 +143,6 @@ a:hover {
   background: var(--bg-elevated);
   border-bottom: 1px solid var(--border);
   overflow-x: auto;
-  overflow-y: hidden;
-  -webkit-overflow-scrolling: touch;
-  scrollbar-width: thin;
-  max-width: 100%;
 }
 
 .tab {
@@ -276,40 +269,13 @@ a:hover {
   color: var(--text-muted);
   font-size: 0.85rem;
 }
-.alerts-head {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 0.75rem;
-  margin-bottom: 0.35rem;
-}
-.alerts-head .section-title {
-  margin: 0;
-}
-.view-all-link {
-  font-size: 0.8rem;
-  font-weight: 600;
-  white-space: nowrap;
-}
 .alert-item {
-  display: flex;
-  justify-content: space-between;
-  gap: 0.75rem;
-  align-items: flex-start;
   padding: 0.35rem 0;
   border-bottom: 1px solid var(--border-subtle);
   font-size: 0.85rem;
 }
 .alert-item:last-child {
   border-bottom: none;
-}
-.alert-main {
-  flex: 1;
-}
-.alert-age {
-  color: var(--text-muted);
-  font-size: 0.75rem;
-  white-space: nowrap;
 }
 
 /* Tables */
@@ -597,44 +563,15 @@ table.data .ticker a:hover {
   padding: 0;
 }
 .drivers-list li {
-  display: block;
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
   padding: 0.35rem 0;
   border-bottom: 1px solid var(--border-subtle);
   font-size: 0.8rem;
 }
 .drivers-list li:last-child {
   border-bottom: none;
-}
-.driver-toggle {
-  display: flex;
-  justify-content: space-between;
-  gap: 0.75rem;
-  width: 100%;
-  background: none;
-  border: none;
-  color: inherit;
-  font: inherit;
-  padding: 0;
-  cursor: pointer;
-  text-align: left;
-}
-.driver-toggle:hover .driver-name {
-  color: var(--accent);
-}
-.driver-detail {
-  display: none;
-  margin-top: 0.35rem;
-  padding: 0.35rem 0.45rem;
-  background: var(--bg-hover);
-  border-radius: 3px;
-  color: var(--text-secondary);
-  font-size: 0.75rem;
-}
-.drivers-list li.expanded .driver-detail {
-  display: block;
-}
-.driver-reason {
-  margin: 0 0 0.25rem;
 }
 .driver-status {
   font-weight: 600;
@@ -695,57 +632,9 @@ table.data .ticker a:hover {
   }
 }
 
-/* Consensus range: Low — marker — High (not a progress bar) */
-.consensus-range {
-  display: flex;
-  align-items: center;
-  gap: 0.35rem;
-  min-width: 10rem;
-  justify-content: flex-end;
-}
-.cr-low,
-.cr-high {
-  font-variant-numeric: tabular-nums;
-  font-size: 0.75rem;
-  color: var(--text-secondary);
-}
-.cr-sep {
-  color: var(--text-muted);
-}
-.cr-track {
-  position: relative;
-  flex: 1;
-  min-width: 4rem;
-  height: 2px;
-  background: var(--border);
-  border-radius: 0;
-}
-.cr-marker {
-  position: absolute;
-  top: 50%;
-  width: 8px;
-  height: 8px;
-  margin-left: -4px;
-  margin-top: -4px;
-  background: var(--accent);
-  border: 1px solid var(--bg-panel);
-  border-radius: 50%;
-  pointer-events: none;
-}
-
 @media (max-width: 640px) {
   .summary-grid {
     grid-template-columns: 1fr;
-  }
-  html,
-  body {
-    overflow-x: hidden;
-  }
-  .app-main,
-  .app-header,
-  .app-footer {
-    overflow-x: hidden;
-    max-width: 100%;
   }
 }
 
@@ -820,4 +709,177 @@ tr.ticker-stale td {
 .alerts-engine-error {
   color: #b91c1c;
   font-weight: 700;
+}
+
+/* Consensus range bar on company page */
+.range-bar {
+  min-width: 8rem;
+}
+.range-bar-track {
+  height: 0.45rem;
+  background: var(--border-subtle);
+  border-radius: 999px;
+  overflow: hidden;
+  position: relative;
+}
+.range-bar-fill {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 999px;
+  max-width: 100%;
+}
+.range-bar-labels {
+  font-size: 0.7rem;
+  color: var(--text-secondary);
+  margin-top: 0.15rem;
+}
+
+/* --- Round 2 P2 UI --- */
+.alerts-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.5rem;
+}
+.alert-item {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+.alert-msg {
+  flex: 1;
+  min-width: 0;
+}
+.alert-age {
+  flex-shrink: 0;
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+.alerts-view-all {
+  margin-top: 0.5rem;
+  font-size: 0.85rem;
+}
+.alerts-view-all summary {
+  cursor: pointer;
+  color: var(--accent);
+  font-weight: 600;
+}
+
+/* Driver tap-to-expand */
+.drivers-list li.driver-item {
+  display: block;
+  padding: 0.35rem 0;
+}
+.driver-row {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  background: transparent;
+  border: 0;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  padding: 0.15rem 0;
+}
+.driver-row:hover,
+.driver-row:focus-visible {
+  color: var(--accent);
+  outline: none;
+}
+.driver-detail {
+  display: none;
+  margin: 0.35rem 0 0.25rem 0;
+  padding: 0.5rem 0.65rem;
+  background: var(--bg-hover);
+  border-radius: 6px;
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+.driver-item.expanded .driver-detail {
+  display: block;
+}
+.driver-reason {
+  margin-bottom: 0.25rem;
+}
+
+/* Consensus range: Low — marker — High (not progress-bar) */
+.consensus-range {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-width: 11rem;
+  font-size: 0.8rem;
+}
+.cr-low,
+.cr-high {
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+.cr-sep {
+  color: var(--text-muted);
+}
+.cr-mid {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 4rem;
+}
+.cr-track {
+  position: relative;
+  width: 100%;
+  height: 0.2rem;
+  background: var(--border-subtle);
+  border-radius: 999px;
+  margin-bottom: 0.15rem;
+}
+.cr-marker {
+  position: absolute;
+  top: 50%;
+  width: 0.55rem;
+  height: 0.55rem;
+  background: var(--accent);
+  border: 2px solid var(--bg);
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+.cr-cons-label {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Mobile: horizontal scroll only on nav; prevent page-level top scrollbar */
+html,
+body {
+  max-width: 100%;
+  overflow-x: hidden;
+}
+.nav-tabs,
+nav.tabs,
+.tabs {
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+  max-width: 100%;
+}
+.table-wrap {
+  max-width: 100%;
+}
+@media (max-width: 720px) {
+  body {
+    overflow-x: hidden;
+  }
+  .nav-tabs,
+  nav.tabs,
+  .tabs {
+    overflow-x: auto;
+  }
 }
