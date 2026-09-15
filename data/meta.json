@@ -11,9 +11,13 @@
   "consensusDataAsOfDisplay": "Sep 15, 2026 09:36 Taipei Time",
   "lastSuccessfulCollection": "2026-09-15T01:36:00Z",
   "lastSuccessfulCollectionDisplay": "Sep 15, 2026 09:36 Taipei Time",
-  "sitePublished": "2026-09-15T05:31:53Z",
-  "sitePublishedDisplay": "Sep 15, 2026 13:31 Taipei Time",
+  "sitePublished": "2026-09-15T06:21:13Z",
+  "sitePublishedDisplay": "Sep 15, 2026 14:21 Taipei Time",
   "dataStale": false,
+  "nextExpected": "2026-09-16T00:00:00Z",
+  "staleAfter": "2026-09-15T06:00:00Z",
+  "freshnessRule": "weekday_0800_taipei_plus_grace",
+  "graceHours": 6,
   "displayMappedYears": [
     "2026E",
     "2027E",
@@ -25,9 +29,10 @@
     "2027E",
     "2028E"
   ],
-  "dataVersion": "86d789ae6f387604c51b0105eb9baf648133ffaa2607d55466ddaaad3410c5b5",
-  "buildId": "86d789ae6f387604c51b0105eb9baf648133ffaa2607d55466ddaaad3410c5b5",
-  "alertEngineLastEvaluated": "2026-09-15T05:31:53Z",
+  "dataVersion": "08e8b4c0eb7810c799dc82b41cb02669a11d40a51a3805f01286ed99d6e51c79",
+  "buildId": "08e8b4c0eb7810c799dc82b41cb02669a11d40a51a3805f01286ed99d6e51c79",
+  "alertEngineLastEvaluated": "2026-09-15T06:21:13Z",
   "alertEngineStatus": "ok",
-  "alertEngineError": null
+  "alertEngineError": null,
+  "oneShotActiveDays": 21
 }
