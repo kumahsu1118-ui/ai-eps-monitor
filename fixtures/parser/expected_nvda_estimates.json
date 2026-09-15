@@ -1,0 +1,25 @@
+{
+  "ticker": "NVDA",
+  "rows": [
+    {
+      "fiscalPeriodEnding": "Jan 2027",
+      "consensus": 9.31,
+      "high": 10.5,
+      "low": 8.2,
+      "analystCount": 42,
+      "rev1M": 1.25,
+      "rev3M": 3.1,
+      "rev6M": 8.4
+    },
+    {
+      "fiscalPeriodEnding": "Jan 2028",
+      "consensus": 15.61,
+      "high": 18.0,
+      "low": 12.5,
+      "analystCount": 38,
+      "rev1M": 2.1,
+      "rev3M": 5.5,
+      "rev6M": 12.0
+    }
+  ]
+}

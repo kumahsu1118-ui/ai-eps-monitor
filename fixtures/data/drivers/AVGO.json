@@ -1,0 +1,87 @@
+{
+  "ticker": "AVGO",
+  "updated": "2026-09-15T05:30:00Z",
+  "status": "Scored from Q3 FY26 digest (report 2026-09-02) — changes only with digest evidence",
+  "drivers": [
+    {
+      "name": "AI ASIC",
+      "previousStatus": "unchanged",
+      "currentStatus": "improving",
+      "status": "improving",
+      "changedAt": "2026-09-02",
+      "reason": "AI semiconductor revenue $16.7B (+221% Y/Y, +54% QoQ); FY27 AI ~$115B / FY28 ~$230B outlook (IR).",
+      "sourceUrl": "https://investors.broadcom.com/news-releases/news-release-details/broadcom-inc-announces-third-quarter-fiscal-year-2026-financial",
+      "note": "AI ASIC / XPU demand improving"
+    },
+    {
+      "name": "hyperscaler customers",
+      "previousStatus": "unchanged",
+      "currentStatus": "improving",
+      "status": "improving",
+      "changedAt": "2026-09-02",
+      "reason": "Anthropic/OpenAI/Meta multi-GW XPU visibility disclosed; Google TPU multi-year agreement (digest).",
+      "sourceUrl": "https://investors.broadcom.com/news-releases/news-release-details/broadcom-inc-announces-third-quarter-fiscal-year-2026-financial",
+      "note": "Customer roadmap improving"
+    },
+    {
+      "name": "AI networking",
+      "previousStatus": "unchanged",
+      "currentStatus": "improving",
+      "status": "improving",
+      "changedAt": "2026-09-02",
+      "reason": "Q4 AI networking expected to triple Y/Y; expected to grow as fast as XPU revenue (digest commentary).",
+      "sourceUrl": "https://seekingalpha.com/article/4942557-broadcom-inc-avgo-q3-2026-earnings-call-transcript",
+      "note": "AI networking improving"
+    },
+    {
+      "name": "Tomahawk",
+      "previousStatus": "unchanged",
+      "currentStatus": "improving",
+      "status": "improving",
+      "changedAt": "2026-09-02",
+      "reason": "Tomahawk 6 deployed across AI hyperscalers; Tomahawk Ultra beginning scale-up in Q3/FY27 (digest).",
+      "sourceUrl": "https://seekingalpha.com/article/4942557-broadcom-inc-avgo-q3-2026-earnings-call-transcript",
+      "note": "Tomahawk deployment evidence"
+    },
+    {
+      "name": "Jericho",
+      "previousStatus": "unchanged",
+      "currentStatus": "unchanged",
+      "status": "unchanged",
+      "changedAt": null,
+      "reason": "No change evidence this report specific to Jericho.",
+      "sourceUrl": "https://investors.broadcom.com/news-releases/news-release-details/broadcom-inc-announces-third-quarter-fiscal-year-2026-financial",
+      "note": "No change evidence this report"
+    },
+    {
+      "name": "VMware",
+      "previousStatus": "unchanged",
+      "currentStatus": "unchanged",
+      "status": "unchanged",
+      "changedAt": null,
+      "reason": "Infrastructure software $8.8B (+29% Y/Y) noted but no incremental VMware-status change vs prior scored baseline.",
+      "sourceUrl": "https://investors.broadcom.com/news-releases/news-release-details/broadcom-inc-announces-third-quarter-fiscal-year-2026-financial",
+      "note": "No material VMware status change evidence vs prior"
+    },
+    {
+      "name": "gross margin",
+      "previousStatus": "unchanged",
+      "currentStatus": "deteriorating",
+      "status": "deteriorating",
+      "changedAt": "2026-09-02",
+      "reason": "Consolidated GM 75%, down 210 bps QoQ; Q4 guided ~73% on XPU memory mix (IR/digest).",
+      "sourceUrl": "https://investors.broadcom.com/news-releases/news-release-details/broadcom-inc-announces-third-quarter-fiscal-year-2026-financial",
+      "note": "GM deteriorating >200 bps sequential"
+    },
+    {
+      "name": "FCF",
+      "previousStatus": "unchanged",
+      "currentStatus": "improving",
+      "status": "improving",
+      "changedAt": "2026-09-02",
+      "reason": "Record Q3 FCF $13.7B (46% of revenue) per IR release.",
+      "sourceUrl": "https://investors.broadcom.com/news-releases/news-release-details/broadcom-inc-announces-third-quarter-fiscal-year-2026-financial",
+      "note": "Record FCF"
+    }
+  ]
+}

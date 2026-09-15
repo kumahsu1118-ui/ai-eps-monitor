@@ -1,0 +1,8 @@
+{
+  "NVDA": ["GPU shipment", "ASP", "Rubin / Rubin Ultra", "inference demand", "HBM supply", "TSMC capacity", "CoWoS / advanced packaging", "networking", "gross margin"],
+  "AVGO": ["AI ASIC", "hyperscaler customers", "AI networking", "Tomahawk", "Jericho", "VMware", "gross margin", "FCF"],
+  "TSM": ["N2", "A16", "advanced packaging", "CoWoS", "AI accelerator demand", "HPC revenue", "utilization", "gross margin", "CapEx"],
+  "MSFT": ["Azure growth", "AI revenue", "Copilot", "M365", "OpenAI / external models", "AI capacity", "CapEx", "depreciation", "gross margin", "FCF"],
+  "BE": ["GW capacity", "data center demand", "ASP", "manufacturing capacity", "gross margin", "backlog", "CSP customers", "power availability"],
+  "KEYS": ["AI / data center testing", "semiconductor test", "networking", "800G / 1.6T", "R&D demand", "order growth", "gross margin"]
+}

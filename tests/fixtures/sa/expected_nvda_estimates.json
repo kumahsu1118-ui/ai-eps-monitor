@@ -1,0 +1,44 @@
+{
+  "ticker": "NVDA",
+  "rows": [
+    {
+      "fiscalPeriodEnding": "Jan 2027",
+      "periodType": "Fiscal Period Ending",
+      "calendarAlignment": "CY2026",
+      "mappedYear": "2026E",
+      "consensus": 9.31,
+      "high": 10.1,
+      "low": 9.01,
+      "analysts": 50,
+      "rev1M": 0.13,
+      "rev3M": 4.13,
+      "rev6M": 12.19
+    },
+    {
+      "fiscalPeriodEnding": "Jan 2028",
+      "periodType": "Fiscal Period Ending",
+      "calendarAlignment": "CY2027",
+      "mappedYear": "2027E",
+      "consensus": 15.61,
+      "high": 18.75,
+      "low": 9.8,
+      "analysts": 53,
+      "rev1M": 1.37,
+      "rev3M": 22.85,
+      "rev6M": 40.57
+    },
+    {
+      "fiscalPeriodEnding": "Jan 2029",
+      "periodType": "Fiscal Period Ending",
+      "calendarAlignment": "CY2028",
+      "mappedYear": "2028E",
+      "consensus": 21.06,
+      "high": 26.45,
+      "low": 14.43,
+      "analysts": 32,
+      "rev1M": 2.98,
+      "rev3M": 33.93,
+      "rev6M": 58.53
+    }
+  ]
+}

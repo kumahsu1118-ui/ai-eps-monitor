@@ -1,0 +1,10 @@
+{
+  "name": "AI Investment EPS & Earnings Monitor",
+  "created_utc": "2026-09-15T01:36:00Z",
+  "tickers": ["NVDA", "AVGO", "TSM", "MSFT", "BE", "KEYS"],
+  "years_of_interest": ["2026E", "2027E", "2028E", "2029E"],
+  "primary_sources": ["company_ir", "10-Q", "10-K", "8-K", "earnings_presentation", "official_transcript"],
+  "secondary_sources": ["seeking_alpha_estimates", "seeking_alpha_transcript", "seeking_alpha_revisions"],
+  "tertiary_sources": ["bloomberg", "reuters", "wsj", "cnbc", "mgmt_interview"],
+  "quaternary_sources": ["x", "analyst_posts", "supply_chain_rumors"]
+}

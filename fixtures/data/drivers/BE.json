@@ -1,0 +1,47 @@
+{
+  "ticker": "BE",
+  "updated": "2026-09-15T01:36:00Z",
+  "status": "Baseline — not yet scored vs prior earnings",
+  "drivers": [
+    {
+      "name": "GW capacity",
+      "status": "unchanged",
+      "note": "Awaiting first post-setup earnings refresh"
+    },
+    {
+      "name": "data center demand",
+      "status": "unchanged",
+      "note": "Awaiting first post-setup earnings refresh"
+    },
+    {
+      "name": "ASP",
+      "status": "unchanged",
+      "note": "Awaiting first post-setup earnings refresh"
+    },
+    {
+      "name": "manufacturing capacity",
+      "status": "unchanged",
+      "note": "Awaiting first post-setup earnings refresh"
+    },
+    {
+      "name": "gross margin",
+      "status": "unchanged",
+      "note": "Awaiting first post-setup earnings refresh"
+    },
+    {
+      "name": "backlog",
+      "status": "unchanged",
+      "note": "Awaiting first post-setup earnings refresh"
+    },
+    {
+      "name": "CSP customers",
+      "status": "unchanged",
+      "note": "Awaiting first post-setup earnings refresh"
+    },
+    {
+      "name": "power availability",
+      "status": "unchanged",
+      "note": "Awaiting first post-setup earnings refresh"
+    }
+  ]
+}
