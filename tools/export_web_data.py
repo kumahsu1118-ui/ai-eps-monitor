@@ -137,16 +137,84 @@ def to_display_str(x):
     return str(x).strip() if not isinstance(x, (int, float, bool)) else x
 
 
+def snapshot_sort_key(path: Path) -> str:
+    """Sort key for snapshot files: prefer full UTC timestamp identity."""
+    name = path.stem  # e.g. 2026-09-15T013600Z or 2026-09-15
+    return name
+
+
+def list_full_snapshots() -> list[Path]:
+    """Full snapshots including same-day timestamped multiples; exclude raw_/quarantine/latest."""
+    out = []
+    for p in SNAP_DIR.glob("20*.json"):
+        if p.name.startswith("raw_"):
+            continue
+        if p.name in {"latest.json", "manifest.json"}:
+            continue
+        if "quarantine" in p.parts:
+            continue
+        # Accept YYYY-MM-DD.json or YYYY-MM-DDTHHMMSSZ.json
+        if re.match(r"^\d{4}-\d{2}-\d{2}(T\d{6}Z)?\.json$", p.name):
+            out.append(p)
+    return sorted(out, key=snapshot_sort_key)
+
+
+def persist_full_snapshot(snap: dict, snap_utc: str | None = None) -> Path:
+    """Write full snapshot as UTC timestamp file; never overwrite first same-day snapshot.
+
+    Also updates latest.json + manifest.json for convenience.
+    """
+    from atomic_io import atomic_write_json
+    utc = snap_utc or snap.get("snapshot_utc") or ""
+    # Normalize to 2026-09-15T013600Z
+    m = re.match(r"^(\d{4}-\d{2}-\d{2})T(\d{2}):(\d{2}):(\d{2})Z$", str(utc))
+    if m:
+        fname = f"{m.group(1)}T{m.group(2)}{m.group(3)}{m.group(4)}Z.json"
+    else:
+        day = str(utc)[:10] if utc else datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        fname = f"{day}.json"
+    path = SNAP_DIR / fname
+    if path.exists():
+        # Do not overwrite — keep first same-day / same-timestamp snapshot
+        # If collision on day-only legacy name, write timestamped sibling when utc known
+        if m and path.exists():
+            return path  # identical timestamp identity preserved
+        if not m:
+            # legacy day file exists — write a timestamped unique name
+            now = datetime.now(timezone.utc)
+            fname = now.strftime("%Y-%m-%dT%H%M%SZ.json")
+            path = SNAP_DIR / fname
+            n = 0
+            while path.exists():
+                n += 1
+                fname = now.strftime("%Y-%m-%dT%H%M%SZ") + f"_{n}.json"
+                path = SNAP_DIR / fname
+    SNAP_DIR.mkdir(parents=True, exist_ok=True)
+    atomic_write_json(path, snap)
+    # Convenience pointers
+    try:
+        atomic_write_json(SNAP_DIR / "latest.json", snap)
+        manifest = {"latest": path.name, "snapshot_utc": snap.get("snapshot_utc"), "files": [x.name for x in list_full_snapshots()]}
+        atomic_write_json(SNAP_DIR / "manifest.json", manifest)
+    except Exception:
+        pass
+    return path
+
+
 def load_latest_snapshot():
-    dated = sorted(
-        p
-        for p in SNAP_DIR.glob("20*.json")
-        if not p.name.startswith("raw_") and re.match(r"^\d{4}-\d{2}-\d{2}", p.name)
-    )
-    if not dated:
-        raise SystemExit(f"No snapshot found in {SNAP_DIR}")
-    path = dated[-1]
-    return path, json.loads(path.read_text(encoding="utf-8"))
+    # Prefer latest.json pointer when present
+    latest_ptr = SNAP_DIR / "latest.json"
+    dated = list_full_snapshots()
+    if latest_ptr.exists() and dated:
+        # Prefer newest timestamped file over possibly-stale latest.json content path
+        path = dated[-1]
+        return path, json.loads(path.read_text(encoding="utf-8"))
+    if dated:
+        path = dated[-1]
+        return path, json.loads(path.read_text(encoding="utf-8"))
+    if latest_ptr.exists():
+        return latest_ptr, json.loads(latest_ptr.read_text(encoding="utf-8"))
+    raise SystemExit(f"No snapshot found in {SNAP_DIR}")
 
 
 def load_watchlist():
@@ -239,7 +307,33 @@ def parse_earnings_date_parts(raw) -> tuple[int, int, int] | None:
     return None
 
 
-def format_next_earnings_display(raw, status: str | None) -> str | None:
+def extract_earnings_session(raw) -> str | None:
+    """Keep Pre-Market / Post-Market session hints from raw next-earnings strings."""
+    if unavailable(raw):
+        return None
+    s = str(raw)
+    m = re.search(r"\((\s*(?:Pre|Post)[\s-]*Market)\s*\)", s, re.I)
+    if m:
+        tok = re.sub(r"\s+", "-", m.group(1).strip(), count=0)
+        tok = re.sub(r"(?i)pre[\s-]*market", "Pre-Market", tok)
+        tok = re.sub(r"(?i)post[\s-]*market", "Post-Market", tok)
+        if re.search(r"(?i)pre", m.group(1)):
+            return "Pre-Market"
+        if re.search(r"(?i)post", m.group(1)):
+            return "Post-Market"
+    if re.search(r"(?i)pre[\s-]*market", s):
+        return "Pre-Market"
+    if re.search(r"(?i)post[\s-]*market", s):
+        return "Post-Market"
+    return None
+
+
+def format_next_earnings_display(
+    raw,
+    status: str | None,
+    session: str | None = None,
+) -> str | None:
+    """UI e.g. 'Nov 25, 2026 · Post-Market · Estimated'."""
     if unavailable(raw):
         return None
     parts = parse_earnings_date_parts(raw)
@@ -252,31 +346,59 @@ def format_next_earnings_display(raw, status: str | None) -> str | None:
         date_s = f"{months[mo - 1]} {d}, {y}"
     else:
         date_s = re.split(r"\s*\(", str(raw).strip(), maxsplit=1)[0].strip()
+    sess = session or extract_earnings_session(raw)
     st = (status or "estimated").lower()
     label = "Confirmed" if st == "confirmed" else "Estimated"
-    return f"{date_s} · {label}"
+    bits = [date_s]
+    if sess:
+        bits.append(sess)
+    bits.append(label)
+    return " · ".join(bits)
 
 
-def infer_next_earnings_status(next_raw, digest: dict | None = None) -> tuple[str | None, str | None]:
-    """Return (status, source). Confirmed only with company IR evidence; SA dates → estimated."""
+def _is_company_ir_url(url: str | None) -> bool:
+    if not url:
+        return False
+    u = str(url).lower()
+    if "seekingalpha.com" in u:
+        return False
+    return bool(
+        re.search(r"investor\.|investors\.|/ir/|investor-relations|newsroom|press-release", u)
+        or "company ir" in u
+    )
+
+
+def infer_next_earnings_status(next_raw, digest: dict | None = None) -> tuple[str | None, str | None, str | None]:
+    """Return (status, source, sourceUrl).
+
+    Confirmed ONLY if structured fields prove company IR:
+      nextEarningsStatus == 'confirmed'
+      AND nextEarningsSourceUrl present
+      AND URL/evidence is company IR (not SA digest heuristic scan).
+    Else Estimated. Heuristic scanning digest text for 'Company IR'+'announced' is REMOVED.
+    """
     if unavailable(next_raw):
-        return None, None
+        return None, None, None
     text = str(next_raw)
-    # Digest may note IR confirmation
     if isinstance(digest, dict):
-        blob = json.dumps(digest).lower()
+        st = digest.get("nextEarningsStatus")
+        url = digest.get("nextEarningsSourceUrl") or digest.get("nextEarningsSourceURL")
+        src = digest.get("nextEarningsSource")
+        # Structured confirmation only
         if (
-            ("company ir" in blob or "investor relations" in blob)
-            and ("confirmed" in blob or "announced" in blob)
-        ) or digest.get("nextEarningsStatus") == "confirmed":
-            src = digest.get("nextEarningsSource") or "Company IR"
-            return "confirmed", src
-        if digest.get("nextEarningsStatus") in ("confirmed", "estimated"):
-            return digest["nextEarningsStatus"], digest.get("nextEarningsSource") or "Seeking Alpha"
+            str(st or "").lower() == "confirmed"
+            and url
+            and (_is_company_ir_url(str(url)) or str(src or "").lower() in {"company ir", "investor relations"})
+        ):
+            return "confirmed", (src or "Company IR"), str(url)
+        if str(st or "").lower() == "confirmed" and not (url and _is_company_ir_url(str(url))):
+            # Explicitly NOT confirmed without structured IR URL evidence
+            return "estimated", (src or "Seeking Alpha"), url
+        if str(st or "").lower() == "estimated":
+            return "estimated", (src or "Seeking Alpha"), url
     if "estimated" in text.lower():
-        return "estimated", "Seeking Alpha"
-    # No IR scrape yet → SA / third-party calendar dates are estimates
-    return "estimated", "Seeking Alpha"
+        return "estimated", "Seeking Alpha", None
+    return "estimated", "Seeking Alpha", None
 
 
 def ensure_driver_files(tickers: list[str]) -> list[dict]:
@@ -561,6 +683,15 @@ MOMENTUM_FORMULA_DOC = (
     "Missing either leg → Neutral."
 )
 
+REVISION_REGIME_DOC = (
+    "Revision regime from mapped Y+1 (nearTerm) and Y+2 (longTerm) SA 1M %: "
+    "Y+1<0 and Y+2>=+5 → Back-end Loaded / Divergent; "
+    "Y+1>=+5 and Y+2<0 → Front-loaded / Divergent; "
+    "both >= +3 → Broad Upward Revision; both <= -3 → Broad Downward Revision; "
+    "both near 0 (|x|<1) → Stable; else Mixed / Neutral-adjacent. "
+    "Complements Momentum (which can be Neutral when legs diverge)."
+)
+
 
 def compute_momentum_from_revisions(rev_y1, rev_y2) -> str:
     """Fixed formula from Y+1 / Y+2 1M revisions. No guidance/drivers."""
@@ -576,6 +707,37 @@ def compute_momentum_from_revisions(rev_y1, rev_y2) -> str:
     if a <= -1.0 and b <= -1.0:
         return "Negative"
     return "Neutral"
+
+
+def compute_revision_regime(rev_y1, rev_y2) -> dict:
+    """nearTerm/longTerm revision % + regime label (for divergent cases Momentum misses)."""
+    a, b = to_num(rev_y1), to_num(rev_y2)
+    out = {
+        "nearTermRevision": a,
+        "longTermRevision": b,
+        "revisionRegime": None,
+        "revisionRegimeDoc": REVISION_REGIME_DOC,
+    }
+    if a is None or b is None:
+        out["revisionRegime"] = "Insufficient Data"
+        return out
+    if a < 0 and b >= 5.0:
+        out["revisionRegime"] = "Back-end Loaded / Divergent"
+    elif a >= 5.0 and b < 0:
+        out["revisionRegime"] = "Front-loaded / Divergent"
+    elif a >= 3.0 and b >= 3.0:
+        out["revisionRegime"] = "Broad Upward Revision"
+    elif a <= -3.0 and b <= -3.0:
+        out["revisionRegime"] = "Broad Downward Revision"
+    elif abs(a) < 1.0 and abs(b) < 1.0:
+        out["revisionRegime"] = "Stable"
+    elif a > 0 and b > 0:
+        out["revisionRegime"] = "Mild Upward"
+    elif a < 0 and b < 0:
+        out["revisionRegime"] = "Mild Downward"
+    else:
+        out["revisionRegime"] = "Divergent / Mixed"
+    return out
 
 
 def build_companies(snap: dict, tickers: list[str], year_keys: list[str] | None = None) -> dict:
@@ -618,8 +780,9 @@ def build_companies(snap: dict, tickers: list[str], year_keys: list[str] | None 
                 digest_hint = json.loads(earn_path.read_text(encoding="utf-8"))
             except Exception:
                 digest_hint = None
-        nestatus, nesource = infer_next_earnings_status(next_raw, digest_hint)
-        next_display = format_next_earnings_display(next_raw, nestatus) if next_raw else None
+        nestatus, nesource, nesource_url = infer_next_earnings_status(next_raw, digest_hint)
+        nesession = extract_earnings_session(next_raw)
+        next_display = format_next_earnings_display(next_raw, nestatus, nesession) if next_raw else None
 
         data_gaps = d.get("data_gaps") or []
         # Optional per-ticker failure: gaps that imply pull failure, or explicit flag
@@ -644,6 +807,8 @@ def build_companies(snap: dict, tickers: list[str], year_keys: list[str] | None 
             "nextEarningsRaw": next_raw,
             "nextEarningsStatus": nestatus,
             "nextEarningsSource": nesource,
+            "nextEarningsSourceUrl": nesource_url,
+            "nextEarningsSession": nesession,
             "fyNote": to_display_str(d.get("fy_note")),
             "momentum": (
                 compute_momentum_from_revisions(
@@ -654,6 +819,14 @@ def build_companies(snap: dict, tickers: list[str], year_keys: list[str] | None 
                 else (to_display_str(d.get("eps_momentum")) or "Neutral")
             ),
             "momentumFormula": MOMENTUM_FORMULA_DOC,
+            **(
+                compute_revision_regime(
+                    (eps_out.get(year_keys[1]) or {}).get("rev1M") if len(year_keys) > 1 else None,
+                    (eps_out.get(year_keys[2]) or {}).get("rev1M") if len(year_keys) > 2 else None,
+                )
+                if len(year_keys) > 2
+                else {"nearTermRevision": None, "longTermRevision": None, "revisionRegime": None}
+            ),
             "eps": eps_out,
             "epsByFiscal": eps_by_fiscal,
             "sourceUrl": to_display_str(d.get("source_url")),
@@ -719,6 +892,9 @@ def build_valuation(
             "displayYears": display,
             "cagrY0Y2": cagr,
             "momentum": c["momentum"],
+            "nearTermRevision": c.get("nearTermRevision"),
+            "longTermRevision": c.get("longTermRevision"),
+            "revisionRegime": c.get("revisionRegime"),
             "lastUpdated": snap_utc,
         }
 
@@ -867,7 +1043,7 @@ def seed_and_append_daily_snapshots(
         )
         if not date or not ticker:
             continue
-        if not fiscal and (not slot or slot not in chart_years):
+        if not fiscal and (not slot or slot not in year_keys):
             continue
         identity = fiscal or slot
         key = (date, ticker, identity)
@@ -889,12 +1065,17 @@ def seed_and_append_daily_snapshots(
         new_rows.append(row)
         last_consensus[key] = eps
 
-    # Snapshot-day consensus: append on first sight OR when EPS changed same day
+    # Snapshot-day consensus: append on first sight OR when EPS changed same day.
+    # Persist ALL displayMappedYears (not only first 3 chartYears). UI still defaults to chartYears.
+    # Partial/failed collection: do NOT append daily EPS historical observation for that ticker.
     snap_date = (snap.get("snapshot_utc") or snap_path.name)[:10]
     snap_utc = snap.get("snapshot_utc")
+    persist_years = list(year_keys)  # all forward years
     for t in tickers:
         c = companies.get(t) or {}
-        for slot in chart_years:
+        if c.get("collectionFailed") or c.get("usingLastKnownGood"):
+            continue  # no fake fresh observation in JSONL / chart history
+        for slot in persist_years:
             e = (c.get("eps") or {}).get(slot) or {}
             fiscal = e.get("reportedFiscalLabel")
             identity = fiscal or slot
@@ -919,12 +1100,13 @@ def seed_and_append_daily_snapshots(
             last_consensus[key] = new_eps
 
     if new_rows:
-        with jsonl_path.open("a", encoding="utf-8") as f:
-            for row in new_rows:
-                f.write(json.dumps(row, ensure_ascii=False) + "\n")
-                existing.append(row)
+        # Fail-closed: atomic JSONL failure aborts (no non-atomic append fallback)
+        from atomic_io import append_jsonl_atomic
+        append_jsonl_atomic(jsonl_path, new_rows)
+        existing.extend(new_rows)
 
-    # Dated JSON for the day reflecting latest values (overwrite that day file only)
+    # Dated JSON for the day reflecting latest values (overwrite that day file only).
+    # Failed/LKG tickers may keep status=missing + lastKnownGood* without creating chart observations.
     day_payload = {
         "date": snap_date,
         "snapshotUtc": snap_utc,
@@ -932,18 +1114,36 @@ def seed_and_append_daily_snapshots(
     }
     for t in tickers:
         c = companies.get(t) or {}
-        day_payload["tickers"][t] = {
+        failed = bool(c.get("collectionFailed") or c.get("usingLastKnownGood"))
+        slots_payload = {
             slot: {
                 "consensus": ((c.get("eps") or {}).get(slot) or {}).get("consensus"),
                 "reportedFiscalLabel": ((c.get("eps") or {}).get(slot) or {}).get("reportedFiscalLabel"),
                 "calendarAlignment": ((c.get("eps") or {}).get(slot) or {}).get("calendarAlignment"),
                 "mappedYear": slot,
             }
-            for slot in chart_years
+            for slot in persist_years
         }
+        if failed:
+            # Preserve LKG display values but mark not a fresh observation
+            lkg_as_of = c.get("lastSuccessfulCollection") or c.get("updateTime") or c.get("collectionAsOf")
+            for slot, sp in slots_payload.items():
+                sp["status"] = "missing"
+                sp["usingLastKnownGood"] = True
+                sp["lastKnownGoodValue"] = sp.get("consensus")
+                sp["lastKnownGoodAsOf"] = lkg_as_of
+            day_payload["tickers"][t] = {
+                **slots_payload,
+                "status": "missing",
+                "usingLastKnownGood": True,
+                "collectionFailed": True,
+                "lastKnownGoodAsOf": lkg_as_of,
+            }
+        else:
+            day_payload["tickers"][t] = slots_payload
         # Also expose by fiscal label for identity stability
         by_fiscal = {}
-        for slot in chart_years:
+        for slot in persist_years:
             e = (c.get("eps") or {}).get(slot) or {}
             lab = e.get("reportedFiscalLabel")
             if lab:
@@ -1083,6 +1283,7 @@ def load_or_init_earnings(companies: dict, tickers: list[str]) -> dict:
                 for k in ("nextEarnings", "nextEarningsRaw", "nextEarningsStatus", "nextEarningsSource", "lastEarnings"):
                     if not data.get(k) and stub.get(k):
                         data[k] = stub[k]
+                data = ensure_earnings_provenance(data)
                 out[t] = data
             else:
                 stub_err = dict(stub)
@@ -1110,6 +1311,7 @@ def load_or_init_earnings(companies: dict, tickers: list[str]) -> dict:
             if not data.get("nextEarningsStatus") and stub.get("nextEarningsStatus"):
                 data["nextEarningsStatus"] = stub["nextEarningsStatus"]
                 data["nextEarningsSource"] = stub.get("nextEarningsSource")
+            data = ensure_earnings_provenance(data)
             out[t] = data
             # Do NOT rewrite the file (preserve markers / user edits)
             continue
@@ -1332,31 +1534,68 @@ def regenerate_markdown_backups(companies: dict, valuation: list, snap: dict, ti
 
 
 def write_json(path: Path, obj):
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(obj, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    """Atomic JSON write (temp + rename) under process flock.
+
+    Fail-closed: NO silent non-atomic fallback for core persistent/public JSON.
+    Atomic failure aborts (raises) so callers do not publish half-written state.
+    """
+    from atomic_io import atomic_write_json
+    atomic_write_json(Path(path), obj)
 
 
 def run_build_alerts() -> dict:
-    """Call deterministic alert engine before writing web/data/alerts.json."""
-    try:
-        import build_alerts as ba
+    """Call deterministic alert engine before writing web/data/alerts.json.
 
+    On evaluate_alerts() exception: preserve last-known-good alertHistory and
+    previous active alerts; set alertEngineStatus=error. Never overwrite with
+    empty arrays.
+    """
+    import build_alerts as ba
+
+    prior = {}
+    try:
+        if ALERTS_PATH.exists():
+            prior = json.loads(ALERTS_PATH.read_text(encoding="utf-8")) or {}
+    except Exception:
+        prior = {}
+
+    try:
         payload = ba.evaluate_alerts()
         ba.write_alerts(payload)
+        # Stamp last successful evaluation
+        payload = dict(payload)
+        payload["alertEngineLastSuccessfulEvaluation"] = payload.get("alertEngineLastEvaluated")
+        payload["alertEngineLastAttempt"] = payload.get("alertEngineLastEvaluated")
+        try:
+            ba.write_alerts(payload)
+        except Exception:
+            pass
         return payload
     except Exception as exc:
+        now = now_utc_iso()
+        prior_active = prior.get("activeAlerts") or prior.get("alerts") or []
+        prior_hist = prior.get("alertHistory") or prior_active
         err = {
-            "alerts": [],
-            "activeAlerts": [],
-            "alertHistory": [],
-            "alertEngineLastEvaluated": now_utc_iso(),
+            "alerts": list(prior_active),
+            "activeAlerts": list(prior_active),
+            "alertHistory": list(prior_hist),
+            "alertDiagnostics": prior.get("alertDiagnostics") or [],
+            "homepageAttentionQueue": prior.get("homepageAttentionQueue") or [],
+            "changedSinceLastCollection": prior.get("changedSinceLastCollection") or [],
+            "alertEngineLastEvaluated": prior.get("alertEngineLastEvaluated"),
+            "alertEngineLastAttempt": now,
+            "alertEngineLastSuccessfulEvaluation": prior.get("alertEngineLastSuccessfulEvaluation")
+            or prior.get("alertEngineLastEvaluated"),
             "alertEngineStatus": "error",
             "alertEngineError": f"{type(exc).__name__}: {exc}",
+            "oneShotActiveDays": prior.get("oneShotActiveDays"),
+            "lastSuccessfulCollection": prior.get("lastSuccessfulCollection"),
         }
         try:
             ALERTS_PATH.parent.mkdir(parents=True, exist_ok=True)
             write_json(ALERTS_PATH, err)
         except Exception:
+            # Preserve prior file bytes on write failure
             pass
         return err
 
@@ -1387,23 +1626,292 @@ def load_prior_meta() -> dict:
 
 
 
+OPERATIONAL_FIELDS = {
+    "updateTime",
+    "collectionAsOf",
+    "dataAsOf",
+    "lastSuccessfulCollection",
+    "alertEngineLastEvaluated",
+    "ageDays",
+    "sitePublished",
+    "sitePublishedDisplay",
+    "lastSuccessfulCollectionDisplay",
+    "consensusDataAsOf",
+    "consensusDataAsOfDisplay",
+    "lastUpdated",
+    "lastUpdatedDisplay",
+    "refreshVersion",
+    "dataStale",
+    "nextExpected",
+    "staleAfter",
+    "collectionStatus",
+    "collectionStatusLabel",
+    "successfulTickers",
+    "failedTickers",
+    "successfulCount",
+    "totalCount",
+}
+
+
+def strip_operational_fields(obj):
+    """Recursively drop operational/timestamp fields before dataVersion hashing."""
+    if isinstance(obj, list):
+        return [strip_operational_fields(x) for x in obj]
+    if isinstance(obj, dict):
+        out = {}
+        for k, v in obj.items():
+            if k in OPERATIONAL_FIELDS:
+                continue
+            out[k] = strip_operational_fields(v)
+        return out
+    return obj
+
+
 def strip_operational_alert_fields(alerts_list: list) -> list:
     """Drop ageDays / other operational fields so dataVersion stays stable across calendar ticks."""
-    out = []
-    for a in alerts_list or []:
-        if not isinstance(a, dict):
-            out.append(a)
+    return strip_operational_fields(alerts_list or [])
+
+
+
+def load_prior_companies() -> dict:
+    p = WEB_DATA / "companies.json"
+    if not p.exists():
+        return {}
+    try:
+        data = json.loads(p.read_text(encoding="utf-8"))
+        return data if isinstance(data, dict) else {}
+    except Exception:
+        return {}
+
+
+def apply_last_known_good_for_missing(
+    companies: dict,
+    tickers: list[str],
+    snap: dict,
+    gate: dict | None = None,
+) -> dict:
+    """For missing/failed watchlist tickers: fill last-known-good + STALE/FAILED badges.
+
+    Never invent EPS — only reuse prior web/data/companies.json or prior snapshot tickers
+    already exported. Marks collectionFailed=True and dataFreshnessBadge=FAILED|STALE.
+    """
+    missing = set((gate or {}).get("missingTickers") or [])
+    prior_companies = load_prior_companies()
+    prior_snap_tickers = {}
+    # Prefer prior dated snapshot (excluding current) already loaded into gate flow externally
+    for t in tickers:
+        c = companies.get(t) or {}
+        in_snap = t in ((snap.get("tickers") or {}) if isinstance(snap, dict) else {})
+        failed = bool(c.get("collectionFailed")) or (t.upper() in {x.upper() for x in missing}) or not in_snap
+        if not failed and in_snap:
+            # Successful fresh ticker
+            c = dict(c)
+            c["dataFreshnessBadge"] = None
+            companies[t] = c
             continue
-        b = {k: v for k, v in a.items() if k not in {"ageDays"}}
-        out.append(b)
+        # Need LKG
+        lkg = prior_companies.get(t)
+        if isinstance(lkg, dict) and (lkg.get("eps") or lkg.get("price") is not None or lkg.get("lastClose") is not None):
+            merged = dict(lkg)
+            merged["ticker"] = t
+            merged["collectionFailed"] = True
+            merged["dataFreshnessBadge"] = "FAILED" if (t.upper() in {x.upper() for x in missing} or not in_snap) else "STALE"
+            merged["usingLastKnownGood"] = True
+            gaps = list(merged.get("dataGaps") or [])
+            note = "missing from snapshot — last-known-good retained"
+            if note not in gaps:
+                gaps.append(note)
+            merged["dataGaps"] = gaps
+            companies[t] = merged
+        else:
+            # Minimal failed stub — still present so UI can show FAILED
+            stub = dict(c) if c else {"ticker": t, "eps": {}, "dataGaps": []}
+            stub["ticker"] = t
+            stub["collectionFailed"] = True
+            stub["dataFreshnessBadge"] = "FAILED"
+            stub["usingLastKnownGood"] = False
+            gaps = list(stub.get("dataGaps") or [])
+            gaps.append("missing from snapshot — no last-known-good")
+            stub["dataGaps"] = gaps
+            companies[t] = stub
+    return companies
+
+
+def ensure_earnings_provenance(data: dict) -> dict:
+    """Ensure hasDigest digests carry actuals + consensusComparison with tiers.
+
+    Never claim SA consensus beat/miss as Company IR Tier 1.
+    actuals = company IR metrics (Tier 1 when IR URL present).
+    consensusComparison = beat/miss attribution (typically SA Tier 4).
+    """
+    if not isinstance(data, dict):
+        return data
+    if not data.get("hasDigest"):
+        return data
+    out = dict(data)
+
+    # --- actuals ---
+    actuals = out.get("actuals") if isinstance(out.get("actuals"), dict) else None
+    results = out.get("results") if isinstance(out.get("results"), dict) else {}
+    if actuals is None:
+        metrics = {}
+        for k in ("eps", "revenue", "grossMargin", "operatingMargin", "fcf"):
+            if results.get(k) is not None:
+                metrics[k] = results.get(k)
+        # Also pull from list forms
+        if not metrics.get("eps"):
+            for row in out.get("eps") or []:
+                if isinstance(row, dict) and row.get("value"):
+                    metrics["eps"] = row.get("value")
+                    if row.get("sourceUrl") and not results.get("sourceUrl"):
+                        results = dict(results)
+                        results["sourceUrl"] = row.get("sourceUrl")
+                        results["sourceTier"] = row.get("sourceTier") or 1
+                    break
+        if not metrics.get("revenue"):
+            for row in out.get("revenue") or []:
+                if isinstance(row, dict) and row.get("value"):
+                    metrics["revenue"] = row.get("value")
+                    break
+        if not metrics.get("grossMargin"):
+            for row in out.get("margins") or []:
+                if isinstance(row, dict) and "gross" in str(row.get("label") or "").lower() and row.get("value"):
+                    metrics["grossMargin"] = row.get("value")
+                    break
+        src_url = (
+            results.get("sourceUrl")
+            or (out.get("guidanceDetail") or {}).get("sourceUrl")
+            if isinstance(out.get("guidanceDetail"), dict)
+            else None
+        )
+        # Prefer IR / sec from results
+        if not src_url:
+            for row in (out.get("eps") or []) + (out.get("revenue") or []):
+                if isinstance(row, dict) and row.get("sourceUrl"):
+                    src_url = row.get("sourceUrl")
+                    break
+        tier = results.get("sourceTier")
+        if tier is None:
+            # Heuristic: company IR / sec.gov → 1
+            u = str(src_url or "").lower()
+            if "sec.gov" in u or "investor." in u or "investors." in u:
+                tier = 1
+            else:
+                tier = 1 if src_url else None
+        # Always materialize actuals for hasDigest (may be sparse)
+        actuals = {
+            "metrics": metrics,
+            "eps": metrics.get("eps"),
+            "revenue": metrics.get("revenue"),
+            "grossMargin": metrics.get("grossMargin"),
+            "sourceUrl": src_url,
+            "secUrl": results.get("secUrl") if isinstance(results, dict) else None,
+            "sourceTier": tier if src_url else None,
+        }
+        out["actuals"] = actuals
+    else:
+        # Normalize metrics key
+        actuals = dict(actuals)
+        if "metrics" not in actuals:
+            metrics = {}
+            for k in ("eps", "revenue", "grossMargin", "operatingMargin", "fcf"):
+                if actuals.get(k) is not None:
+                    metrics[k] = actuals.get(k)
+            actuals["metrics"] = metrics
+        if actuals.get("sourceUrl") is None and results.get("sourceUrl"):
+            actuals["sourceUrl"] = results.get("sourceUrl")
+        if actuals.get("sourceTier") is None and results.get("sourceTier") is not None:
+            actuals["sourceTier"] = results.get("sourceTier")
+        out["actuals"] = actuals
+
+    # --- consensusComparison ---
+    cc = out.get("consensusComparison") if isinstance(out.get("consensusComparison"), dict) else None
+    vs = None
+    if cc:
+        vs = cc.get("vsConsensus") or cc.get("beatMiss") or cc.get("comparison")
+    if vs is None:
+        vs = out.get("comparison") or results.get("vsConsensus") or out.get("guidanceVsConsensus")
+    # Find SA (non-IR) source for beat/miss
+    sa_url = None
+    sa_tier = 4
+    if cc and cc.get("sourceUrl"):
+        sa_url = cc.get("sourceUrl")
+        if cc.get("sourceTier") is not None:
+            sa_tier = cc.get("sourceTier")
+    if not sa_url:
+        for s in out.get("sources") or []:
+            if not isinstance(s, dict):
+                continue
+            u = str(s.get("url") or "")
+            if "seekingalpha.com" in u.lower():
+                sa_url = u
+                sa_tier = s.get("sourceTier") if s.get("sourceTier") is not None else 4
+                break
+    if not sa_url:
+        # Supplemental URLs on digest bullets
+        for key in ("positives", "negatives", "uncertainties"):
+            for item in out.get(key) or []:
+                if not isinstance(item, dict):
+                    continue
+                u = item.get("supplementalUrl") or item.get("url")
+                if u and "seekingalpha.com" in str(u).lower():
+                    sa_url = u
+                    sa_tier = 4
+                    break
+            if sa_url:
+                break
+    # Never use Company IR URL as consensusComparison source claiming beat/miss
+    ir_url = (out.get("actuals") or {}).get("sourceUrl") if isinstance(out.get("actuals"), dict) else None
+    if sa_url and ir_url and sa_url == ir_url:
+        # Prefer to keep IR only on actuals; clear SA claim
+        if "seekingalpha.com" not in str(sa_url).lower():
+            sa_url = None
+
+    # Always materialize consensusComparison for hasDigest
+    beat_miss = str(vs) if vs is not None else None
+    if True:
+        new_cc = {
+            "vsConsensus": beat_miss,
+            "beatMiss": beat_miss,
+            "sourceUrl": sa_url,
+            "sourceTier": sa_tier if sa_url else None,
+            "note": (
+                "Beat/miss vs consensus attributed to Seeking Alpha / secondary summary "
+                "(not Company IR actuals Tier 1)"
+                if sa_url and "seekingalpha.com" in str(sa_url).lower()
+                else "Beat/miss attribution; actuals remain on Company IR when Tier 1"
+            ),
+        }
+        # If existing cc had fields, preserve extras but enforce tier separation
+        if cc:
+            for k, v in cc.items():
+                if k not in new_cc or new_cc[k] is None:
+                    new_cc[k] = v
+            # Force: if sourceUrl is IR-looking and claims consensus, demote
+            u = str(new_cc.get("sourceUrl") or "").lower()
+            if new_cc.get("sourceTier") == 1 and "seekingalpha.com" not in u and (
+                "investor." in u or "investors." in u or "sec.gov" in u
+            ):
+                # IR URL must not be the consensusComparison claim as Tier 1 beat/miss
+                if sa_url:
+                    new_cc["sourceUrl"] = sa_url
+                    new_cc["sourceTier"] = sa_tier
+                else:
+                    new_cc["sourceTier"] = 4
+                    new_cc["note"] = (
+                        "Consensus beat/miss is not Company IR Tier 1; tier adjusted"
+                    )
+        out["consensusComparison"] = new_cc
+
     return out
 
 
 def collection_completeness(companies: dict, tickers: list[str]) -> dict:
+    """COMPLETE only when every watchlist ticker succeeded (none missing/failed)."""
     successful, failed = [], []
     for t in tickers:
         c = companies.get(t) or {}
-        if c.get("collectionFailed"):
+        if c.get("collectionFailed") or c.get("usingLastKnownGood"):
             failed.append(t)
         else:
             successful.append(t)
@@ -1430,9 +1938,163 @@ def collection_completeness(companies: dict, tickers: list[str]) -> dict:
 
 
 
-def main():
+
+
+
+COMPARISON_CHECKPOINT_PATH = ROOT / "data" / "comparison_checkpoint.json"
+
+
+def load_comparison_checkpoint() -> dict:
+    if COMPARISON_CHECKPOINT_PATH.exists():
+        try:
+            return json.loads(COMPARISON_CHECKPOINT_PATH.read_text(encoding="utf-8")) or {}
+        except Exception:
+            return {}
+    return {}
+
+
+def advance_comparison_checkpoint(snap_utc: str) -> dict:
+    """Atomic update of What-Changed checkpoint AFTER successful collection/export."""
+    payload = {
+        "snapUtc": snap_utc,
+        "comparisonCheckpoint": snap_utc,
+        "advancedAt": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+    }
+    write_json(COMPARISON_CHECKPOINT_PATH, payload)
+    return payload
+
+
+def stamp_build_id(obj, build_id: str, *, ticker_map: bool = False):
+    """Attach buildId to a JSON root for multi-file consistency checks.
+
+    ticker_map=True (companies/earnings): use _buildId so ticker keys stay clean.
+    """
+    if isinstance(obj, dict):
+        out = dict(obj)
+        if ticker_map:
+            out["_buildId"] = build_id
+        else:
+            out["buildId"] = build_id
+        return out
+    return {"buildId": build_id, "data": obj}
+
+
+
+def quarantine_snapshot(snap_path: Path, snap: dict, gate: dict) -> Path:
+    """Save invalid snapshot to quarantine; do not touch public web/data."""
+    qdir = ROOT / "data" / "snapshots" / "quarantine"
+    qdir.mkdir(parents=True, exist_ok=True)
+    name = snap_path.name if snap_path else "unknown.json"
+    qpath = qdir / f"{name}.quarantine"
+    payload = dict(snap) if isinstance(snap, dict) else {"raw": snap}
+    payload["qualityGate"] = gate
+    payload["status"] = gate.get("status")
+    write_json(qpath, payload)
+    return qpath
+
+
+def main() -> int:
+    """Export web data. Fail-closed when qualityGate.publishable != true."""
+    # Global pipeline lock: Quality Gate → persist → alerts → export
+    # Skip if parent publish script already holds data/.pipeline.lock
+    _lock_cm = None
+    if os.environ.get("PIPELINE_LOCK_HELD") != "1":
+        from atomic_io import (
+            GlobalPipelineLock,
+            PipelineBusy,
+            default_pipeline_lock_path,
+            RUN_IN_PROGRESS_MSG,
+        )
+        try:
+            _lock_cm = GlobalPipelineLock(default_pipeline_lock_path(ROOT), non_blocking=True)
+            _lock_cm.__enter__()
+        except PipelineBusy:
+            print(RUN_IN_PROGRESS_MSG, flush=True)
+            return 2
+    try:
+        return _main_locked()
+    finally:
+        if _lock_cm is not None:
+            _lock_cm.__exit__(None, None, None)
+
+
+def _main_locked() -> int:
+    """Core export under pipeline lock."""
     snap_path, snap = load_latest_snapshot()
     tickers = load_watchlist()
+    prior_snap = None
+    snaps = list_full_snapshots()
+    for p in reversed(snaps):
+        if p.resolve() == snap_path.resolve():
+            continue
+        try:
+            prior_snap = json.loads(p.read_text(encoding="utf-8"))
+            break
+        except Exception:
+            continue
+
+    gate = {
+        "status": "ok",
+        "publishable": True,
+        "reason": None,
+        "message": "ok",
+        "extremeChanges": [],
+        "expectedTickers": list(tickers),
+        "receivedTickers": list((snap.get("tickers") or {}).keys()) if isinstance(snap, dict) else [],
+        "missingTickers": [],
+        "unexpectedTickers": [],
+    }
+    try:
+        import snapshot_quality as sq
+        gate = sq.gate_snapshot(snap, prior_snap, expected_tickers=tickers)
+    except Exception as exc:
+        print(f"quality gate error (fail-closed): {exc}")
+        gate = {
+            "status": "reject",
+            "reason": "gate_exception",
+            "message": f"{type(exc).__name__}: {exc}",
+            "publishable": False,
+            "extremeChanges": [],
+            "expectedTickers": list(tickers),
+            "receivedTickers": [],
+            "missingTickers": list(tickers),
+            "unexpectedTickers": [],
+        }
+
+    snap = dict(snap) if isinstance(snap, dict) else {"tickers": {}}
+    snap["qualityGate"] = {
+        "status": gate.get("status"),
+        "reason": gate.get("reason"),
+        "publishable": gate.get("publishable"),
+        "extremeChanges": gate.get("extremeChanges") or [],
+        "coverageRegressions": gate.get("coverageRegressions") or [],
+        "priceOutliers": gate.get("priceOutliers") or [],
+        "zeroAnalystConsensus": gate.get("zeroAnalystConsensus") or [],
+        "expectedTickers": gate.get("expectedTickers") or tickers,
+        "receivedTickers": gate.get("receivedTickers") or [],
+        "missingTickers": gate.get("missingTickers") or [],
+        "unexpectedTickers": gate.get("unexpectedTickers") or [],
+        "message": gate.get("message"),
+    }
+
+    if gate.get("publishable") is not True:
+        qpath = quarantine_snapshot(snap_path, snap, gate)
+        print(
+            f"ERROR: qualityGate.publishable!=true status={gate.get('status')} "
+            f"reason={gate.get('reason')} — aborting export (no public web/data write, "
+            f"no daily snapshots, no lastSuccessfulCollection update). quarantine={qpath}"
+        )
+        # Do NOT modify public web/data, daily snapshots, revisions, lastSuccessfulCollection
+        return 1
+
+    if gate.get("status") == "partial":
+        print(f"WARNING: partial watchlist collection — {gate.get('message')}")
+    elif gate.get("status") == "needs_verification":
+        # Should be non-publishable already; belt-and-suspenders
+        print(f"ERROR: needs_verification — {gate.get('message')}")
+        quarantine_snapshot(snap_path, snap, gate)
+        return 1
+
     driver_errors = ensure_driver_files(tickers)
     snap_utc = snap.get("snapshot_utc") or ""
     source = snap.get("source") or "Seeking Alpha"
@@ -1444,10 +2106,13 @@ def main():
     prior_meta = load_prior_meta()
 
     companies = build_companies(snap, tickers, year_keys=year_keys)
+    companies = apply_last_known_good_for_missing(companies, tickers, snap, gate)
+
     valuation = build_valuation(companies, tickers, snap_utc, year_keys=year_keys)
     history_raw = load_history()
     revisions = [map_history_row(r) for r in history_raw]
 
+    # Only append daily snapshots when publishable (already gated)
     daily_rows = seed_and_append_daily_snapshots(
         companies, tickers, snap, snap_path, year_keys=year_keys
     )
@@ -1455,7 +2120,6 @@ def main():
 
     earnings = load_or_init_earnings(companies, tickers)
 
-    # Deterministic alert engine — must run before writing alerts.json
     alerts_payload = run_build_alerts()
     active = alerts_payload.get("activeAlerts") or alerts_payload.get("alerts") or []
     history_alerts = alerts_payload.get("alertHistory") or active
@@ -1463,30 +2127,36 @@ def main():
         "activeAlerts": active,
         "alertHistory": history_alerts,
         "alertDiagnostics": alerts_payload.get("alertDiagnostics") or [],
-        "alerts": active,  # legacy alias
+        "homepageAttentionQueue": alerts_payload.get("homepageAttentionQueue") or [],
+        "changedSinceLastCollection": alerts_payload.get("changedSinceLastCollection") or [],
+        "alerts": active,
         "alertEngineLastEvaluated": alerts_payload.get("alertEngineLastEvaluated"),
+        "alertEngineLastAttempt": alerts_payload.get("alertEngineLastAttempt")
+        or alerts_payload.get("alertEngineLastEvaluated"),
+        "alertEngineLastSuccessfulEvaluation": alerts_payload.get("alertEngineLastSuccessfulEvaluation"),
         "alertEngineStatus": alerts_payload.get("alertEngineStatus") or "error",
         "alertEngineError": alerts_payload.get("alertEngineError"),
         "oneShotActiveDays": alerts_payload.get("oneShotActiveDays"),
     }
 
-    # Schedule-aware freshness (weekday 08:00 Taipei + grace) — replaces naive 48h
     freshness = compute_freshness(snap_utc)
     data_stale = bool(freshness.get("dataStale"))
 
-    # Preserve prior sitePublished until publish actually ships a new payload
     site_published = prior_meta.get("sitePublished")
     site_published_display = prior_meta.get("sitePublishedDisplay")
     if not site_published:
-        # First export: stamp once; publish script may refresh when hash changes
         published_dt = now_taipei()
         site_published = published_dt.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
         site_published_display = taipei_display_safe(site_published)
 
-    # dataVersion = substantive EPS/price/earnings/active-alert payload.
-    # refreshVersion / lastSuccessfulCollection = operational (may tick without data change).
-    # ageDays must NOT change dataVersion — strip before hashing; UI ages from eventAt.
     coll = collection_completeness(companies, tickers)
+    # Never claim COMPLETE when gate reports missing tickers
+    if gate.get("missingTickers") and coll["collectionStatus"] == "complete":
+        coll["collectionStatus"] = "partial"
+        coll["collectionStatusLabel"] = (
+            f"PARTIAL · {coll['successfulCount']}/{coll['totalCount']}"
+        )
+
     refresh_version = hashlib.sha256(
         canonical_json_bytes(
             {
@@ -1499,15 +2169,16 @@ def main():
     ).hexdigest()
 
     payload_parts = {
-        "companies": companies,
-        "valuation": {"rows": valuation},
-        "revisions": {"revisions": revisions},
-        "eps_history": eps_history,
-        "earnings": earnings,
-        "alerts": {
-            "activeAlerts": strip_operational_alert_fields(active),
+        "companies": strip_operational_fields(companies),
+        "valuation": strip_operational_fields({"rows": valuation}),
+        "revisions": strip_operational_fields({"revisions": revisions}),
+        "eps_history": strip_operational_fields(eps_history),
+        "earnings": strip_operational_fields(earnings),
+        "alerts": strip_operational_fields({
+            "activeAlerts": active,
             "alertEngineStatus": alerts.get("alertEngineStatus"),
-        },
+            "homepageAttentionQueue": alerts.get("homepageAttentionQueue") or [],
+        }),
         "watchlist": {"tickers": tickers},
     }
     data_version = compute_data_version(payload_parts)
@@ -1523,6 +2194,7 @@ def main():
         "mappingRule": MAPPING_RULE_NOTE,
         "trueCyStatus": TRUE_CY_STATUS,
         "momentumFormula": MOMENTUM_FORMULA_DOC,
+        "revisionRegimeDoc": REVISION_REGIME_DOC,
         "consensusDataAsOf": snap_utc,
         "consensusDataAsOfDisplay": display,
         "lastSuccessfulCollection": snap_utc,
@@ -1540,6 +2212,8 @@ def main():
         "refreshVersion": refresh_version,
         "buildId": build_id,
         "alertEngineLastEvaluated": alerts.get("alertEngineLastEvaluated"),
+        "alertEngineLastAttempt": alerts.get("alertEngineLastAttempt"),
+        "alertEngineLastSuccessfulEvaluation": alerts.get("alertEngineLastSuccessfulEvaluation"),
         "alertEngineStatus": alerts.get("alertEngineStatus"),
         "alertEngineError": alerts.get("alertEngineError"),
         "oneShotActiveDays": alerts.get("oneShotActiveDays"),
@@ -1550,19 +2224,56 @@ def main():
         "totalCount": coll["totalCount"],
         "collectionStatusLabel": coll["collectionStatusLabel"],
         "driverExportErrors": driver_errors or None,
+        "qualityGate": snap.get("qualityGate"),
     }
 
     WEB_DATA.mkdir(parents=True, exist_ok=True)
-    write_json(WEB_DATA / "watchlist.json", {"tickers": tickers})
-    write_json(WEB_DATA / "meta.json", meta)
-    write_json(WEB_DATA / "companies.json", companies)
-    write_json(WEB_DATA / "valuation.json", {"rows": valuation})
-    write_json(WEB_DATA / "revisions.json", {"revisions": revisions})
-    write_json(WEB_DATA / "eps_history.json", eps_history)
-    write_json(WEB_DATA / "earnings.json", earnings)
-    write_json(WEB_DATA / "alerts.json", alerts)
+    # Stamp buildId on every public JSON so frontend can reject mixed generations
+    watchlist_o = stamp_build_id({"tickers": tickers}, build_id)
+    companies_o = stamp_build_id(companies, build_id, ticker_map=True)
+    valuation_o = stamp_build_id({"rows": valuation}, build_id)
+    revisions_o = stamp_build_id({"revisions": revisions}, build_id)
+    eps_o = stamp_build_id(eps_history if isinstance(eps_history, dict) else {"series": eps_history}, build_id, ticker_map=True)
+    earnings_o = stamp_build_id(earnings, build_id, ticker_map=True)
+    alerts_o = stamp_build_id(alerts, build_id)
+    meta["buildId"] = build_id
 
-    regenerate_markdown_backups(companies, valuation, snap, tickers, year_keys=year_keys)
+    write_json(WEB_DATA / "watchlist.json", watchlist_o)
+    write_json(WEB_DATA / "meta.json", meta)
+    write_json(WEB_DATA / "companies.json", companies_o)
+    write_json(WEB_DATA / "valuation.json", valuation_o)
+    write_json(WEB_DATA / "revisions.json", revisions_o)
+    write_json(WEB_DATA / "eps_history.json", eps_o)
+    write_json(WEB_DATA / "earnings.json", earnings_o)
+    write_json(WEB_DATA / "alerts.json", alerts_o)
+
+    # Prefer single atomic dashboard.json (meta/companies/valuation/revisions/epsHistory/earnings/alerts/watchlist)
+    dashboard = {
+        "buildId": build_id,
+        "meta": meta,
+        "companies": companies,
+        "valuation": {"rows": valuation},
+        "revisions": {"revisions": revisions},
+        "epsHistory": eps_history,
+        "earnings": earnings,
+        "alerts": alerts,
+        "watchlist": {"tickers": tickers},
+    }
+    write_json(WEB_DATA / "dashboard.json", dashboard)
+
+    # Advance What-Changed checkpoint AFTER successful collection/export (atomic)
+    try:
+        cp = advance_comparison_checkpoint(snap_utc)
+        print(f"  comparisonCheckpoint → {cp.get('snapUtc')}")
+    except Exception as cp_exc:
+        print(f"ERROR: failed to advance comparisonCheckpoint: {cp_exc}")
+        raise
+
+    try:
+        regenerate_markdown_backups(companies, valuation, snap, tickers, year_keys=year_keys)
+    except Exception as md_exc:
+        # Markdown backup may exception without aborting core JSON export
+        print(f"markdown backup skipped: {md_exc}")
 
     print(f"Exported web data → {WEB_DATA}")
     print(f"  snapshot: {snap_path.name}")
@@ -1574,9 +2285,10 @@ def main():
     print(f"  dataVersion: {data_version[:12]}…")
     print(f"  refreshVersion: {refresh_version[:12]}…")
     print(f"  collectionStatus: {coll.get('collectionStatusLabel')}")
+    print(f"  qualityGate: {gate.get('status')} publishable={gate.get('publishable')}")
     print(f"  alertEngineStatus: {alerts.get('alertEngineStatus')} ({len(alerts.get('alerts') or [])} alerts)")
-
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

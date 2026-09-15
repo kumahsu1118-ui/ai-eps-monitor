@@ -513,20 +513,35 @@
     set("#meta-published", m.sitePublishedDisplay || m.sitePublished);
     set("#meta-source", m.primarySource);
     const collEl = $("#meta-collection-status");
+    const collRow = $("#meta-collection-status-row");
     if (collEl) {
       const label = m.collectionStatusLabel || m.collectionStatus;
-      if (label && String(m.collectionStatus || "").toLowerCase() === "partial") {
+      const st = String(m.collectionStatus || "").toLowerCase();
+      if (label && st === "partial") {
         collEl.textContent = String(label);
         collEl.removeAttribute("hidden");
         collEl.style.display = "";
-      } else if (label && String(m.collectionStatus || "").toLowerCase() === "failed") {
+        if (collRow) {
+          collRow.removeAttribute("hidden");
+          collRow.style.display = "";
+        }
+      } else if (label && st === "failed") {
         collEl.textContent = String(label);
         collEl.removeAttribute("hidden");
         collEl.style.display = "";
+        if (collRow) {
+          collRow.removeAttribute("hidden");
+          collRow.style.display = "";
+        }
       } else {
+        /* collectionStatus=complete (or absent): hide entire Collection row */
         collEl.textContent = "";
         collEl.setAttribute("hidden", "");
         collEl.style.display = "none";
+        if (collRow) {
+          collRow.setAttribute("hidden", "");
+          collRow.style.display = "none";
+        }
       }
     }
     const staleRow = $("#meta-stale-row");

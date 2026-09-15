@@ -39,6 +39,45 @@ if dv != sdv or dv != ldv:
 print(f"Same-build gate OK dataVersion={dv[:16]}…")
 PYGATE
 
+
+# --- different_detail_screenshot gate (Final Reliability) ---
+# 06-nvda-earnings-latest.png and 07-avgo-earnings-latest.png must be REAL distinct
+# company earnings detail pages — identical SHA256 → review build FAIL.
+python3 - <<'PYSHOT'
+import hashlib, sys
+from pathlib import Path
+ROOT = Path("/workspace/ai-eps-monitor")
+shots = ROOT / "review-pack/screenshots"
+p4 = shots / "04-nvda-company-latest.png"
+p5 = shots / "05-avgo-company-latest.png"
+p6 = shots / "06-nvda-earnings-latest.png"
+p7 = shots / "07-avgo-earnings-latest.png"
+for p in (p4, p5, p6, p7):
+    if not p.exists():
+        print(f"ERROR: missing {p.name}", file=sys.stderr)
+        sys.exit(1)
+h4 = hashlib.sha256(p4.read_bytes()).hexdigest()
+h5 = hashlib.sha256(p5.read_bytes()).hexdigest()
+h6 = hashlib.sha256(p6.read_bytes()).hexdigest()
+h7 = hashlib.sha256(p7.read_bytes()).hexdigest()
+ok = True
+if h4 == h6:
+    print(f"ERROR: company_vs_earnings — 04==06 identical SHA {h4}", file=sys.stderr)
+    ok = False
+if h5 == h7:
+    print(f"ERROR: company_vs_earnings — 05==07 identical SHA {h5}", file=sys.stderr)
+    ok = False
+if h6 == h7:
+    print(f"ERROR: different_detail_screenshot — 06==07 identical SHA {h6}", file=sys.stderr)
+    ok = False
+if not ok:
+    print("Capture REAL #/company/TICKER vs #/earnings/TICKER Earnings Detail (not renamed company shot).", file=sys.stderr)
+    sys.exit(1)
+print(f"company_vs_earnings_route_screenshot OK 04!=06 05!=07 06!=07")
+print(f"  nvda_co={h4[:12]} nvda_earn={h6[:12]} avgo_co={h5[:12]} avgo_earn={h7[:12]}")
+PYSHOT
+
+
 STAGE=$(mktemp -d)
 DEST="$STAGE/ai-eps-monitor-review"
 mkdir -p "$DEST"/{web/data,tools,fixtures/parser,fixtures/data,data/{earnings,drivers,alerts,daily_eps_snapshots,revisions,snapshots},review-pack/screenshots,dashboard}
@@ -48,7 +87,7 @@ cp -a "$ROOT"/web/index.html "$ROOT"/web/app.js "$ROOT"/web/styles.css "$DEST/we
 cp -a "$ROOT"/web/data/*.json "$DEST/web/data/" 2>/dev/null || true
 
 # Tools (no secrets)
-for f in export_web_data.py build_alerts.py run_acceptance_tests.py sa_parser.py publish_github_pages.sh build_review_zip.sh; do
+for f in export_web_data.py build_alerts.py run_acceptance_tests.py sa_parser.py atomic_io.py snapshot_quality.py publish_github_pages.sh build_review_zip.sh generate_readme_review.py; do
   cp -a "$ROOT/tools/$f" "$DEST/tools/" 2>/dev/null || true
 done
 
@@ -70,7 +109,7 @@ if ls "$ROOT"/data/snapshots/*.json >/dev/null 2>&1; then
 fi
 
 # Docs
-for f in README_REVIEW.md TEST_RESULTS_LONGTERM.md TEST_RESULTS_LONGTERM_R2.md TEST_RESULTS_ROUND3.md CALENDAR_MAPPING_AUDIT.md UPDATE_PIPELINE.md TEST_RESULTS_RELIABILITY.md README.md; do
+for f in README_REVIEW.md TEST_RESULTS_FAILCLOSED_SIGNAL.md TEST_RESULTS_FINAL_RELIABILITY.md TEST_RESULTS_ROUND3.md CALENDAR_MAPPING_AUDIT.md UPDATE_PIPELINE.md README.md; do
   [[ -f "$ROOT/$f" ]] && cp -a "$ROOT/$f" "$DEST/"
 done
 

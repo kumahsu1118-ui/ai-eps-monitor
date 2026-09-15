@@ -4,26 +4,33 @@
 Rules (documented, no ML / no invented thresholds beyond these):
   1. Single consensus EPS revision |revisionPct| > 2% (from revision events;
      baselines / n/a skipped). Computes pct from previous→current when missing.
-  2. Cumulative 30D revision > 5% from daily.jsonl (same ticker +
+  2. Cumulative INTERNAL 30D revision from daily.jsonl (same ticker +
      reportedFiscalPeriodEnding): nearest valid obs at window start vs latest.
-     Single-point revisions >2% remain rule 1 (revision events).
+     Stateful hysteresis: |pct|>=5% Open; stays >=5% Update same alert ID;
+     |pct|<4% Resolve. History only Open / material Update / Resolved (no daily spam).
      If <2 usable daily points in window → alertDiagnostics only (NOT alertHistory).
+  2b. Source-reported SA 1M |rev1M|>=5% → source_reported_1m_revision
+     labeled "Source window: Seeking Alpha 1M" (NEVER Internal 30D).
   3. Results vs consensus (resultsVsConsensus) and guidance vs consensus
      (guidanceVsConsensus) are separate. Guidance alert ONLY when
      guidanceDetail.vsConsensus in {above, below}; unknown → no guidance alert.
   4. gross_margin_pressure (result/pressure) vs gross_margin_guidance_revision
      (requires previousGuidance + currentGuidance). Legacy GM >200bps pressure
      when parsable.
-  5. Driver status → improving/deteriorating with reason.
+  5. Driver status → improving/deteriorating with reason. Multiple transitions
+     for the same driver (different eventDate) ALL remain in alertHistory.
+     Dedupe ONLY by full unique Alert ID — never collapse by (ticker, driver).
 
 Alert ID = rule + ticker + fiscalPeriod/eventPeriod + eventDate + driverName/eventKey
 (stable, unique — never collapse multiple drivers onto :na).
 
 Lifecycle:
   - One-shot events expire from activeAlerts after ONE_SHOT_ACTIVE_DAYS (21).
+  - Cumulative alerts are non-oneshot (stateful) while Open/Updated.
   - alertHistory retains material evaluated alerts (long retention).
   - insufficient-history records go to alertDiagnostics only (no history/daily pollution).
-  - activeAlerts = history items still within active window.
+  - activeAlerts = history items still within active window (or stateful open).
+  - homepageAttentionQueue: ranked Important Alerts (max 2/ticker, max 5).
 
 Writes data/alerts/index.json with activeAlerts + alertHistory (+ legacy alerts alias).
 """
@@ -57,6 +64,41 @@ TICKERS_DEFAULT = ["NVDA", "AVGO", "TSM", "MSFT", "BE", "KEYS"]
 # One-shot homepage window (within 14–30 days). Documented choice: 21 days.
 ONE_SHOT_ACTIVE_DAYS = 21
 CUMULATIVE_LOOKBACK_DAYS = 30
+CUMULATIVE_OPEN_PCT = 5.0
+CUMULATIVE_RESOLVE_PCT = 4.0  # hysteresis: resolve only below 4%
+CUMULATIVE_MATERIAL_PCT_DELTA = 1.0  # material update threshold (pp)
+SOURCE_1M_ALERT_PCT = 5.0
+SOURCE_1M_RESOLVE_PCT = 4.0  # hysteresis: resolve when |1M| < 4%
+SOURCE_1M_MATERIAL_PCT_DELTA = 1.0
+
+
+def consensus_confidence(analyst_count) -> str:
+    """Deterministic coverage confidence label."""
+    n = to_num(analyst_count)
+    if n is None:
+        return "Unknown"
+    n = int(n)
+    if n >= 10:
+        return "High"
+    if n >= 5:
+        return "Medium"
+    if n >= 2:
+        return "Low"
+    if n == 1:
+        return "Single estimate"
+    return "Unknown"
+
+
+def severity_for_source_1m(rev_pct, analyst_count, *, far_forward: bool = False) -> str:
+    """analystCount <5 on far-forward revisions must NOT default High severity."""
+    n = to_num(analyst_count)
+    conf = consensus_confidence(n)
+    if n is not None and n < 5 and far_forward:
+        # Cap severity for thin coverage far-forward
+        return "medium" if abs(to_num(rev_pct) or 0) >= 10 else "low"
+    if conf in {"Low", "Single estimate"}:
+        return "medium" if abs(to_num(rev_pct) or 0) >= SOURCE_1M_ALERT_PCT else "low"
+    return "high"
 
 
 def now_utc_iso() -> str:
@@ -241,8 +283,16 @@ def alert(
 
 
 def age_days(alert_obj: dict, now: datetime | None = None) -> int:
+    """Homepage age uses lastMaterialChangeAt (fallback openedAt), never snapshot Hold refresh."""
     now = now or datetime.now(timezone.utc)
-    ev = parse_date(alert_obj.get("eventAt") or alert_obj.get("eventDate") or alert_obj.get("createdAt"))
+    ev = parse_date(
+        alert_obj.get("lastMaterialChangeAt")
+        or alert_obj.get("lastMaterialUpdateAt")
+        or alert_obj.get("openedAt")
+        or alert_obj.get("eventAt")
+        or alert_obj.get("eventDate")
+        or alert_obj.get("createdAt")
+    )
     if ev is None:
         return 0
     return max(0, int((now - ev).total_seconds() // 86400))
@@ -250,10 +300,15 @@ def age_days(alert_obj: dict, now: datetime | None = None) -> int:
 
 def is_active(alert_obj: dict, now: datetime | None = None) -> bool:
     now = now or datetime.now(timezone.utc)
+    st = str(alert_obj.get("status") or alert_obj.get("lifecycleStatus") or "").lower()
+    if st == "resolved":
+        return False
+    if alert_obj.get("lifecycleEvent") == "Resolved":
+        return False
     until = parse_date(alert_obj.get("expiresAt") or alert_obj.get("activeUntil"))
     if until is not None:
         return now <= until
-    # Non-expiring (should be rare): keep active
+    # Non-expiring stateful (cumulative Open/Updated): keep active
     if alert_obj.get("oneshot") is False:
         return True
     # Legacy alerts without eventAt/createdAt cannot prove freshness → not active
@@ -319,15 +374,24 @@ def rule2_cumulative(
     lookback_days: int = CUMULATIVE_LOOKBACK_DAYS,
     daily_rows: list[dict] | None = None,
     now: datetime | None = None,
+    prior_history: list[dict] | None = None,
 ) -> tuple[list[dict], list[dict]]:
-    """Cumulative first→last revision in TRUE lookback window > 5%.
+    """Cumulative first→last revision in TRUE lookback window — stateful.
 
     Primary source: data/daily_eps_snapshots/daily.jsonl grouped by
     (ticker, reportedFiscalPeriodEnding). Uses nearest valid observation at
     or before window start vs the latest observation in the window.
 
-    Returns (alerts, diagnostics). Diagnostics carry insufficient-history
-    status and must NOT enter alertHistory / activeAlerts / daily pollution.
+    Stateful hysteresis (Internal 30D — never SA 1M):
+      |pct| >= 5% → Open (or Update same active alert ID while stays >=5%)
+      |pct| < 4%  → Resolve active alert
+      4% <= |pct| < 5% → hold prior Open/Updated (hysteresis band)
+
+    History only records Open / material Update / Resolved — no daily spam.
+    Stable alert ID per open episode (no daily minting).
+
+    Returns (alerts_for_merge, diagnostics). Diagnostics carry insufficient-history
+    and must NOT enter alertHistory / activeAlerts / daily pollution.
     NEVER fall back to all-history while claiming a 30D window.
     """
     now = now or datetime.now(timezone.utc)
@@ -356,7 +420,6 @@ def rule2_cumulative(
         groups.setdefault((ticker, fiscal), []).append((dt, cons, row))
 
     # Fallback: if no daily rows at all, derive sparse points from revision history
-    # (still require >=2 points inside the TRUE window — never all-history as 30D).
     if not groups and history:
         for row in history:
             ticker = row.get("Ticker")
@@ -371,21 +434,62 @@ def rule2_cumulative(
                 continue
             groups.setdefault((ticker, fiscal), []).append((dt, cur, row))
 
+    # Index prior open cumulative alerts by (ticker, fiscal)
+    prior_open: dict[tuple, dict] = {}
+    for a in prior_history or []:
+        if not isinstance(a, dict):
+            continue
+        if a.get("rule") != "cumulative_revision_gt_5pct":
+            continue
+        st = str(a.get("status") or a.get("lifecycleStatus") or "").lower()
+        if st == "resolved":
+            continue
+        key = (a.get("ticker"), a.get("fiscalPeriod") or a.get("period") or a.get("fiscal"))
+        if not key[0] or not key[1]:
+            continue
+        # Prefer most recently updated / opened
+        prev = prior_open.get(key)
+        if prev is None:
+            prior_open[key] = a
+        else:
+            def _ts(x):
+                return parse_date(x.get("updatedAt") or x.get("eventAt") or x.get("createdAt")) or datetime.min.replace(tzinfo=timezone.utc)
+            if _ts(a) >= _ts(prev):
+                prior_open[key] = a
+
     out: list[dict] = []
     diagnostics: list[dict] = []
+
+    def _stable_cum_id(ticker: str, fiscal: str, open_date: str) -> str:
+        return make_alert_id(
+            "cumulative_revision_gt_5pct",
+            ticker,
+            fiscal,
+            open_date,
+            "internal_30d",
+        )
+
+    def _material(old_pct, new_pct, old_dir, new_dir) -> bool:
+        if old_pct is None:
+            return True
+        if old_dir and new_dir and old_dir != new_dir:
+            return True
+        try:
+            return abs(float(new_pct) - float(old_pct)) >= CUMULATIVE_MATERIAL_PCT_DELTA
+        except Exception:
+            return True
+
+    evaluated_keys = set()
     for (ticker, fiscal), pts in groups.items():
+        evaluated_keys.add((ticker, fiscal))
         pts_sorted = sorted(pts, key=lambda x: x[0])
-        # Candidates at or before window_start (nearest = last of these)
         before = [p for p in pts_sorted if p[0] <= window_start]
-        in_or_after_start = [p for p in pts_sorted if p[0] >= window_start]
         latest_candidates = [p for p in pts_sorted if p[0] <= now]
         if not latest_candidates:
             continue
         latest = latest_candidates[-1]
 
         start_pt = before[-1] if before else None
-        # Start anchor must be near window start (not a 60d-old stale point claiming to be 30D).
-        # Slack: at most 2 days before window_start.
         MAX_START_SLACK_DAYS = 2
         if start_pt is not None and (window_start - start_pt[0]).days > MAX_START_SLACK_DAYS:
             start_pt = None
@@ -407,9 +511,26 @@ def rule2_cumulative(
                     "diagnostic": True,
                 }
             )
+            # Resolve any prior open if we lost the window
+            prior = prior_open.get((ticker, fiscal))
+            if prior is not None:
+                resolved = dict(prior)
+                resolved["status"] = "Resolved"
+                resolved["lifecycleStatus"] = "Resolved"
+                resolved["lifecycleEvent"] = "Resolved"
+                resolved["resolvedAt"] = now.strftime("%Y-%m-%dT%H:%M:%SZ")
+                resolved["oneshot"] = False
+                resolved["expiresAt"] = now.strftime("%Y-%m-%dT%H:%M:%SZ")
+                resolved["activeUntil"] = resolved["expiresAt"]
+                resolved["message"] = (
+                    f"{ticker} {fiscal}: Internal 30D cumulative resolved "
+                    f"(insufficient history / window lost)"
+                )
+                resolved["title"] = resolved["message"]
+                resolved["windowLabel"] = "Internal 30D"
+                out.append(resolved)
             continue
 
-        # Need a later observation distinct from start
         if latest[0] <= start_pt[0] or latest[1] is None:
             diagnostics.append(
                 {
@@ -435,18 +556,23 @@ def rule2_cumulative(
         if first is None or last is None or first == 0:
             continue
         cum_pct = (last - first) / abs(first) * 100.0
-        if abs(cum_pct) > 5.0:
-            direction = "upgrade" if cum_pct > 0 else "downgrade"
-            last_date = latest[0].strftime("%Y-%m-%d")
-            out.append(
-                alert(
+        abs_pct = abs(cum_pct)
+        direction = "upgrade" if cum_pct > 0 else "downgrade"
+        last_date = latest[0].strftime("%Y-%m-%d")
+        prior = prior_open.get((ticker, fiscal))
+
+        if abs_pct >= CUMULATIVE_OPEN_PCT:
+            if prior is None:
+                # Open new episode — stable ID uses open date (not daily mint)
+                open_date = last_date
+                a = alert(
                     "cumulative_revision_gt_5pct",
                     "high",
                     ticker,
-                    f"{ticker} {fiscal}: cumulative {lookback_days}D revision {direction} {cum_pct:+.2f}% (>5%)",
+                    f"{ticker} {fiscal}: Internal 30D cumulative {direction} {cum_pct:+.2f}% (≥5%) [Open]",
                     period=fiscal,
-                    event_date=last_date,
-                    event_key=f"cum_{cum_pct:+.2f}",
+                    event_date=open_date,
+                    event_key="internal_30d",
                     event_at=latest[0].strftime("%Y-%m-%dT%H:%M:%SZ"),
                     cumulativePct=cum_pct,
                     lookbackDays=lookback_days,
@@ -454,9 +580,109 @@ def rule2_cumulative(
                     startEps=first,
                     endEps=last,
                     startDate=start_pt[0].strftime("%Y-%m-%d"),
+                    oneshot=False,
+                    status="Open",
+                    lifecycleStatus="Open",
+                    lifecycleEvent="Open",
+                    windowLabel="Internal 30D",
+                    openedAt=latest[0].strftime("%Y-%m-%dT%H:%M:%SZ"),
+                    updatedAt=latest[0].strftime("%Y-%m-%dT%H:%M:%SZ"),
+                    direction=direction,
                 )
-            )
+                a["id"] = _stable_cum_id(ticker, fiscal, open_date)
+                a["expiresAt"] = None
+                a["activeUntil"] = None
+                out.append(a)
+            else:
+                # Update same active alert ID (no new daily ID)
+                a = dict(prior)
+                old_pct = to_num(prior.get("cumulativePct"))
+                old_dir = prior.get("direction")
+                material = _material(old_pct, cum_pct, old_dir, direction)
+                a["cumulativePct"] = cum_pct
+                a["endEps"] = last
+                a["startEps"] = first
+                a["startDate"] = start_pt[0].strftime("%Y-%m-%d")
+                a["direction"] = direction
+                a["lookbackDays"] = lookback_days
+                a["oneshot"] = False
+                a["expiresAt"] = None
+                a["activeUntil"] = None
+                a["windowLabel"] = "Internal 30D"
+                a["updatedAt"] = now.strftime("%Y-%m-%dT%H:%M:%SZ")
+                a["status"] = "Updated" if material else (prior.get("status") or "Open")
+                a["lifecycleStatus"] = a["status"]
+                if material:
+                    a["lifecycleEvent"] = "Updated"
+                    a["message"] = (
+                        f"{ticker} {fiscal}: Internal 30D cumulative {direction} {cum_pct:+.2f}% (≥5%) [Updated]"
+                    )
+                    a["title"] = a["message"]
+                    a["lastMaterialUpdateAt"] = a["updatedAt"]
+                    a["lastMaterialPct"] = cum_pct
+                else:
+                    # Non-material: keep prior message / lifecycleEvent; still return for active merge
+                    a["lifecycleEvent"] = "Hold"
+                    a["_skipHistoryAppend"] = True
+                # Preserve stable id / createdAt / openedAt
+                a["id"] = prior.get("id") or _stable_cum_id(
+                    ticker, fiscal, (prior.get("eventDate") or last_date)
+                )
+                out.append(a)
+        elif abs_pct < CUMULATIVE_RESOLVE_PCT:
+            if prior is not None:
+                a = dict(prior)
+                a["status"] = "Resolved"
+                a["lifecycleStatus"] = "Resolved"
+                a["lifecycleEvent"] = "Resolved"
+                a["resolvedAt"] = now.strftime("%Y-%m-%dT%H:%M:%SZ")
+                a["cumulativePct"] = cum_pct
+                a["direction"] = direction
+                a["oneshot"] = False
+                a["expiresAt"] = now.strftime("%Y-%m-%dT%H:%M:%SZ")
+                a["activeUntil"] = a["expiresAt"]
+                a["windowLabel"] = "Internal 30D"
+                a["message"] = (
+                    f"{ticker} {fiscal}: Internal 30D cumulative resolved "
+                    f"({cum_pct:+.2f}% < {CUMULATIVE_RESOLVE_PCT}%)"
+                )
+                a["title"] = a["message"]
+                out.append(a)
+            # else: never opened — silence (no spam)
+        else:
+            # Hysteresis band 4–5%: hold prior open without new history spam
+            if prior is not None:
+                a = dict(prior)
+                a["cumulativePct"] = cum_pct
+                a["direction"] = direction
+                a["updatedAt"] = now.strftime("%Y-%m-%dT%H:%M:%SZ")
+                a["oneshot"] = False
+                a["expiresAt"] = None
+                a["activeUntil"] = None
+                a["lifecycleEvent"] = "Hold"
+                a["_skipHistoryAppend"] = True
+                a["windowLabel"] = "Internal 30D"
+                out.append(a)
+
+    # Resolve prior opens for keys no longer in groups (ticker/fiscal disappeared)
+    for key, prior in prior_open.items():
+        if key in evaluated_keys:
+            continue
+        a = dict(prior)
+        a["status"] = "Resolved"
+        a["lifecycleStatus"] = "Resolved"
+        a["lifecycleEvent"] = "Resolved"
+        a["resolvedAt"] = now.strftime("%Y-%m-%dT%H:%M:%SZ")
+        a["oneshot"] = False
+        a["expiresAt"] = now.strftime("%Y-%m-%dT%H:%M:%SZ")
+        a["activeUntil"] = a["expiresAt"]
+        a["windowLabel"] = "Internal 30D"
+        a["message"] = f"{key[0]} {key[1]}: Internal 30D cumulative resolved (no longer tracked)"
+        a["title"] = a["message"]
+        out.append(a)
+
     return out, diagnostics
+
 
 
 def _norm_vs(val) -> str | None:
@@ -734,8 +960,46 @@ def _driver_event_date(driver: dict, file_obj: dict) -> tuple[str | None, bool]:
 
 
 def rule5_driver_or_digest_flags(tickers: list[str]) -> list[dict]:
-    """Driver status changed to improving/deteriorating with reason — unique per driver."""
+    """Driver status transitions with reason.
+
+    Emits one alert per distinct transition (previous→current + eventDate).
+    If driver.statusHistory / transitions[] is present, emit ALL entries.
+    Current Driver State remains the latest transition only (currentStatus).
+    Unique Alert IDs include eventDate — NEVER collapse by (ticker, driver).
+    """
     out = []
+
+    def _emit(t, name, prev, cur, reason, event_date, missing, source_url=None, fiscal=None):
+        if cur not in {"improving", "deteriorating"} or not reason:
+            return
+        extra = {}
+        if missing:
+            extra["missingEventDate"] = True
+        event_at = f"{event_date}T00:00:00Z" if event_date else None
+        if prev and prev != cur:
+            msg = f"{t} driver '{name}': {prev} → {cur} — {reason}"
+        else:
+            msg = f"{t} driver '{name}': {cur} — {reason}"
+            prev = prev or None
+        out.append(
+            alert(
+                "driver_status_change",
+                "medium" if cur == "improving" else "high",
+                t,
+                msg,
+                period=fiscal or "na",
+                event_date=event_date,
+                event_key=name,
+                event_at=event_at,
+                driver=name,
+                driverName=name,
+                previousStatus=prev,
+                currentStatus=cur,
+                sourceUrl=source_url,
+                **extra,
+            )
+        )
+
     for t in tickers:
         drv = load_json(DRIVERS_DIR / f"{t}.json")
         if not drv:
@@ -743,61 +1007,256 @@ def rule5_driver_or_digest_flags(tickers: list[str]) -> list[dict]:
         for d in drv.get("drivers") or []:
             if not isinstance(d, dict):
                 continue
-            cur = str(d.get("currentStatus") or d.get("status") or "").lower()
-            prev = str(d.get("previousStatus") or "").lower()
-            reason = d.get("reason") or d.get("note")
             name = d.get("name") or "unnamed"
-            event_date, missing = _driver_event_date(d, drv)
-            # NEVER use today as business eventAt
-            event_at = f"{event_date}T00:00:00Z" if event_date else None
-            if cur in {"improving", "deteriorating"} and reason:
-                extra = {}
-                if missing:
-                    extra["missingEventDate"] = True
-                if prev and prev != cur:
-                    out.append(
-                        alert(
-                            "driver_status_change",
-                            "medium",
-                            t,
-                            f"{t} driver '{name}': {prev} → {cur} — {reason}",
-                            period=d.get("fiscalPeriod") or "na",
-                            event_date=event_date,
-                            event_key=name,
-                            event_at=event_at,
-                            driver=name,
-                            driverName=name,
-                            previousStatus=prev,
-                            currentStatus=cur,
-                            sourceUrl=d.get("sourceUrl"),
-                            **extra,
-                        )
-                    )
-                elif not prev and cur in {"improving", "deteriorating"}:
-                    out.append(
-                        alert(
-                            "driver_status_change",
-                            "medium",
-                            t,
-                            f"{t} driver '{name}': {cur} — {reason}",
-                            period=d.get("fiscalPeriod") or "na",
-                            event_date=event_date,
-                            event_key=name,
-                            event_at=event_at,
-                            driver=name,
-                            driverName=name,
-                            currentStatus=cur,
-                            sourceUrl=d.get("sourceUrl"),
-                            **extra,
-                        )
-                    )
+            reason_default = d.get("reason") or d.get("note")
+            fiscal = d.get("fiscalPeriod")
+            source_url = d.get("sourceUrl")
+            transitions = d.get("statusHistory") or d.get("transitions") or []
+            if isinstance(transitions, list) and transitions:
+                for tr in transitions:
+                    if not isinstance(tr, dict):
+                        continue
+                    prev = str(tr.get("previousStatus") or tr.get("from") or tr.get("prev") or "").lower()
+                    cur = str(tr.get("currentStatus") or tr.get("to") or tr.get("status") or "").lower()
+                    reason = tr.get("reason") or tr.get("note") or reason_default
+                    event_date, missing = _driver_event_date(tr, drv)
+                    if not event_date:
+                        event_date, missing = _driver_event_date(d, drv)
+                    _emit(t, name, prev, cur, reason, event_date, missing, source_url, fiscal)
+            else:
+                cur = str(d.get("currentStatus") or d.get("status") or "").lower()
+                prev = str(d.get("previousStatus") or "").lower()
+                event_date, missing = _driver_event_date(d, drv)
+                if cur in {"improving", "deteriorating"} and reason_default:
+                    if prev and prev != cur:
+                        _emit(t, name, prev, cur, reason_default, event_date, missing, source_url, fiscal)
+                    elif not prev:
+                        _emit(t, name, prev, cur, reason_default, event_date, missing, source_url, fiscal)
     return out
+
+
+def rule6_source_reported_1m(
+    tickers: list[str] | None = None,
+    prior_history: list | None = None,
+    now: datetime | None = None,
+) -> list[dict]:
+    """SA-supplied 1M revision — stateful Open / Update / Resolve (no daily spam).
+
+    ID must NOT include snapshot date as daily spam key.
+    Open when |1M| >= 5%; stay open with Update while |1M| >= 5%; Resolve when |1M| < 4%.
+    Label: "Source window: Seeking Alpha 1M". NEVER call this Internal 30D.
+    """
+    now = now or datetime.now(timezone.utc)
+    out = []
+    snap_dir = ROOT / "data" / "snapshots"
+    snap = None
+    if snap_dir.exists():
+        files = sorted(snap_dir.glob("*.json"), reverse=True)
+        for p in files:
+            if p.name.startswith("raw_") or "quarantine" in p.parts:
+                continue
+            try:
+                snap = load_json(p)
+                if snap:
+                    break
+            except Exception:
+                continue
+    if not snap:
+        return out
+    tickers = tickers or load_tickers()
+    year_keys = []
+    try:
+        # Prefer meta display years when available
+        meta_p = ROOT / "web" / "data" / "meta.json"
+        if meta_p.exists():
+            year_keys = (json.loads(meta_p.read_text(encoding="utf-8")) or {}).get("displayMappedYears") or []
+    except Exception:
+        year_keys = []
+
+    # Index prior open source_1m alerts by (ticker, slot)
+    prior_open: dict[tuple, dict] = {}
+    for a in prior_history or []:
+        if not isinstance(a, dict):
+            continue
+        if a.get("rule") != "source_reported_1m_revision":
+            continue
+        st = str(a.get("status") or a.get("lifecycleStatus") or "").lower()
+        if st == "resolved":
+            continue
+        slot = a.get("slot") or a.get("eventKey") or a.get("fiscalPeriod")
+        key = (a.get("ticker"), slot)
+        if not key[0] or not key[1]:
+            continue
+        prev = prior_open.get(key)
+        if prev is None:
+            prior_open[key] = a
+        else:
+            def _ts(x):
+                return parse_date(x.get("updatedAt") or x.get("eventAt") or x.get("createdAt")) or datetime.min.replace(tzinfo=timezone.utc)
+            if _ts(a) >= _ts(prev):
+                prior_open[key] = a
+
+    evaluated = set()
+    for t in tickers:
+        td = (snap.get("tickers") or {}).get(t) or {}
+        eps = td.get("eps") or {}
+        slots = list(eps.keys())
+        # Far-forward = last display year when known, else last slot
+        far_slot = None
+        if year_keys:
+            far_slot = year_keys[-1] if year_keys else None
+        elif slots:
+            far_slot = sorted(slots)[-1]
+
+        for slot, row in eps.items():
+            if not isinstance(row, dict):
+                continue
+            rev = to_num(row.get("rev_1M_pct") if "rev_1M_pct" in row else row.get("rev1M"))
+            if rev is None:
+                continue
+            fiscal = row.get("reported_fiscal_label") or row.get("reportedFiscalLabel") or slot
+            analysts = to_num(row.get("analysts") if "analysts" in row else row.get("analystCount"))
+            high = to_num(row.get("high"))
+            low = to_num(row.get("low"))
+            cons = to_num(row.get("consensus"))
+            disp = None
+            if high is not None and low is not None and cons not in (None, 0):
+                disp = (high - low) / abs(cons)
+            conf = consensus_confidence(analysts)
+            far_forward = bool(far_slot and slot == far_slot)
+            direction = "upgrade" if rev > 0 else "downgrade"
+            abs_rev = abs(rev)
+            key = (t, f"sa1m_{slot}")
+            evaluated.add(key)
+            # Prefer eventKey style matching prior
+            prior = prior_open.get((t, f"sa1m_{slot}")) or prior_open.get((t, slot)) or prior_open.get((t, fiscal))
+
+            coverage_kwargs = dict(
+                analystCount=int(analysts) if analysts is not None else None,
+                consensusLow=low,
+                consensusHigh=high,
+                consensus=cons,
+                dispersion=disp,
+                confidence=conf,
+                farForward=far_forward,
+                revisionPct=rev,
+                rev1M=rev,
+                slot=slot,
+                fiscal=fiscal,
+                sourceWindow="Seeking Alpha 1M",
+                windowLabel="Source window: Seeking Alpha 1M",
+                neverInternal30D=True,
+                oneshot=False,
+            )
+
+            if abs_rev >= SOURCE_1M_ALERT_PCT:
+                sev = severity_for_source_1m(rev, analysts, far_forward=far_forward)
+                if prior is None:
+                    # Open — stable ID WITHOUT snapshot date (use slot key only via event_date=None sentinel "open")
+                    opened = snap.get("snapshot_utc") or now_utc_iso()
+                    a = alert(
+                        "source_reported_1m_revision",
+                        sev,
+                        t,
+                        (
+                            f"{t} {fiscal}: Seeking Alpha 1M revision {direction} {rev:+.2f}% (≥5%) [Open] "
+                            f"— Source window: Seeking Alpha 1M"
+                            + (f" · Confidence: {conf}" if conf else "")
+                        ),
+                        period=fiscal,
+                        event_date="stateful",  # NOT snapshot date — prevents daily spam IDs
+                        event_key=f"sa1m_{slot}",
+                        event_at=opened,
+                        status="Open",
+                        lifecycleStatus="Open",
+                        lifecycleEvent="Open",
+                        openedAt=opened,
+                        lastMaterialChangeAt=opened,
+                        lastObservedAt=opened,
+                        **coverage_kwargs,
+                    )
+                    out.append(a)
+                else:
+                    # Update same ID — material change or heartbeat Hold
+                    a = dict(prior)
+                    old_pct = to_num(prior.get("revisionPct") or prior.get("rev1M"))
+                    material = old_pct is None or abs(old_pct - rev) >= SOURCE_1M_MATERIAL_PCT_DELTA
+                    observed = snap.get("snapshot_utc") or now_utc_iso()
+                    a.update({k: v for k, v in coverage_kwargs.items() if v is not None})
+                    a["severity"] = sev
+                    a["status"] = "Open"
+                    a["lifecycleStatus"] = "Open"
+                    a["lifecycleEvent"] = "Updated" if material else "Hold"
+                    a["updatedAt"] = observed
+                    a["lastObservedAt"] = observed
+                    a["oneshot"] = False
+                    a["expiresAt"] = None
+                    a["activeUntil"] = None
+                    # Preserve openedAt / business eventAt on Hold — never refresh to snapshot time
+                    if not a.get("openedAt"):
+                        a["openedAt"] = prior.get("openedAt") or prior.get("eventAt") or observed
+                    if material:
+                        a["lastMaterialChangeAt"] = observed
+                        a["eventAt"] = observed  # material business event time advances
+                        a["message"] = (
+                            f"{t} {fiscal}: Seeking Alpha 1M revision {direction} {rev:+.2f}% (≥5%) "
+                            f"[Updated] — Source window: Seeking Alpha 1M"
+                            + (f" · Confidence: {conf}" if conf else "")
+                        )
+                        a["title"] = a["message"]
+                    else:
+                        # Hold: only lastObservedAt; keep eventAt / lastMaterialChangeAt
+                        a["eventAt"] = prior.get("eventAt") or prior.get("openedAt") or a.get("eventAt")
+                        if prior.get("lastMaterialChangeAt"):
+                            a["lastMaterialChangeAt"] = prior["lastMaterialChangeAt"]
+                        elif not a.get("lastMaterialChangeAt"):
+                            a["lastMaterialChangeAt"] = a.get("openedAt") or a.get("eventAt")
+                        a["message"] = (
+                            f"{t} {fiscal}: Seeking Alpha 1M revision {direction} {rev:+.2f}% (≥5%) "
+                            f"[Hold] — Source window: Seeking Alpha 1M"
+                            + (f" · Confidence: {conf}" if conf else "")
+                        )
+                        a["title"] = a["message"]
+                        a["_skipHistoryAppend"] = True
+                    # Preserve stable id / createdAt / openedAt
+                    out.append(a)
+            elif abs_rev < SOURCE_1M_RESOLVE_PCT and prior is not None:
+                resolved = dict(prior)
+                resolved["status"] = "Resolved"
+                resolved["lifecycleStatus"] = "Resolved"
+                resolved["lifecycleEvent"] = "Resolved"
+                resolved["resolvedAt"] = now.strftime("%Y-%m-%dT%H:%M:%SZ")
+                resolved["oneshot"] = False
+                resolved["expiresAt"] = now.strftime("%Y-%m-%dT%H:%M:%SZ")
+                resolved["activeUntil"] = resolved["expiresAt"]
+                resolved["revisionPct"] = rev
+                resolved["rev1M"] = rev
+                resolved["message"] = (
+                    f"{t} {fiscal}: Seeking Alpha 1M revision resolved (|1M|={rev:+.2f}% <4%) "
+                    f"— Source window: Seeking Alpha 1M"
+                )
+                resolved["title"] = resolved["message"]
+                resolved["windowLabel"] = "Source window: Seeking Alpha 1M"
+                out.append(resolved)
+            # else: between 4 and 5 → hold prior open without spam if any; ignore if none
+
+    # Resolve prior opens whose slots disappeared / no longer evaluated
+    for key, prior in prior_open.items():
+        ek = (prior.get("ticker"), prior.get("eventKey") or f"sa1m_{prior.get('slot')}")
+        if ek in evaluated or (prior.get("ticker"), prior.get("eventKey")) in evaluated:
+            continue
+        # Keep open until resolve threshold observed — do not auto-resolve on missing row
+        pass
+
+    return out
+
 
 
 # Material rules shown on homepage (exclude informational insufficient-history)
 HOMEPAGE_RULES = {
     "single_revision_gt_2pct",
     "cumulative_revision_gt_5pct",
+    "source_reported_1m_revision",
     "results_vs_consensus",
     "guidance_vs_consensus",
     "gross_margin_pressure",
@@ -807,8 +1266,101 @@ HOMEPAGE_RULES = {
     "gm_guidance_change_gt_200bps",
 }
 
+# Deterministic homepage Attention Queue ranking (lower = higher priority)
+ATTENTION_PRIORITY = {
+    "driver_deteriorating": 0,
+    "revision_downside": 1,
+    "guidance_downside": 2,
+    "margin_pressure": 3,
+    "driver_improving": 4,
+    "results_beat": 5,
+    "other": 9,
+}
+
+
 SEVERITY_RANK = {"high": 0, "medium": 1, "low": 2, "info": 3}
 
+
+
+def attention_rank(alert_obj: dict) -> tuple:
+    """Lower tuple sorts first for homepage Attention Queue."""
+    rule = alert_obj.get("rule") or ""
+    cur = str(alert_obj.get("currentStatus") or "").lower()
+    msg = str(alert_obj.get("message") or "").lower()
+    pct = to_num(alert_obj.get("revisionPct") if alert_obj.get("revisionPct") is not None else alert_obj.get("cumulativePct"))
+    bucket = "other"
+    if rule == "driver_status_change" and cur == "deteriorating":
+        bucket = "driver_deteriorating"
+    elif rule in {"single_revision_gt_2pct", "cumulative_revision_gt_5pct", "source_reported_1m_revision"}:
+        if pct is not None and pct < 0:
+            bucket = "revision_downside"
+        elif "downgrade" in msg or "deteriorat" in msg:
+            bucket = "revision_downside"
+        else:
+            bucket = "revision_downside" if (pct is not None and pct < 0) else "other"
+            if pct is not None and pct >= 0:
+                bucket = "other"
+    elif rule == "guidance_vs_consensus" and (
+        "below" in msg or str(alert_obj.get("vsConsensus") or "").lower() == "below"
+    ):
+        bucket = "guidance_downside"
+    elif rule in {"gross_margin_pressure", "gross_margin_guidance_revision", "gm_guidance_change_gt_200bps"}:
+        bucket = "margin_pressure"
+    elif rule == "driver_status_change" and cur == "improving":
+        bucket = "driver_improving"
+    elif rule == "results_vs_consensus" and (
+        "above" in msg or "beat" in msg or str(alert_obj.get("vsConsensus") or "").lower() == "above"
+    ):
+        bucket = "results_beat"
+    pri = ATTENTION_PRIORITY.get(bucket, 9)
+    sev = SEVERITY_RANK.get(str(alert_obj.get("severity") or "").lower(), 9)
+    ts = parse_date(alert_obj.get("eventAt") or alert_obj.get("eventDate")) or datetime.min.replace(tzinfo=timezone.utc)
+    return (pri, sev, -ts.timestamp())
+
+
+def build_attention_queue(active: list[dict], max_total: int = 5, max_per_ticker: int = 2) -> list[dict]:
+    """Deterministic Important Alerts ranking — NOT first-N of activeAlerts."""
+    ranked = sorted(active, key=attention_rank)
+    out = []
+    per: dict[str, int] = {}
+    for a in ranked:
+        t = a.get("ticker") or "?"
+        if per.get(t, 0) >= max_per_ticker:
+            continue
+        out.append(a)
+        per[t] = per.get(t, 0) + 1
+        if len(out) >= max_total:
+            break
+    return out
+
+
+def events_since_last_collection(
+    history_all: list[dict],
+    last_collection: str | None,
+) -> list[dict]:
+    """WHAT CHANGED SINCE LAST COLLECTION — only events after last successful collection."""
+    if not last_collection:
+        return []
+    cutoff = parse_date(last_collection)
+    if cutoff is None:
+        return []
+    out = []
+    for a in history_all:
+        if a.get("diagnostic") or a.get("_skipHistoryAppend"):
+            continue
+        if a.get("lifecycleEvent") == "Hold":
+            continue
+        ev = parse_date(a.get("eventAt") or a.get("updatedAt") or a.get("createdAt") or a.get("eventDate"))
+        if ev is None:
+            continue
+        if ev > cutoff:
+            out.append(a)
+    out.sort(
+        key=lambda x: (
+            -(parse_date(x.get("eventAt") or x.get("updatedAt") or x.get("createdAt")) or datetime.min.replace(tzinfo=timezone.utc)).timestamp()
+        )
+    )
+    return out
 
 
 def evaluate_alerts(now: datetime | None = None) -> dict:
@@ -816,17 +1368,23 @@ def evaluate_alerts(now: datetime | None = None) -> dict:
     tickers = load_tickers()
     history = load_history()
     daily_rows = load_daily_jsonl()
+    prior = load_json(ALERTS_PATH) or {}
+    prior_hist = prior.get("alertHistory") or prior.get("alerts") or []
+
     generated: list[dict] = []
     diagnostics: list[dict] = []
     generated.extend(rule1_single_revision(history))
-    cum_alerts, cum_diag = rule2_cumulative(history, daily_rows=daily_rows, now=now)
+    cum_alerts, cum_diag = rule2_cumulative(
+        history, daily_rows=daily_rows, now=now, prior_history=prior_hist
+    )
     generated.extend(cum_alerts)
     diagnostics.extend(cum_diag)
     generated.extend(rule3_results_and_guidance(tickers))
     generated.extend(rule4_gm(tickers))
     generated.extend(rule5_driver_or_digest_flags(tickers))
+    generated.extend(rule6_source_reported_1m(tickers, prior_history=prior_hist, now=now))
 
-    # Deduplicate by id (keep first)
+    # Deduplicate ONLY by full unique Alert ID (keep first / prefer newer generated)
     seen = set()
     uniq = []
     for a in generated:
@@ -837,63 +1395,56 @@ def evaluate_alerts(now: datetime | None = None) -> dict:
         uniq.append(a)
 
     # Merge with prior history (long retention) — exclude diagnostics / insufficient-history
-    prior = load_json(ALERTS_PATH) or {}
-    prior_hist = prior.get("alertHistory") or prior.get("alerts") or []
+    # NO cross-event collapse of driver_status_change by (ticker, driver).
     hist_by_id = {}
     for a in prior_hist:
         if not isinstance(a, dict) or not a.get("id"):
             continue
-        # Drop any previously-stored insufficient-history rows from history
         if a.get("rule") == "cumulative_revision_insufficient_history" or a.get("diagnostic"):
             continue
         if a.get("status") == "insufficient history":
             continue
         hist_by_id[a.get("id")] = a
+
     for a in uniq:
         if a.get("diagnostic") or a.get("rule") == "cumulative_revision_insufficient_history":
+            continue
+        if a.get("_skipHistoryAppend") and a.get("lifecycleEvent") == "Hold":
+            # Still refresh active copy in hist_by_id without new history spam semantics
+            aid = a.get("id")
+            if aid and aid in hist_by_id:
+                old = hist_by_id[aid]
+                merged = dict(old)
+                for k, v in a.items():
+                    if k.startswith("_"):
+                        continue
+                    if k in {"createdAt", "openedAt", "id", "eventAt", "lastMaterialChangeAt"}:
+                        continue  # never refresh business event time on Hold
+                    if v is not None:
+                        merged[k] = v
+                merged["lastObservedAt"] = a.get("lastObservedAt") or merged.get("lastObservedAt")
+                # Keep prior lifecycleEvent if Hold
+                if old.get("lifecycleEvent") in {"Open", "Updated"}:
+                    merged["lifecycleEvent"] = old.get("lifecycleEvent")
+                hist_by_id[aid] = merged
+            elif aid:
+                b = {k: v for k, v in a.items() if not k.startswith("_")}
+                hist_by_id[aid] = b
             continue
         aid = a.get("id")
         if aid in hist_by_id:
             old = hist_by_id[aid]
             if old.get("createdAt"):
                 a["createdAt"] = old["createdAt"]
-            if old.get("expiresAt") and not a.get("expiresAt"):
+            if old.get("openedAt") and not a.get("openedAt"):
+                a["openedAt"] = old["openedAt"]
+            if old.get("expiresAt") and a.get("expiresAt") is None and a.get("oneshot") is not False:
                 a["expiresAt"] = old["expiresAt"]
                 a["activeUntil"] = old.get("activeUntil") or old["expiresAt"]
-        hist_by_id[aid] = a
+        clean = {k: v for k, v in a.items() if not k.startswith("_")}
+        hist_by_id[aid] = clean
 
     history_all = list(hist_by_id.values())
-
-    # Collapse duplicate driver_status_change rows for same ticker+driver:
-    # prefer alert whose eventDate matches driver.changedAt (not a legacy "today" stamp).
-    def _driver_dedupe_key(a: dict):
-        if a.get("rule") != "driver_status_change":
-            return None
-        return (a.get("ticker"), a.get("eventKey") or a.get("driver") or a.get("driverName"))
-
-    by_drv: dict = {}
-    drop_ids = set()
-    for a in history_all:
-        key = _driver_dedupe_key(a)
-        if not key:
-            continue
-        prev = by_drv.get(key)
-        if prev is None:
-            by_drv[key] = a
-            continue
-        # Prefer the one that is NOT missingEventDate and has the earlier business date
-        def score(x):
-            miss = 1 if x.get("missingEventDate") else 0
-            dt = parse_date(x.get("eventAt") or x.get("eventDate"))
-            # earlier event date preferred (true changedAt), missing sorts last
-            ts = dt.timestamp() if dt else float("inf")
-            return (miss, ts)
-
-        winner, loser = (a, prev) if score(a) < score(prev) else (prev, a)
-        by_drv[key] = winner
-        drop_ids.add(loser.get("id"))
-    if drop_ids:
-        history_all = [a for a in history_all if a.get("id") not in drop_ids]
 
     # Stamp ageDays (operational — UI may also compute from eventAt)
     for a in history_all:
@@ -916,6 +1467,31 @@ def evaluate_alerts(now: datetime | None = None) -> dict:
         )
     )
 
+    attention = build_attention_queue(active, max_total=5, max_per_ticker=2)
+
+    # What-Changed uses comparisonCheckpoint (previous successful export), not wall clock.
+    # Checkpoint is advanced by export_web_data AFTER successful collection/export.
+    last_coll = None
+    cp_path = ROOT / "data" / "comparison_checkpoint.json"
+    if cp_path.exists():
+        try:
+            cp = json.loads(cp_path.read_text(encoding="utf-8")) or {}
+            last_coll = cp.get("comparisonCheckpoint") or cp.get("snapUtc")
+        except Exception:
+            last_coll = None
+    if not last_coll:
+        last_coll = prior.get("comparisonCheckpoint") or prior.get("lastSuccessfulCollection")
+    if not last_coll:
+        meta_web = ROOT / "web" / "data" / "meta.json"
+        if meta_web.exists():
+            try:
+                last_coll = (json.loads(meta_web.read_text(encoding="utf-8")) or {}).get(
+                    "lastSuccessfulCollection"
+                )
+            except Exception:
+                last_coll = None
+    changed_since = events_since_last_collection(history_all, last_coll)
+
     # Merge prior diagnostics (keep recent) + new
     prior_diag = prior.get("alertDiagnostics") or []
     diag_by_key = {}
@@ -930,26 +1506,38 @@ def evaluate_alerts(now: datetime | None = None) -> dict:
         "activeAlerts": active,
         "alertHistory": history_all,
         "alertDiagnostics": alert_diagnostics,
+        "homepageAttentionQueue": attention,
+        "changedSinceLastCollection": changed_since,
         # Legacy alias for older consumers during transition
         "alerts": active,
         "alertEngineLastEvaluated": now.strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "alertEngineLastAttempt": now.strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "alertEngineLastSuccessfulEvaluation": now.strftime("%Y-%m-%dT%H:%M:%SZ"),
         "alertEngineStatus": "ok",
         "alertEngineError": None,
         "oneShotActiveDays": ONE_SHOT_ACTIVE_DAYS,
+        "lastSuccessfulCollection": last_coll,
+        "comparisonCheckpoint": last_coll,
         "rules": [
             "single_revision_gt_2pct: |revisionPct| > 2% (revision events)",
-            "cumulative_revision_gt_5pct: daily.jsonl nearest@D-30 vs latest > 5%; else alertDiagnostics insufficient history",
+            "cumulative_revision_gt_5pct: Internal 30D stateful (≥5% Open / Update same ID; <4% Resolve); diagnostics for insufficient history",
+            "source_reported_1m_revision: SA |1M|≥5% stateful Open/Update/Resolve (ID without snapshot date); Source window: Seeking Alpha 1M; confidence from analystCount",
             "results_vs_consensus / guidance_vs_consensus: split; guidance only if above/below; results uses consensusComparison provenance",
             "gross_margin_pressure / gross_margin_guidance_revision (prev+current guidance)",
-            "driver_status_change: improving/deteriorating with reason (unique per driver); eventAt from changedAt priority",
-            f"lifecycle: one-shot active {ONE_SHOT_ACTIVE_DAYS}d; history retained; diagnostics excluded from history",
+            "driver_status_change: all transitions retained by unique Alert ID (no ticker+driver collapse); eventAt from changedAt priority",
+            f"lifecycle: one-shot active {ONE_SHOT_ACTIVE_DAYS}d; cumulative stateful; history retained; diagnostics excluded",
+            "homepageAttentionQueue: deterioration→revision→guidance→margin→improving→beat; max 2/ticker, max 5",
         ],
     }
 
 
+
 def write_alerts(payload: dict) -> Path:
+    """Atomic write only — fail-closed, no silent non-atomic fallback."""
     ALERTS_PATH.parent.mkdir(parents=True, exist_ok=True)
-    ALERTS_PATH.write_text(json.dumps(payload, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    from atomic_io import atomic_write_json
+    atomic_write_json(ALERTS_PATH, payload)
     return ALERTS_PATH
 
 
@@ -964,14 +1552,25 @@ def main() -> int:
         )
         return 0
     except Exception as exc:
+        prior = load_json(ALERTS_PATH) or {}
+        prior_active = prior.get("activeAlerts") or prior.get("alerts") or []
+        prior_hist = prior.get("alertHistory") or prior_active
+        now = now_utc_iso()
         err = {
-            "activeAlerts": [],
-            "alertHistory": [],
-            "alerts": [],
-            "alertEngineLastEvaluated": now_utc_iso(),
+            "activeAlerts": list(prior_active),
+            "alertHistory": list(prior_hist),
+            "alerts": list(prior_active),
+            "alertDiagnostics": prior.get("alertDiagnostics") or [],
+            "homepageAttentionQueue": prior.get("homepageAttentionQueue") or [],
+            "changedSinceLastCollection": prior.get("changedSinceLastCollection") or [],
+            "alertEngineLastEvaluated": prior.get("alertEngineLastEvaluated"),
+            "alertEngineLastAttempt": now,
+            "alertEngineLastSuccessfulEvaluation": prior.get("alertEngineLastSuccessfulEvaluation")
+            or prior.get("alertEngineLastEvaluated"),
             "alertEngineStatus": "error",
             "alertEngineError": f"{type(exc).__name__}: {exc}",
-            "oneShotActiveDays": ONE_SHOT_ACTIVE_DAYS,
+            "oneShotActiveDays": prior.get("oneShotActiveDays") or ONE_SHOT_ACTIVE_DAYS,
+            "lastSuccessfulCollection": prior.get("lastSuccessfulCollection"),
         }
         try:
             write_alerts(err)

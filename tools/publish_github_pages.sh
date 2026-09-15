@@ -1,16 +1,53 @@
 #!/usr/bin/env bash
 # Sync exported web/ public files → site-repo → git push
-# NO_CHANGES (exit 0) when public payload hash unchanged vs site-repo/.data-version
+# Second line of defense: abort if qualityGate.publishable != true
+# NO_CHANGES (exit 0) when public payload hash (dataVersion+refreshVersion) unchanged
 set -euo pipefail
 ROOT=/workspace/ai-eps-monitor
+LOCK="$ROOT/data/.pipeline.lock"
+mkdir -p "$ROOT/data"
+# Hold exclusive flock for Quality Gate → export → publish (fd 9)
+exec 9>"$LOCK"
+if ! flock -n 9; then
+  echo "RUN ALREADY IN PROGRESS" >&2
+  exit 2
+fi
+export PIPELINE_LOCK_HELD=1
 WEB="$ROOT/web"
 REPO="$ROOT/site-repo"
 export PATH="/home/box/.local/bin:$PATH"
 
-python3 "$ROOT/tools/build_alerts.py"
+# Alert evaluation is post-gate only via export_web_data.run_build_alerts()
+set +e
 python3 "$ROOT/tools/export_web_data.py"
+EXP_RC=$?
+set -e
+if [[ "$EXP_RC" -ne 0 ]]; then
+  echo "ERROR: export_web_data.py exited $EXP_RC — abort publish (fail-closed)" >&2
+  exit "$EXP_RC"
+fi
 
-# Compute content hash of public payload (excludes meta publish-only stamps by hashing data files + app assets)
+# Second line of defense: qualityGate.publishable must be true
+python3 - <<'PYGATE'
+import json, sys
+from pathlib import Path
+meta_path = Path("/workspace/ai-eps-monitor/web/data/meta.json")
+if not meta_path.exists():
+    print("ERROR: meta.json missing after export — abort publish", file=sys.stderr)
+    sys.exit(1)
+meta = json.loads(meta_path.read_text(encoding="utf-8"))
+qg = meta.get("qualityGate") or {}
+if qg.get("publishable") is not True:
+    print(
+        f"ERROR: qualityGate.publishable!=true status={qg.get('status')} "
+        f"reason={qg.get('reason')} — abort publish (no git push)",
+        file=sys.stderr,
+    )
+    sys.exit(1)
+print(f"qualityGate OK status={qg.get('status')} publishable=true")
+PYGATE
+
+# Compute content hash: dataVersion + refreshVersion (metadata-only commit OK)
 HASH=$(python3 - <<'PY'
 import hashlib, json
 from pathlib import Path
@@ -29,12 +66,14 @@ def feed_file(p: Path):
 for name in ("index.html", "app.js", "styles.css"):
     feed_file(WEB / name)
 
-# Prefer exporter dataVersion (canonical payload hash excluding publish stamps).
-# Fall back to hashing data files with volatile fields stripped.
 meta_path = WEB / "data" / "meta.json"
 meta = json.loads(meta_path.read_text(encoding="utf-8")) if meta_path.exists() else {}
-if meta.get("dataVersion"):
-    feed_bytes(str(meta["dataVersion"]).encode("utf-8"))
+# Prefer dataVersion + refreshVersion so collection heartbeat can publish
+# even when substantive EPS payload is unchanged.
+if meta.get("dataVersion") or meta.get("refreshVersion"):
+    feed_bytes(str(meta.get("dataVersion") or "").encode("utf-8"))
+    feed_bytes(b"|")
+    feed_bytes(str(meta.get("refreshVersion") or "").encode("utf-8"))
 else:
     data_names = [
         "companies.json",
@@ -48,7 +87,6 @@ else:
         p = WEB / "data" / name
         if p.exists():
             feed_file(p)
-    # alerts: active list + alertEngineStatus (ignore lastEvaluated timestamps)
     ap = WEB / "data" / "alerts.json"
     if ap.exists():
         alerts = json.loads(ap.read_text(encoding="utf-8"))
@@ -85,7 +123,6 @@ months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec
 display = f"{months[now.month-1]} {now.day}, {now.year} {now.hour:02d}:{now.minute:02d} Taipei Time"
 meta["sitePublished"] = utc
 meta["sitePublishedDisplay"] = display
-# Do not write latestSuccessfulRefresh as a primary field
 meta.pop("latestSuccessfulRefresh", None)
 meta.pop("siteRepoCommit", None)
 if not meta.get("dataVersion"):
