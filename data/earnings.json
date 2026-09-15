@@ -5,7 +5,7 @@
     "reportDate": "2026-08-26",
     "periodLabel": "Q2 2027 (fiscal 2027)",
     "lastEarnings": "8/26/2026",
-    "nextEarnings": "Nov 25, 2026 · Post-Market · Estimated",
+    "nextEarnings": "Nov 25, 2026 · Estimated",
     "revenue": [
       {
         "label": "Revenue",
@@ -318,8 +318,6 @@
     "sourceHierarchy": "Source hierarchy: (1) Company IR earnings release (2) SEC 10-Q/10-K/8-K (3) Official IR earnings call transcript (4) Seeking Alpha supplemental",
     "nextEarningsStatus": "estimated",
     "nextEarningsSource": "Seeking Alpha",
-    "resultsVsConsensus": "Above",
-    "guidanceVsConsensus": "unknown",
     "actuals": {
       "eps": "$2.22",
       "revenue": "$96.22B",
@@ -335,10 +333,10 @@
     },
     "consensusComparison": {
       "vsConsensus": "Above",
-      "beatMiss": "Above",
       "sourceUrl": "https://seekingalpha.com/article/4940563-nvidia-corporation-nvda-q2-2027-earnings-call-transcript",
       "sourceTier": 4,
-      "note": "Beat/miss vs consensus attributed to Seeking Alpha / secondary summary (not Company IR actuals Tier 1)"
+      "note": "Beat/miss vs consensus attributed to Seeking Alpha summary (Tier 4), not Company IR actuals",
+      "beatMiss": "Above"
     },
     "nextEarningsRaw": "11/25/2026 (Post-Market)"
   },
@@ -348,7 +346,7 @@
     "reportDate": "2026-09-02",
     "periodLabel": "Q3 2026 (fiscal 2026)",
     "lastEarnings": "9/2/2026",
-    "nextEarnings": "Dec 10, 2026 · Post-Market · Estimated",
+    "nextEarnings": "Dec 10, 2026 · Estimated",
     "revenue": [
       {
         "label": "Revenue",
@@ -648,8 +646,6 @@
     "sourceHierarchy": "Source hierarchy: (1) Company IR earnings release (2) SEC 10-Q/10-K/8-K (3) Official IR earnings call transcript (when available) (4) Seeking Alpha supplemental (Q&A only when no official transcript)",
     "nextEarningsStatus": "estimated",
     "nextEarningsSource": "Seeking Alpha",
-    "resultsVsConsensus": "Above",
-    "guidanceVsConsensus": "unknown",
     "nextEarningsRaw": "12/10/2026 (Post-Market)",
     "actuals": {
       "metrics": {
@@ -699,7 +695,7 @@
     "ticker": "MSFT",
     "hasDigest": false,
     "lastEarnings": "7/29/2026",
-    "nextEarnings": "Oct 29, 2026 · Post-Market · Estimated",
+    "nextEarnings": "Oct 29, 2026 · Estimated",
     "nextEarningsRaw": "10/29/2026 (Post-Market)",
     "nextEarningsStatus": "estimated",
     "nextEarningsSource": "Seeking Alpha",
@@ -720,7 +716,7 @@
     "ticker": "BE",
     "hasDigest": false,
     "lastEarnings": "7/28/2026",
-    "nextEarnings": "Oct 29, 2026 · Post-Market · Estimated",
+    "nextEarnings": "Oct 29, 2026 · Estimated",
     "nextEarningsRaw": "10/29/2026 (Post-Market)",
     "nextEarningsStatus": "estimated",
     "nextEarningsSource": "Seeking Alpha",

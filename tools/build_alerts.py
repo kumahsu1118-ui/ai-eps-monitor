@@ -35,6 +35,14 @@ import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+try:
+    from atomic_io import atomic_write_text
+except ImportError:  # pragma: no cover
+    import sys as _sys
+
+    _sys.path.insert(0, str(Path(__file__).resolve().parent))
+    from atomic_io import atomic_write_text
+
 _here = Path(__file__).resolve().parent
 ROOT = _here.parent
 if not (ROOT / "data" / "snapshots").exists():
@@ -51,12 +59,17 @@ DRIVERS_DIR = ROOT / "data" / "drivers"
 ALERTS_PATH = ROOT / "data" / "alerts" / "index.json"
 UNIVERSE_PATH = ROOT / "data" / "universe.json"
 DAILY_JSONL = ROOT / "data" / "daily_eps_snapshots" / "daily.jsonl"
+SNAP_DIR = ROOT / "data" / "snapshots"
 
 TICKERS_DEFAULT = ["NVDA", "AVGO", "TSM", "MSFT", "BE", "KEYS"]
 
 # One-shot homepage window (within 14–30 days). Documented choice: 21 days.
 ONE_SHOT_ACTIVE_DAYS = 21
 CUMULATIVE_LOOKBACK_DAYS = 30
+# SA source-reported 1M revision — stateful hysteresis (not Internal 30D).
+SA_1M_OPEN_PCT = 5.0
+SA_1M_RESOLVE_PCT = 4.0
+LOW_COVERAGE_ANALYSTS = 5
 
 
 def now_utc_iso() -> str:
@@ -250,6 +263,8 @@ def age_days(alert_obj: dict, now: datetime | None = None) -> int:
 
 def is_active(alert_obj: dict, now: datetime | None = None) -> bool:
     now = now or datetime.now(timezone.utc)
+    if str(alert_obj.get("lifecycleState") or "").lower() == "resolved":
+        return False
     until = parse_date(alert_obj.get("expiresAt") or alert_obj.get("activeUntil"))
     if until is not None:
         return now <= until
@@ -803,11 +818,175 @@ HOMEPAGE_RULES = {
     "gross_margin_pressure",
     "gross_margin_guidance_revision",
     "driver_status_change",
+    "source_reported_1m_revision",
     # legacy name kept if any residual
     "gm_guidance_change_gt_200bps",
 }
 
 SEVERITY_RANK = {"high": 0, "medium": 1, "low": 2, "info": 3}
+
+
+def load_latest_snapshot_dict() -> dict | None:
+    if not SNAP_DIR.exists():
+        return None
+    dated = sorted(
+        p
+        for p in SNAP_DIR.glob("20*.json")
+        if not p.name.startswith("raw_") and re.match(r"^\d{4}-\d{2}-\d{2}", p.name)
+    )
+    if not dated:
+        return None
+    try:
+        return json.loads(dated[-1].read_text(encoding="utf-8"))
+    except Exception:
+        return None
+
+
+def sa_1m_stable_id(ticker: str, fiscal: str) -> str:
+    """Stable ID: no calendar day, so daily re-reads cannot spam new IDs."""
+    return make_alert_id("source_reported_1m_revision", ticker, fiscal, "sa1m", "sa_1m")
+
+
+def _coverage_for_analysts(n) -> tuple[str, str]:
+    """Return (coverageConfidence, max_severity). <5 analysts cannot be High."""
+    analysts = to_num(n)
+    if analysts is None:
+        return "unknown", "medium"
+    if analysts < LOW_COVERAGE_ANALYSTS:
+        return "low", "medium"
+    return "high", "high"
+
+
+def rule6_source_reported_1m(tickers: list[str], snap: dict | None = None) -> list[dict]:
+    """Seeking Alpha source-reported 1M readings for hysteresis state machine.
+
+    Open/Update when |1M| >= 5%. Keep-open band 4–5%. Resolve < 4%.
+    Labeled 'Seeking Alpha 1M' — never 'Internal 30D'.
+    Stable ID (no daily date) so re-collection cannot spam new IDs.
+    Coverage: analysts < 5 → not High severity.
+    """
+    snap = snap if snap is not None else load_latest_snapshot_dict()
+    if not snap:
+        return []
+    tickers_blob = snap.get("tickers") or {}
+    out = []
+    for t in tickers:
+        td = tickers_blob.get(t) or {}
+        eps = td.get("eps") or {}
+        for slot, year in eps.items():
+            if not isinstance(year, dict):
+                continue
+            rev = to_num(year.get("rev_1M_pct") if "rev_1M_pct" in year else year.get("rev1M"))
+            if rev is None:
+                continue
+            fiscal = year.get("reported_fiscal_label") or year.get("reportedFiscalLabel") or slot
+            analysts = year.get("analysts")
+            confidence, max_sev = _coverage_for_analysts(analysts)
+            direction = "upgrade" if rev > 0 else "downgrade"
+            a = alert(
+                "source_reported_1m_revision",
+                max_sev,
+                t,
+                f"{t} {fiscal}: Seeking Alpha 1M {direction} {rev:+.2f}%",
+                period=fiscal,
+                event_date="sa1m",
+                event_key="sa_1m",
+                event_at=snap.get("snapshot_utc"),
+                revisionPct=rev,
+                source="Seeking Alpha 1M",
+                sourceLabel="Seeking Alpha 1M",
+                sourceWindow="1M",
+                notInternal30d=True,
+                oneshot=False,
+                slot=slot,
+                analysts=analysts,
+                coverageConfidence=confidence,
+                coverageAnalysts=analysts,
+            )
+            a["id"] = sa_1m_stable_id(t, fiscal)
+            a["expiresAt"] = None
+            a["activeUntil"] = None
+            a["_sa1mAbs"] = abs(rev)
+            out.append(a)
+    return out
+
+
+def apply_sa_1m_hysteresis(
+    measurements: list[dict],
+    prior_hist: list[dict] | None,
+    now: datetime | None = None,
+) -> list[dict]:
+    """Stateful SA 1M: ≥5% Open/Update, 4–5% keep, <4% Resolve. Stable IDs."""
+    now = now or datetime.now(timezone.utc)
+    now_iso = now.strftime("%Y-%m-%dT%H:%M:%SZ")
+    prior_by_id = {
+        a.get("id"): a
+        for a in (prior_hist or [])
+        if isinstance(a, dict) and a.get("rule") == "source_reported_1m_revision" and a.get("id")
+    }
+    meas_by_id: dict[str, dict] = {}
+    for a in measurements:
+        aid = a.get("id")
+        if aid:
+            meas_by_id[aid] = a
+
+    out: list[dict] = []
+    seen = set()
+
+    def _open_from(meas: dict, prior: dict | None, state: str) -> dict:
+        a = dict(meas)
+        a["lifecycleState"] = state
+        a["oneshot"] = False
+        a["expiresAt"] = None
+        a["activeUntil"] = None
+        if prior and prior.get("createdAt"):
+            a["createdAt"] = prior["createdAt"]
+        a.pop("_sa1mAbs", None)
+        return a
+
+    all_ids = set(meas_by_id) | set(prior_by_id)
+    for aid in all_ids:
+        meas = meas_by_id.get(aid)
+        prior = prior_by_id.get(aid)
+        prior_state = str((prior or {}).get("lifecycleState") or "").lower()
+        mag = (meas or {}).get("_sa1mAbs")
+        if mag is None and meas is not None:
+            mag = abs(to_num(meas.get("revisionPct")) or 0.0)
+
+        if meas is None:
+            if prior and prior_state != "resolved":
+                resolved = dict(prior)
+                resolved["lifecycleState"] = "resolved"
+                resolved["resolvedAt"] = now_iso
+                resolved["expiresAt"] = now_iso
+                resolved["activeUntil"] = now_iso
+                out.append(resolved)
+            elif prior:
+                out.append(prior)
+            continue
+
+        if mag >= SA_1M_OPEN_PCT:
+            state = "updated" if prior and prior_state not in {"", "resolved"} else "open"
+            if prior_state == "resolved":
+                state = "open"
+            out.append(_open_from(meas, prior if prior_state != "resolved" else None, state))
+        elif mag >= SA_1M_RESOLVE_PCT:
+            if prior and prior_state not in {"", "resolved"}:
+                out.append(_open_from(meas, prior, prior_state or "open"))
+            # else: do not newly open in the hysteresis band
+        else:
+            if prior and prior_state != "resolved":
+                resolved = dict(prior)
+                resolved["lifecycleState"] = "resolved"
+                resolved["resolvedAt"] = now_iso
+                resolved["expiresAt"] = now_iso
+                resolved["activeUntil"] = now_iso
+                resolved["revisionPct"] = meas.get("revisionPct")
+                out.append(resolved)
+            elif prior:
+                out.append(prior)
+        seen.add(aid)
+    return out
 
 
 
@@ -816,6 +995,8 @@ def evaluate_alerts(now: datetime | None = None) -> dict:
     tickers = load_tickers()
     history = load_history()
     daily_rows = load_daily_jsonl()
+    prior = load_json(ALERTS_PATH) or {}
+    prior_hist = prior.get("alertHistory") or prior.get("alerts") or []
     generated: list[dict] = []
     diagnostics: list[dict] = []
     generated.extend(rule1_single_revision(history))
@@ -825,6 +1006,8 @@ def evaluate_alerts(now: datetime | None = None) -> dict:
     generated.extend(rule3_results_and_guidance(tickers))
     generated.extend(rule4_gm(tickers))
     generated.extend(rule5_driver_or_digest_flags(tickers))
+    sa_meas = rule6_source_reported_1m(tickers)
+    generated.extend(apply_sa_1m_hysteresis(sa_meas, prior_hist, now=now))
 
     # Deduplicate by id (keep first)
     seen = set()
@@ -837,8 +1020,6 @@ def evaluate_alerts(now: datetime | None = None) -> dict:
         uniq.append(a)
 
     # Merge with prior history (long retention) — exclude diagnostics / insufficient-history
-    prior = load_json(ALERTS_PATH) or {}
-    prior_hist = prior.get("alertHistory") or prior.get("alerts") or []
     hist_by_id = {}
     for a in prior_hist:
         if not isinstance(a, dict) or not a.get("id"):
@@ -942,6 +1123,7 @@ def evaluate_alerts(now: datetime | None = None) -> dict:
             "results_vs_consensus / guidance_vs_consensus: split; guidance only if above/below; results uses consensusComparison provenance",
             "gross_margin_pressure / gross_margin_guidance_revision (prev+current guidance)",
             "driver_status_change: improving/deteriorating with reason (unique per driver); eventAt from changedAt priority",
+            "source_reported_1m_revision: SA 1M stateful hysteresis ≥5% open, <4% resolve; stable ID (no daily spam); <5 analysts not High",
             f"lifecycle: one-shot active {ONE_SHOT_ACTIVE_DAYS}d; history retained; diagnostics excluded from history",
         ],
     }
@@ -949,36 +1131,61 @@ def evaluate_alerts(now: datetime | None = None) -> dict:
 
 def write_alerts(payload: dict) -> Path:
     ALERTS_PATH.parent.mkdir(parents=True, exist_ok=True)
-    ALERTS_PATH.write_text(json.dumps(payload, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    atomic_write_text(ALERTS_PATH, json.dumps(payload, indent=2, ensure_ascii=False) + "\n")
     return ALERTS_PATH
 
 
-def main() -> int:
+def preserve_alerts_on_error(exc: BaseException) -> dict:
+    """Fail-closed alert engine: keep prior history/active; status=error; never empty wipe."""
+    prior = load_json(ALERTS_PATH) or {}
+    if not isinstance(prior, dict):
+        prior = {}
+    active = prior.get("activeAlerts")
+    if not isinstance(active, list):
+        active = prior.get("alerts") if isinstance(prior.get("alerts"), list) else []
+    history = prior.get("alertHistory")
+    if not isinstance(history, list):
+        history = list(active)
+    payload = {
+        "activeAlerts": list(active),
+        "alertHistory": list(history),
+        "alertDiagnostics": prior.get("alertDiagnostics") or [],
+        "alerts": list(active),
+        "alertEngineLastEvaluated": now_utc_iso(),
+        "alertEngineLastAttempt": now_utc_iso(),
+        "alertEngineLastSuccessfulEvaluation": prior.get("alertEngineLastSuccessfulEvaluation"),
+        "alertEngineStatus": "error",
+        "alertEngineError": f"{type(exc).__name__}: {exc}",
+        "oneShotActiveDays": prior.get("oneShotActiveDays") or ONE_SHOT_ACTIVE_DAYS,
+    }
     try:
-        payload = evaluate_alerts()
         write_alerts(payload)
-        print(
-            f"Wrote {ALERTS_PATH}: active={len(payload['activeAlerts'])} "
-            f"history={len(payload['alertHistory'])} status={payload['alertEngineStatus']} "
-            f"oneShotActiveDays={ONE_SHOT_ACTIVE_DAYS}"
-        )
-        return 0
+    except Exception:
+        pass
+    return payload
+
+
+def safe_evaluate_alerts(now: datetime | None = None) -> dict:
+    try:
+        payload = evaluate_alerts(now=now)
+        payload["alertEngineLastAttempt"] = payload.get("alertEngineLastEvaluated") or now_utc_iso()
+        if payload.get("alertEngineStatus") == "ok":
+            payload["alertEngineLastSuccessfulEvaluation"] = payload.get("alertEngineLastEvaluated")
+        write_alerts(payload)
+        return payload
     except Exception as exc:
-        err = {
-            "activeAlerts": [],
-            "alertHistory": [],
-            "alerts": [],
-            "alertEngineLastEvaluated": now_utc_iso(),
-            "alertEngineStatus": "error",
-            "alertEngineError": f"{type(exc).__name__}: {exc}",
-            "oneShotActiveDays": ONE_SHOT_ACTIVE_DAYS,
-        }
-        try:
-            write_alerts(err)
-        except Exception:
-            pass
-        print(f"ALERT ENGINE ERROR: {exc}", file=sys.stderr)
-        return 1
+        return preserve_alerts_on_error(exc)
+
+
+def main() -> int:
+    payload = safe_evaluate_alerts()
+    status = payload.get("alertEngineStatus")
+    print(
+        f"Wrote {ALERTS_PATH}: active={len(payload.get('activeAlerts') or [])} "
+        f"history={len(payload.get('alertHistory') or [])} status={status} "
+        f"oneShotActiveDays={payload.get('oneShotActiveDays')}"
+    )
+    return 0 if status == "ok" else 1
 
 
 if __name__ == "__main__":

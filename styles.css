@@ -884,7 +884,6 @@ nav.tabs,
   }
 }
 
-
 /* Revision regime (alongside Momentum) */
 .mom-wrap { display: inline-flex; flex-direction: column; gap: 2px; align-items: flex-start; }
 .revision-regime {
@@ -898,15 +897,8 @@ nav.tabs,
   padding: 1px 6px;
   margin-top: 2px;
 }
-.failed-ticker-badge {
-  background: rgba(248, 81, 73, 0.2) !important;
-  color: #ff7b72 !important;
-  border-color: rgba(248, 81, 73, 0.45) !important;
-}
-.alert-confidence {
-  display: inline-block;
-  margin-left: 8px;
-  font-size: 11px;
-  color: #8b949e;
-}
 .earnings-detail .section-title { color: #58a6ff; }
+.earnings-detail {
+  border-top: 3px solid var(--accent);
+  padding-top: 0.5rem;
+}

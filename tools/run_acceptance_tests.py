@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -133,10 +134,15 @@ def build_fixture(dest: Path) -> Path:
     dest.mkdir(parents=True, exist_ok=True)
     tools = dest / "tools"
     tools.mkdir(parents=True, exist_ok=True)
-    for name in ("export_web_data.py", "build_alerts.py", "sa_parser.py"):
+    for name in ("export_web_data.py", "build_alerts.py", "sa_parser.py", "atomic_io.py", "snapshot_quality.py"):
         src = ROOT / "tools" / name
         if src.exists():
             shutil.copy2(src, tools / name)
+    for name in ("publish_github_pages.sh", "sync_pages_root.sh"):
+        src = ROOT / "tools" / name
+        if src.exists():
+            shutil.copy2(src, tools / name)
+            os.chmod(tools / name, 0o755)
 
     web = dest / "web"
     web.mkdir(parents=True, exist_ok=True)
@@ -224,6 +230,15 @@ def build_fixture(dest: Path) -> Path:
 
 def run_export(fixture: Path) -> None:
     subprocess.check_call([sys.executable, str(fixture / "tools" / "export_web_data.py")], cwd=str(fixture))
+
+
+def run_export_rc(fixture: Path) -> subprocess.CompletedProcess:
+    return subprocess.run(
+        [sys.executable, str(fixture / "tools" / "export_web_data.py")],
+        cwd=str(fixture),
+        capture_output=True,
+        text=True,
+    )
 
 
 def run_build_alerts(fixture: Path) -> None:
@@ -1195,9 +1210,467 @@ def test_review_same_build(fixture: Path) -> None:
     record("review_same_build_test", ok, f"gate_ok={gate_ok} mismatch={gate_mismatch}")
 
 
+# ---------- Fail-closed reliability + signal quality ----------
+
+def _sha256_file(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def _restore_snapshot(fixture: Path) -> None:
+    dest = fixture / "data" / "snapshots" / "2026-09-15.json"
+    src = ROOT / "fixtures" / "data" / "snapshots" / "2026-09-15.json"
+    if src.exists():
+        shutil.copy2(src, dest)
+    else:
+        dest.write_text(json.dumps(build_synthetic_snapshot(), indent=2) + "\n", encoding="utf-8")
+    for kind in ("earnings", "drivers"):
+        src_dir = ROOT / "fixtures" / "data" / kind
+        dest_dir = fixture / "data" / kind
+        dest_dir.mkdir(parents=True, exist_ok=True)
+        if src_dir.exists():
+            for p in src_dir.glob("*.json"):
+                shutil.copy2(p, dest_dir / p.name)
+    alerts = fixture / "data" / "alerts" / "index.json"
+    alerts.write_text(
+        json.dumps({"alerts": [], "activeAlerts": [], "alertHistory": []}, indent=2) + "\n",
+        encoding="utf-8",
+    )
+
+
+def test_quality_gate_blocks_export(fixture: Path) -> None:
+    """publishable!=true blocks web/data, daily, revisions, lastSuccessfulCollection; quarantines; LKG kept."""
+    _restore_snapshot(fixture)
+    run_export(fixture)
+    web_meta_path = fixture / "web" / "data" / "meta.json"
+    web_co_path = fixture / "web" / "data" / "companies.json"
+    hist_path = fixture / "data" / "revisions" / "history.jsonl"
+    daily_path = fixture / "data" / "daily_eps_snapshots" / "daily.jsonl"
+    meta_before = web_meta_path.read_bytes()
+    co_before = web_co_path.read_bytes()
+    hist_before = hist_path.read_bytes() if hist_path.exists() else b""
+    daily_before = daily_path.read_bytes() if daily_path.exists() else b""
+    last_success = json.loads(meta_before.decode("utf-8")).get("lastSuccessfulCollection")
+
+    snap_path = fixture / "data" / "snapshots" / "2026-09-15.json"
+    snap_path.write_text(json.dumps({"snapshot_utc": "2026-09-15T12:00:00Z", "tickers": {}}, indent=2) + "\n")
+
+    proc = run_export_rc(fixture)
+    meta_after = json.loads(web_meta_path.read_text(encoding="utf-8"))
+    qdir = fixture / "data" / "snapshots" / "quarantine"
+    quarantined = list(qdir.glob("*.json")) if qdir.exists() else []
+    ok = proc.returncode != 0
+    ok = ok and web_meta_path.read_bytes() == meta_before
+    ok = ok and web_co_path.read_bytes() == co_before
+    ok = ok and (hist_path.read_bytes() if hist_path.exists() else b"") == hist_before
+    ok = ok and (daily_path.read_bytes() if daily_path.exists() else b"") == daily_before
+    ok = ok and meta_after.get("lastSuccessfulCollection") == last_success
+    ok = ok and len(quarantined) >= 1
+    _restore_snapshot(fixture)
+    record(
+        "quality_gate_blocks_export_test",
+        ok,
+        f"rc={proc.returncode} q={len(quarantined)} lkg_meta={meta_after.get('lastSuccessfulCollection')}",
+    )
+
+
+def test_quality_gate_blocks_publish(fixture: Path) -> None:
+    """publish_github_pages.sh aborts when qualityGate.publishable is not true — no git push."""
+    _restore_snapshot(fixture)
+    site = fixture / "site-repo"
+    site.mkdir(parents=True, exist_ok=True)
+    (site / "data").mkdir(parents=True, exist_ok=True)
+    subprocess.check_call(["git", "init", "-q"], cwd=str(site))
+    subprocess.check_call(["git", "config", "user.email", "test@example.com"], cwd=str(site))
+    subprocess.check_call(["git", "config", "user.name", "test"], cwd=str(site))
+    (site / "README").write_text("seed\n", encoding="utf-8")
+    subprocess.check_call(["git", "add", "README"], cwd=str(site))
+    subprocess.check_call(["git", "commit", "-qm", "seed"], cwd=str(site))
+    head_before = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=str(site), text=True).strip()
+
+    run_export(fixture)
+    meta_path = fixture / "web" / "data" / "meta.json"
+    meta = json.loads(meta_path.read_text(encoding="utf-8"))
+    meta["qualityGate"] = {
+        "status": "reject",
+        "reason": "validation_failed",
+        "publishable": False,
+        "expectedTickers": meta.get("qualityGate", {}).get("expectedTickers") or ["NVDA"],
+        "missingTickers": ["NVDA"],
+    }
+    meta_path.write_text(json.dumps(meta, indent=2) + "\n", encoding="utf-8")
+
+    env = os.environ.copy()
+    env["AI_EPS_ROOT"] = str(fixture)
+    env["AI_EPS_SITE_REPO"] = str(site)
+    env["AI_EPS_SKIP_EXPORT"] = "1"
+    env["AI_EPS_SYNC_PAGES_ROOT"] = "0"
+    script = fixture / "tools" / "publish_github_pages.sh"
+    proc = subprocess.run(["bash", str(script)], cwd=str(fixture), env=env, capture_output=True, text=True)
+    head_after = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=str(site), text=True).strip()
+    combined = (proc.stdout or "") + (proc.stderr or "")
+    ok = proc.returncode != 0
+    ok = ok and head_before == head_after
+    ok = ok and ("QUALITY GATE" in combined or "publishable" in combined.lower())
+    record("quality_gate_blocks_publish_test", ok, f"rc={proc.returncode} head_stable={head_before==head_after}")
+
+
+def test_missing_watchlist_tickers_gate(fixture: Path) -> None:
+    """Missing expectedTickers → not COMPLETE; partial uses LKG + badge."""
+    _restore_snapshot(fixture)
+    run_export(fixture)
+    companies_lkg = json.loads((fixture / "web" / "data" / "companies.json").read_text(encoding="utf-8"))
+    keys_price = (companies_lkg.get("KEYS") or {}).get("lastClose")
+    snap_path = fixture / "data" / "snapshots" / "2026-09-15.json"
+    snap = json.loads(snap_path.read_text(encoding="utf-8"))
+    snap.get("tickers", {}).pop("KEYS", None)
+    snap_path.write_text(json.dumps(snap, indent=2) + "\n", encoding="utf-8")
+    proc = run_export_rc(fixture)
+    ok = proc.returncode == 0
+    meta = json.loads((fixture / "web" / "data" / "meta.json").read_text(encoding="utf-8"))
+    companies = json.loads((fixture / "web" / "data" / "companies.json").read_text(encoding="utf-8"))
+    qg = meta.get("qualityGate") or {}
+    ok = ok and qg.get("publishable") is True
+    ok = ok and "KEYS" in (qg.get("expectedTickers") or [])
+    ok = ok and "KEYS" in (qg.get("missingTickers") or [])
+    ok = ok and str(meta.get("collectionStatus") or "").lower() != "complete"
+    ok = ok and "COMPLETE" not in str(meta.get("collectionStatusLabel") or "")
+    keys = companies.get("KEYS") or {}
+    ok = ok and keys.get("usingLastKnownGood") is True
+    ok = ok and keys.get("lkgBadge") == "LKG"
+    if keys_price is not None:
+        ok = ok and keys.get("lastClose") == keys_price
+    _restore_snapshot(fixture)
+    record(
+        "missing_watchlist_tickers_gate_test",
+        ok,
+        f"status={meta.get('collectionStatusLabel')} missing={qg.get('missingTickers')} lkg={keys.get('usingLastKnownGood')}",
+    )
+
+
+def test_alert_engine_failure_preserves_history(fixture: Path) -> None:
+    ba = import_mod(fixture, "build_alerts")
+    prior = {
+        "activeAlerts": [
+            {"id": "keep-active", "rule": "single_revision_gt_2pct", "ticker": "NVDA", "severity": "high", "message": "keep"}
+        ],
+        "alertHistory": [
+            {"id": "keep-active", "rule": "single_revision_gt_2pct", "ticker": "NVDA", "severity": "high", "message": "keep"},
+            {"id": "keep-hist", "rule": "driver_status_change", "ticker": "AVGO", "severity": "medium", "message": "hist"},
+        ],
+        "alertEngineStatus": "ok",
+        "alertEngineError": None,
+    }
+    ba.write_alerts(prior)
+    ba.evaluate_alerts = lambda now=None: (_ for _ in ()).throw(RuntimeError("forced engine failure"))
+    payload = ba.safe_evaluate_alerts()
+    on_disk = json.loads((fixture / "data" / "alerts" / "index.json").read_text(encoding="utf-8"))
+    hist_ids = {a.get("id") for a in (payload.get("alertHistory") or [])}
+    active_ids = {a.get("id") for a in (payload.get("activeAlerts") or [])}
+    ok = payload.get("alertEngineStatus") == "error"
+    ok = ok and payload.get("alertEngineError")
+    ok = ok and "keep-active" in hist_ids and "keep-hist" in hist_ids
+    ok = ok and "keep-active" in active_ids
+    ok = ok and len(payload.get("alertHistory") or []) >= 2
+    ok = ok and len(on_disk.get("alertHistory") or []) >= 2
+    ok = ok and (on_disk.get("alertHistory") or []) != []
+    record(
+        "alert_engine_failure_preserves_history_test",
+        ok,
+        f"status={payload.get('alertEngineStatus')} hist={len(payload.get('alertHistory') or [])}",
+    )
+
+
+def test_refresh_only_publish(fixture: Path) -> None:
+    """Publish identity changes when refreshVersion changes even if dataVersion is unchanged."""
+    _restore_snapshot(fixture)
+    exp = import_mod(fixture, "export_web_data")
+    run_export(fixture)
+    meta = json.loads((fixture / "web" / "data" / "meta.json").read_text(encoding="utf-8"))
+    dv = meta.get("dataVersion")
+    rv = meta.get("refreshVersion")
+    ok = bool(dv) and bool(rv)
+    # Same substantive payload, different operational refresh → must publish
+    meta_same_dv = {"dataVersion": dv, "refreshVersion": rv}
+    meta_refresh_tick = {"dataVersion": dv, "refreshVersion": "ff" * 32}
+    p1 = exp.compute_publish_version(meta_same_dv)
+    p2 = exp.compute_publish_version(meta_refresh_tick)
+    ok = ok and p1 != p2
+    # dataVersion-only change also publishes
+    p3 = exp.compute_publish_version({"dataVersion": "aa" * 32, "refreshVersion": rv})
+    ok = ok and p3 != p1
+    # Identical pair is a no-op
+    ok = ok and exp.compute_publish_version(meta_same_dv) == p1
+    record(
+        "refresh_only_publish_test",
+        ok,
+        f"dv={str(dv)[:12]} rv={str(rv)[:12]} refresh_tick_publishes={p1!=p2}",
+    )
+
+
+def test_source_1m_no_daily_spam(fixture: Path) -> None:
+    ba = import_mod(fixture, "build_alerts")
+    _restore_snapshot(fixture)
+    snap_path = fixture / "data" / "snapshots" / "2026-09-15.json"
+    snap = json.loads(snap_path.read_text(encoding="utf-8"))
+    for slot, year in (snap["tickers"]["NVDA"].get("eps") or {}).items():
+        if isinstance(year, dict) and slot != "2027E":
+            year["rev_1M_pct"] = 0.2
+            year["analysts"] = 20
+    year = snap["tickers"]["NVDA"]["eps"]["2027E"]
+    year["rev_1M_pct"] = 6.5
+    year["analysts"] = 20
+    snap["snapshot_utc"] = "2026-09-15T01:00:00Z"
+    snap_path.write_text(json.dumps(snap, indent=2) + "\n")
+    (fixture / "data" / "alerts" / "index.json").write_text(
+        json.dumps({"alerts": [], "activeAlerts": [], "alertHistory": []}, indent=2) + "\n"
+    )
+    p1 = ba.evaluate_alerts()
+    ba.write_alerts(p1)
+    hits1 = [a for a in (p1.get("activeAlerts") or []) if a.get("rule") == "source_reported_1m_revision" and a.get("ticker") == "NVDA"]
+    ids1 = [a.get("id") for a in hits1]
+    ok = len(hits1) >= 1
+    ok = ok and all("2026-09-15" not in str(i) for i in ids1)
+    ok = ok and all(":sa1m:sa_1m" in str(i) or str(i).endswith(":sa_1m") for i in ids1)
+
+    year["rev_1M_pct"] = 7.1
+    snap["snapshot_utc"] = "2026-09-16T01:00:00Z"
+    snap_path.write_text(json.dumps(snap, indent=2) + "\n")
+    p2 = ba.evaluate_alerts()
+    hits2 = [a for a in (p2.get("activeAlerts") or []) if a.get("rule") == "source_reported_1m_revision" and a.get("ticker") == "NVDA"]
+    ids2 = [a.get("id") for a in hits2]
+    ok = ok and set(ids1) == set(ids2)
+    ok = ok and len(ids2) == len(set(ids2))
+
+    year["rev_1M_pct"] = 4.4  # hysteresis keep-open
+    snap_path.write_text(json.dumps(snap, indent=2) + "\n")
+    p3 = ba.evaluate_alerts()
+    hits3 = [a for a in (p3.get("activeAlerts") or []) if a.get("id") in set(ids1)]
+    ok = ok and len(hits3) >= 1
+    ok = ok and all(str(a.get("lifecycleState") or "").lower() != "resolved" for a in hits3)
+
+    year["rev_1M_pct"] = 2.0  # resolve
+    snap_path.write_text(json.dumps(snap, indent=2) + "\n")
+    p4 = ba.evaluate_alerts()
+    active4 = [a for a in (p4.get("activeAlerts") or []) if a.get("id") in set(ids1)]
+    hist4 = [a for a in (p4.get("alertHistory") or []) if a.get("id") in set(ids1)]
+    ok = ok and len(active4) == 0
+    ok = ok and hist4 and all(str(a.get("lifecycleState") or "").lower() == "resolved" for a in hist4)
+    _restore_snapshot(fixture)
+    record("source_1m_no_daily_spam_test", ok, f"ids={ids1} keep={len(hits3)} resolved_active={len(active4)}")
+
+
+def test_low_coverage_revision_confidence(fixture: Path) -> None:
+    ba = import_mod(fixture, "build_alerts")
+    _restore_snapshot(fixture)
+    snap_path = fixture / "data" / "snapshots" / "2026-09-15.json"
+    snap = json.loads(snap_path.read_text(encoding="utf-8"))
+    for slot, year in (snap["tickers"]["NVDA"].get("eps") or {}).items():
+        if isinstance(year, dict) and slot != "2027E":
+            year["rev_1M_pct"] = 0.2
+            year["analysts"] = 20
+    year = snap["tickers"]["NVDA"]["eps"]["2027E"]
+    year["rev_1M_pct"] = 8.0
+    year["analysts"] = 3
+    snap_path.write_text(json.dumps(snap, indent=2) + "\n")
+    (fixture / "data" / "alerts" / "index.json").write_text(
+        json.dumps({"alerts": [], "activeAlerts": [], "alertHistory": []}, indent=2) + "\n"
+    )
+    low = ba.evaluate_alerts()
+    hits = [
+        a
+        for a in (low.get("activeAlerts") or []) + (low.get("alertHistory") or [])
+        if a.get("rule") == "source_reported_1m_revision" and a.get("ticker") == "NVDA"
+    ]
+    ok = len(hits) >= 1
+    ok = ok and all(str(a.get("severity") or "").lower() != "high" for a in hits)
+    ok = ok and all(str(a.get("coverageConfidence") or "").lower() in {"low", "unknown"} for a in hits)
+
+    year["analysts"] = 12
+    snap_path.write_text(json.dumps(snap, indent=2) + "\n")
+    (fixture / "data" / "alerts" / "index.json").write_text(
+        json.dumps({"alerts": [], "activeAlerts": [], "alertHistory": []}, indent=2) + "\n"
+    )
+    high = ba.evaluate_alerts()
+    hits_h = [
+        a
+        for a in (high.get("activeAlerts") or [])
+        if a.get("rule") == "source_reported_1m_revision" and a.get("ticker") == "NVDA"
+    ]
+    ok = ok and hits_h and all(str(a.get("severity") or "").lower() == "high" for a in hits_h)
+    ok = ok and all(str(a.get("coverageConfidence") or "").lower() == "high" for a in hits_h)
+    _restore_snapshot(fixture)
+    record(
+        "low_coverage_revision_confidence_test",
+        ok,
+        f"low_sev={[a.get('severity') for a in hits]} high_sev={[a.get('severity') for a in hits_h]}",
+    )
+
+
+def test_all_earnings_provenance(fixture: Path) -> None:
+    _restore_snapshot(fixture)
+    run_export(fixture)
+    earnings = json.loads((fixture / "web" / "data" / "earnings.json").read_text(encoding="utf-8"))
+    digest_tickers = [t for t, d in earnings.items() if isinstance(d, dict) and d.get("hasDigest") is True]
+    ok = len(digest_tickers) >= 1
+    missing = []
+    for t in digest_tickers:
+        d = earnings[t]
+        act = d.get("actuals") if isinstance(d.get("actuals"), dict) else None
+        cc = d.get("consensusComparison") if isinstance(d.get("consensusComparison"), dict) else None
+        if not act or not (act.get("sourceUrl") or act.get("eps") or act.get("revenue") or act.get("metrics")):
+            missing.append(f"{t}.actuals")
+        if not cc or cc.get("sourceTier") is None:
+            missing.append(f"{t}.consensusComparison")
+    ok = ok and not missing
+    record("all_earnings_provenance_test", ok, f"digests={digest_tickers} missing={missing}")
+
+
+def test_atomic_failure_does_not_nonatomic_fallback(fixture: Path) -> None:
+    exp = import_mod(fixture, "export_web_data")
+    dest = fixture / "web" / "data" / "atomic_probe.json"
+    dest.write_text('{"keep": true}\n', encoding="utf-8")
+    original = dest.read_bytes()
+    src = (fixture / "tools" / "export_web_data.py").read_text(encoding="utf-8")
+    # write_json must not contain a non-atomic fallback
+    write_fn = src.split("def write_json", 1)[1].split("\ndef ", 1)[0]
+    ok = "atomic_write_text" in write_fn
+    ok = ok and "write_text(" not in write_fn.replace("atomic_write_text(", "")
+
+    def boom(*_a, **_k):
+        raise OSError("simulated atomic failure")
+
+    exp.atomic_write_text = boom
+    raised = False
+    try:
+        exp.write_json(dest, {"evil": True})
+    except Exception:
+        raised = True
+    still = dest.read_bytes()
+    ok = ok and raised and still == original
+    record(
+        "atomic_failure_does_not_nonatomic_fallback_test",
+        ok,
+        f"raised={raised} unchanged={still==original}",
+    )
+
+
+def test_revision_regime(fixture: Path) -> None:
+    exp = import_mod(fixture, "export_web_data")
+    _restore_snapshot(fixture)
+    ok = exp.compute_revision_regime(-0.97, 15.7) == "Back-end Loaded / Divergent"
+    ok = ok and exp.compute_revision_regime(1.37, 2.98) == "Mild Upward"
+    ok = ok and exp.compute_revision_regime(0.2, 0.3) == "Stable"
+    ok = ok and exp.compute_revision_regime(5.5, -1.0) == "Front-loaded / Divergent"
+    run_export(fixture)
+    companies = json.loads((fixture / "web" / "data" / "companies.json").read_text(encoding="utf-8"))
+    meta = json.loads((fixture / "web" / "data" / "meta.json").read_text(encoding="utf-8"))
+    val = json.loads((fixture / "web" / "data" / "valuation.json").read_text(encoding="utf-8"))
+    for t in ("NVDA", "AVGO"):
+        c = companies.get(t) or {}
+        ok = ok and c.get("revisionRegime")
+        ok = ok and c.get("revisionRegimeDoc")
+        ok = ok and "nearTermRevision" in c and "longTermRevision" in c
+    ok = ok and meta.get("revisionRegimeDoc")
+    row = (val.get("rows") or [None])[0]
+    ok = ok and row and row.get("revisionRegime")
+    record("revision_regime_test", ok, f"nvda={ (companies.get('NVDA') or {}).get('revisionRegime') }")
+
+
+def _capture_route_png(url: str, dest: Path) -> bool:
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    chrome = shutil.which("google-chrome") or shutil.which("google-chrome-stable") or shutil.which("chromium")
+    if not chrome:
+        return False
+    cmd = [
+        chrome,
+        "--headless=new",
+        "--disable-gpu",
+        "--no-sandbox",
+        "--hide-scrollbars",
+        "--window-size=1280,900",
+        "--virtual-time-budget=4000",
+        f"--screenshot={dest}",
+        url,
+    ]
+    try:
+        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=25)
+    except subprocess.TimeoutExpired:
+        return dest.exists() and dest.stat().st_size > 1000
+    return proc.returncode == 0 and dest.exists() and dest.stat().st_size > 1000
+
+
+def test_company_vs_earnings_route_screenshot(fixture: Path) -> None:
+    """04 (NVDA company) != 06 (NVDA earnings); 05 != 07; 06 != 07. Real earnings routes."""
+    _restore_snapshot(fixture)
+    app = (fixture / "web" / "app.js").read_text(encoding="utf-8")
+    ok = 'parts[0] === "earnings" && parts[1]"' in app or (
+        'parts[0] === "earnings" && parts[1]' in app
+    )
+    ok = ok and "renderEarningsDetail" in app
+    ok = ok and 'name: "earningsDetail"' in app
+    ok = ok and 'name: "company"' in app
+    run_export(fixture)
+
+    import http.server
+    import socketserver
+    import threading
+
+    web = fixture / "web"
+
+    class Handler(http.server.SimpleHTTPRequestHandler):
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, directory=str(web), **kwargs)
+
+        def log_message(self, *_args):
+            return
+
+    httpd = socketserver.TCPServer(("127.0.0.1", 0), Handler)
+    port = httpd.server_address[1]
+    t = threading.Thread(target=httpd.serve_forever, daemon=True)
+    t.start()
+    shot_dir = fixture / "review-pack" / "screenshots"
+    routes = [
+        ("04-nvda-company-latest.png", f"http://127.0.0.1:{port}/index.html#/company/NVDA"),
+        ("05-avgo-company-latest.png", f"http://127.0.0.1:{port}/index.html#/company/AVGO"),
+        ("06-nvda-earnings-latest.png", f"http://127.0.0.1:{port}/index.html#/earnings/NVDA"),
+        ("07-avgo-earnings-latest.png", f"http://127.0.0.1:{port}/index.html#/earnings/AVGO"),
+    ]
+    captured = {}
+    try:
+        for name, url in routes:
+            dest = shot_dir / name
+            captured[name] = _capture_route_png(url, dest)
+    finally:
+        httpd.shutdown()
+        httpd.server_close()
+
+    hashes = {}
+    for name, _url in routes:
+        p = shot_dir / name
+        ok = ok and captured.get(name) and p.exists()
+        if p.exists():
+            hashes[name] = _sha256_file(p)
+    if len(hashes) == 4:
+        ok = ok and hashes["04-nvda-company-latest.png"] != hashes["06-nvda-earnings-latest.png"]
+        ok = ok and hashes["05-avgo-company-latest.png"] != hashes["07-avgo-earnings-latest.png"]
+        ok = ok and hashes["06-nvda-earnings-latest.png"] != hashes["07-avgo-earnings-latest.png"]
+    else:
+        ok = False
+    root_shot = ROOT / "review-pack" / "screenshots"
+    root_shot.mkdir(parents=True, exist_ok=True)
+    for name in hashes:
+        src = shot_dir / name
+        if src.exists():
+            shutil.copy2(src, root_shot / name)
+    record(
+        "company_vs_earnings_route_screenshot_test",
+        ok,
+        f"captured={captured} hashes={ {k: v[:10] for k,v in hashes.items()} }",
+    )
+
 
 def main() -> int:
-    print("=== ai-eps-monitor Round 2 + Round 3 Data Integrity acceptance (isolated) ===")
+    print("=== ai-eps-monitor Fail-Closed Reliability + Signal Quality acceptance (isolated) ===")
     print(f"ROOT={ROOT}")
     before = snapshot_prod_fingerprints()
 
@@ -1241,6 +1714,19 @@ def main() -> int:
         test_momentum_determinism(fixture)
         test_data_version_vs_refresh(fixture)
         test_review_same_build(fixture)
+
+        # Fail-closed reliability + signal quality
+        test_quality_gate_blocks_export(fixture)
+        test_quality_gate_blocks_publish(fixture)
+        test_missing_watchlist_tickers_gate(fixture)
+        test_alert_engine_failure_preserves_history(fixture)
+        test_refresh_only_publish(fixture)
+        test_source_1m_no_daily_spam(fixture)
+        test_low_coverage_revision_confidence(fixture)
+        test_all_earnings_provenance(fixture)
+        test_atomic_failure_does_not_nonatomic_fallback(fixture)
+        test_revision_regime(fixture)
+        test_company_vs_earnings_route_screenshot(fixture)
 
     test_production_unmutated(before)
 

@@ -17,7 +17,7 @@ Repo: https://github.com/kumahsu1118-ui/ai-eps-monitor
 - Open SA in the box browser (persistent login).
 - If session expired → in-chat login form / box help; **do not** push stale numbers as fresh.
 
-**On failure:** Mark collection failed; keep previous consensus; set / keep freshness so **DATA STALE** can appear when >48h since last good consensus; notify user to re-auth.
+**On failure:** Mark collection failed; keep previous consensus; set / keep freshness so **DATA STALE** can appear after the next **weekday 08:00 Taipei + grace** without a successful collection (Friday success keeps Sat/Sun fresh; Monday after grace without success is stale). Notify user to re-auth.
 
 ### 3. Pull consensus & prices
 - For each ticker: earnings estimates + revisions (SA **1M/3M/6M** only; never invent 7D/30D/90D).
@@ -49,6 +49,10 @@ python3 /workspace/ai-eps-monitor/tools/export_web_data.py
 
 **On failure:** Do not publish; notify user with exporter traceback.
 
+**Fail-closed quality gate:** If `qualityGate.publishable` is not exactly `true`, export writes nothing to `web/data`, does not update daily snapshots / revision history / `lastSuccessfulCollection`, quarantines the invalid snapshot, keeps the last-known-good site, and exits non-zero. `publish_github_pages.sh` aborts before `git push`. Missing watchlist `expectedTickers` is **not COMPLETE**; partial collections serve last-known-good rows with an LKG badge.
+
+Publish identity is `dataVersion` **or** `refreshVersion` — a refresh-only tick still ships.
+
 ### 7. Publish to GitHub Pages
 ```bash
 /workspace/ai-eps-monitor/tools/publish_github_pages.sh
@@ -67,7 +71,7 @@ python3 /workspace/ai-eps-monitor/tools/export_web_data.py
 
 | Step | Failure | Handling |
 |------|---------|----------|
-| SA login | Session dead | Re-auth; no fake refresh; stale badge when >48h |
+| SA login | Session dead | Re-auth; no fake refresh; stale badge after weekday 08:00 Taipei + grace |
 | Single ticker pull | Page/block | Null/gaps for ticker; continue |
 | Snapshot write | Disk/error | Abort publish; keep last good snapshot |
 | Export | Script error | Abort publish; notify |

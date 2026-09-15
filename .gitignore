@@ -37,3 +37,7 @@ site-repo/.git/
 web/overview-verify.png
 web/pages-verify.png
 *.lock
+!package-lock.json
+
+# Quarantined invalid snapshots (fail-closed quality gate)
+data/snapshots/quarantine/

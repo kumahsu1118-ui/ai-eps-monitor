@@ -6,12 +6,10 @@
     "afterHours": 212.04,
     "priceAsOf": "4:00 PM 09/14/26; post-market $212.04 at 7:59 PM",
     "lastEarnings": "8/26/2026",
-    "nextEarnings": "Nov 25, 2026 · Post-Market · Estimated",
+    "nextEarnings": "Nov 25, 2026 · Estimated",
     "nextEarningsRaw": "11/25/2026 (Post-Market)",
     "nextEarningsStatus": "estimated",
     "nextEarningsSource": "Seeking Alpha",
-    "nextEarningsSourceUrl": null,
-    "nextEarningsSession": "Post-Market",
     "fyNote": "Annual view; table column shown as 'Fiscal Period Ending'.",
     "momentum": "Positive",
     "momentumFormula": "Deterministic EPS momentum from mapped Y+1 and Y+2 SA 1M revision % only (no management guidance / drivers): both >= +3 → Strong Positive; both >= +1 → Positive; both <= -3 → Strong Negative; both <= -1 → Negative; else Neutral. Missing either leg → Neutral.",
@@ -154,6 +152,7 @@
     "dataAsOf": "2026-09-15T01:36:00Z",
     "lastSuccessfulCollection": "2026-09-15T01:36:00Z",
     "collectionFailed": false,
+    "usingLastKnownGood": false,
     "drivers": {
       "ticker": "NVDA",
       "updated": "2026-09-15T05:30:00Z",
@@ -250,8 +249,7 @@
           "note": "GM deteriorating from memory/GM guide"
         }
       ]
-    },
-    "dataFreshnessBadge": null
+    }
   },
   "AVGO": {
     "ticker": "AVGO",
@@ -260,12 +258,10 @@
     "afterHours": 346.22,
     "priceAsOf": "4:00 PM 09/14/26; post-market $346.22 at 7:59 PM",
     "lastEarnings": "9/2/2026",
-    "nextEarnings": "Dec 10, 2026 · Post-Market · Estimated",
+    "nextEarnings": "Dec 10, 2026 · Estimated",
     "nextEarningsRaw": "12/10/2026 (Post-Market)",
     "nextEarningsStatus": "estimated",
     "nextEarningsSource": "Seeking Alpha",
-    "nextEarningsSourceUrl": null,
-    "nextEarningsSession": "Post-Market",
     "fyNote": "Annual view; table column shown as 'Fiscal Period Ending'.",
     "momentum": "Neutral",
     "momentumFormula": "Deterministic EPS momentum from mapped Y+1 and Y+2 SA 1M revision % only (no management guidance / drivers): both >= +3 → Strong Positive; both >= +1 → Positive; both <= -3 → Strong Negative; both <= -1 → Negative; else Neutral. Missing either leg → Neutral.",
@@ -408,6 +404,7 @@
     "dataAsOf": "2026-09-15T01:36:00Z",
     "lastSuccessfulCollection": "2026-09-15T01:36:00Z",
     "collectionFailed": false,
+    "usingLastKnownGood": false,
     "drivers": {
       "ticker": "AVGO",
       "updated": "2026-09-15T05:30:00Z",
@@ -494,8 +491,7 @@
           "note": "Record FCF"
         }
       ]
-    },
-    "dataFreshnessBadge": null
+    }
   },
   "TSM": {
     "ticker": "TSM",
@@ -508,8 +504,6 @@
     "nextEarningsRaw": "10/16/2026 (Estimated)",
     "nextEarningsStatus": "estimated",
     "nextEarningsSource": "Seeking Alpha",
-    "nextEarningsSourceUrl": null,
-    "nextEarningsSession": null,
     "fyNote": "Annual view; table column shown as 'Fiscal Period Ending'.",
     "momentum": "Neutral",
     "momentumFormula": "Deterministic EPS momentum from mapped Y+1 and Y+2 SA 1M revision % only (no management guidance / drivers): both >= +3 → Strong Positive; both >= +1 → Positive; both <= -3 → Strong Negative; both <= -1 → Negative; else Neutral. Missing either leg → Neutral.",
@@ -644,6 +638,7 @@
     "dataAsOf": "2026-09-15T01:36:00Z",
     "lastSuccessfulCollection": "2026-09-15T01:36:00Z",
     "collectionFailed": false,
+    "usingLastKnownGood": false,
     "drivers": {
       "ticker": "TSM",
       "updated": "2026-09-15T01:36:00Z",
@@ -695,8 +690,7 @@
           "note": "Awaiting first post-setup earnings refresh"
         }
       ]
-    },
-    "dataFreshnessBadge": null
+    }
   },
   "MSFT": {
     "ticker": "MSFT",
@@ -705,12 +699,10 @@
     "afterHours": 504.23,
     "priceAsOf": "4:00 PM 09/14/26; post-market $504.23 at 7:59 PM",
     "lastEarnings": "7/29/2026",
-    "nextEarnings": "Oct 29, 2026 · Post-Market · Estimated",
+    "nextEarnings": "Oct 29, 2026 · Estimated",
     "nextEarningsRaw": "10/29/2026 (Post-Market)",
     "nextEarningsStatus": "estimated",
     "nextEarningsSource": "Seeking Alpha",
-    "nextEarningsSourceUrl": null,
-    "nextEarningsSession": "Post-Market",
     "fyNote": "Annual view; table column shown as 'Fiscal Period Ending'.",
     "momentum": "Neutral",
     "momentumFormula": "Deterministic EPS momentum from mapped Y+1 and Y+2 SA 1M revision % only (no management guidance / drivers): both >= +3 → Strong Positive; both >= +1 → Positive; both <= -3 → Strong Negative; both <= -1 → Negative; else Neutral. Missing either leg → Neutral.",
@@ -838,6 +830,7 @@
     "dataAsOf": "2026-09-15T01:36:00Z",
     "lastSuccessfulCollection": "2026-09-15T01:36:00Z",
     "collectionFailed": false,
+    "usingLastKnownGood": false,
     "drivers": {
       "ticker": "MSFT",
       "updated": "2026-09-15T01:36:00Z",
@@ -894,8 +887,7 @@
           "note": "Awaiting first post-setup earnings refresh"
         }
       ]
-    },
-    "dataFreshnessBadge": null
+    }
   },
   "BE": {
     "ticker": "BE",
@@ -904,12 +896,10 @@
     "afterHours": 258.15,
     "priceAsOf": "4:00 PM 09/14/26; post-market $258.15 at 7:59 PM",
     "lastEarnings": "7/28/2026",
-    "nextEarnings": "Oct 29, 2026 · Post-Market · Estimated",
+    "nextEarnings": "Oct 29, 2026 · Estimated",
     "nextEarningsRaw": "10/29/2026 (Post-Market)",
     "nextEarningsStatus": "estimated",
     "nextEarningsSource": "Seeking Alpha",
-    "nextEarningsSourceUrl": null,
-    "nextEarningsSession": "Post-Market",
     "fyNote": "Annual view; table column shown as 'Fiscal Period Ending'.",
     "momentum": "Neutral",
     "momentumFormula": "Deterministic EPS momentum from mapped Y+1 and Y+2 SA 1M revision % only (no management guidance / drivers): both >= +3 → Strong Positive; both >= +1 → Positive; both <= -3 → Strong Negative; both <= -1 → Negative; else Neutral. Missing either leg → Neutral.",
@@ -1060,6 +1050,7 @@
     "dataAsOf": "2026-09-15T01:36:00Z",
     "lastSuccessfulCollection": "2026-09-15T01:36:00Z",
     "collectionFailed": false,
+    "usingLastKnownGood": false,
     "drivers": {
       "ticker": "BE",
       "updated": "2026-09-15T01:36:00Z",
@@ -1106,8 +1097,7 @@
           "note": "Awaiting first post-setup earnings refresh"
         }
       ]
-    },
-    "dataFreshnessBadge": null
+    }
   },
   "KEYS": {
     "ticker": "KEYS",
@@ -1120,8 +1110,6 @@
     "nextEarningsRaw": null,
     "nextEarningsStatus": null,
     "nextEarningsSource": null,
-    "nextEarningsSourceUrl": null,
-    "nextEarningsSession": null,
     "fyNote": "Annual view; table column shown as 'Fiscal Period Ending'.",
     "momentum": "Positive",
     "momentumFormula": "Deterministic EPS momentum from mapped Y+1 and Y+2 SA 1M revision % only (no management guidance / drivers): both >= +3 → Strong Positive; both >= +1 → Positive; both <= -3 → Strong Negative; both <= -1 → Negative; else Neutral. Missing either leg → Neutral.",
@@ -1265,6 +1253,7 @@
     "dataAsOf": "2026-09-15T01:36:00Z",
     "lastSuccessfulCollection": "2026-09-15T01:36:00Z",
     "collectionFailed": false,
+    "usingLastKnownGood": false,
     "drivers": {
       "ticker": "KEYS",
       "updated": "2026-09-15T01:36:00Z",
@@ -1306,7 +1295,6 @@
           "note": "Awaiting first post-setup earnings refresh"
         }
       ]
-    },
-    "dataFreshnessBadge": null
+    }
   }
 }

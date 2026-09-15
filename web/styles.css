@@ -883,3 +883,22 @@ nav.tabs,
     overflow-x: auto;
   }
 }
+
+/* Revision regime (alongside Momentum) */
+.mom-wrap { display: inline-flex; flex-direction: column; gap: 2px; align-items: flex-start; }
+.revision-regime {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 600;
+  color: #d2a8ff;
+  background: rgba(210, 168, 255, 0.12);
+  border: 1px solid rgba(210, 168, 255, 0.35);
+  border-radius: 4px;
+  padding: 1px 6px;
+  margin-top: 2px;
+}
+.earnings-detail .section-title { color: #58a6ff; }
+.earnings-detail {
+  border-top: 3px solid var(--accent);
+  padding-top: 0.5rem;
+}

@@ -1,66 +1,59 @@
 #!/usr/bin/env bash
-# Sync exported web/ public files → site-repo → git push
-# NO_CHANGES (exit 0) when public payload hash unchanged vs site-repo/.data-version
+# Sync exported web/ public files → Pages payload → git push
+# Fail-closed: qualityGate.publishable must be exactly true or we abort (no push).
+# Publish identity: dataVersion OR refreshVersion change.
 set -euo pipefail
-ROOT=/workspace/ai-eps-monitor
+
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+ROOT="${AI_EPS_ROOT:-$ROOT}"
 WEB="$ROOT/web"
-REPO="$ROOT/site-repo"
-export PATH="/home/box/.local/bin:$PATH"
+REPO="${AI_EPS_SITE_REPO:-$ROOT/site-repo}"
+export PATH="/home/box/.local/bin:${PATH:-}"
+export AI_EPS_ROOT="$ROOT"
 
-python3 "$ROOT/tools/build_alerts.py"
-python3 "$ROOT/tools/export_web_data.py"
+if [[ "${AI_EPS_SKIP_EXPORT:-}" != "1" ]]; then
+  python3 "$ROOT/tools/build_alerts.py" || true
+  if ! python3 "$ROOT/tools/export_web_data.py"; then
+    echo "QUALITY GATE / EXPORT FAILED — aborting publish; last-known-good site kept" >&2
+    exit 1
+  fi
+fi
 
-# Compute content hash of public payload (excludes meta publish-only stamps by hashing data files + app assets)
-HASH=$(python3 - <<'PY'
+META="$WEB/data/meta.json"
+if [[ ! -f "$META" ]]; then
+  echo "ERROR: missing $META — nothing to publish" >&2
+  exit 1
+fi
+
+GATE_OK=$(python3 - <<PY
+import json
+from pathlib import Path
+meta = json.loads(Path("$META").read_text(encoding="utf-8"))
+qg = meta.get("qualityGate") if isinstance(meta.get("qualityGate"), dict) else {}
+print("1" if qg.get("publishable") is True else "0")
+PY
+)
+if [[ "$GATE_OK" != "1" ]]; then
+  echo "QUALITY GATE BLOCKED PUBLISH: qualityGate.publishable is not true — no git push, LKG site kept" >&2
+  exit 1
+fi
+
+HASH=$(python3 - <<PY
 import hashlib, json
 from pathlib import Path
-ROOT = Path("/workspace/ai-eps-monitor")
-WEB = ROOT / "web"
+meta = json.loads(Path("$META").read_text(encoding="utf-8"))
 h = hashlib.sha256()
-
-def feed_bytes(b: bytes):
+def feed(b: bytes):
     h.update(len(b).to_bytes(8, "big"))
     h.update(b)
-
-def feed_file(p: Path):
-    feed_bytes(p.read_bytes())
-
-# App shell
-for name in ("index.html", "app.js", "styles.css"):
-    feed_file(WEB / name)
-
-# Prefer exporter dataVersion (canonical payload hash excluding publish stamps).
-# Fall back to hashing data files with volatile fields stripped.
-meta_path = WEB / "data" / "meta.json"
-meta = json.loads(meta_path.read_text(encoding="utf-8")) if meta_path.exists() else {}
-if meta.get("dataVersion"):
-    feed_bytes(str(meta["dataVersion"]).encode("utf-8"))
-else:
-    data_names = [
-        "companies.json",
-        "valuation.json",
-        "revisions.json",
-        "eps_history.json",
-        "earnings.json",
-        "watchlist.json",
-    ]
-    for name in data_names:
-        p = WEB / "data" / name
-        if p.exists():
-            feed_file(p)
-    # alerts: active list + alertEngineStatus (ignore lastEvaluated timestamps)
-    ap = WEB / "data" / "alerts.json"
-    if ap.exists():
-        alerts = json.loads(ap.read_text(encoding="utf-8"))
-        feed_bytes(json.dumps({
-            "activeAlerts": alerts.get("activeAlerts") or alerts.get("alerts") or [],
-            "alertEngineStatus": alerts.get("alertEngineStatus"),
-        }, sort_keys=True, separators=(",", ":")).encode("utf-8"))
-
+feed(str(meta.get("dataVersion") or "").encode("utf-8"))
+feed(b"|")
+feed(str(meta.get("refreshVersion") or "").encode("utf-8"))
 print(h.hexdigest())
 PY
 )
 
+mkdir -p "$REPO/data"
 VERSION_FILE="$REPO/.data-version"
 PREV=""
 if [[ -f "$VERSION_FILE" ]]; then
@@ -72,12 +65,11 @@ if [[ -n "$PREV" && "$PREV" == "$HASH" ]]; then
   exit 0
 fi
 
-# Payload changed — stamp sitePublished + ensure dataVersion/buildId in meta, then commit
 python3 - <<PY
 import json
 from pathlib import Path
 from datetime import datetime, timezone, timedelta
-meta_path = Path("/workspace/ai-eps-monitor/web/data/meta.json")
+meta_path = Path("$META")
 meta = json.loads(meta_path.read_text(encoding="utf-8"))
 now = datetime.now(timezone(timedelta(hours=8)))
 utc = now.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -85,17 +77,12 @@ months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec
 display = f"{months[now.month-1]} {now.day}, {now.year} {now.hour:02d}:{now.minute:02d} Taipei Time"
 meta["sitePublished"] = utc
 meta["sitePublishedDisplay"] = display
-# Do not write latestSuccessfulRefresh as a primary field
 meta.pop("latestSuccessfulRefresh", None)
 meta.pop("siteRepoCommit", None)
-if not meta.get("dataVersion"):
-    meta["dataVersion"] = "$HASH"
-    meta["buildId"] = "$HASH"
 meta_path.write_text(json.dumps(meta, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
 print("stamped sitePublished", display)
 PY
 
-mkdir -p "$REPO/data"
 cp -a "$WEB/index.html" "$WEB/styles.css" "$WEB/app.js" "$REPO/"
 cp -a "$WEB/data/." "$REPO/data/"
 cp "$REPO/index.html" "$REPO/404.html"
@@ -103,14 +90,33 @@ touch "$REPO/.nojekyll"
 echo "$HASH" > "$VERSION_FILE"
 rm -f "$REPO/ORIGIN.txt" "$REPO/overview-verify.png"
 
+if [[ "${AI_EPS_SYNC_PAGES_ROOT:-1}" == "1" && -x "$ROOT/tools/sync_pages_root.sh" ]]; then
+  bash "$ROOT/tools/sync_pages_root.sh" || true
+fi
+
+if [[ "${AI_EPS_SKIP_GIT:-}" == "1" ]]; then
+  echo "PUSH_SKIPPED hash=${HASH:0:12} (AI_EPS_SKIP_GIT=1)"
+  exit 0
+fi
+
 cd "$REPO"
-gh auth setup-git >/dev/null
+if [[ ! -d .git ]]; then
+  echo "NO_GIT_REPO — files copied, no push"
+  exit 0
+fi
+if command -v gh >/dev/null 2>&1; then
+  gh auth setup-git >/dev/null 2>&1 || true
+fi
 git add -A
 if git diff --cached --quiet; then
   echo "NO_CHANGES"
   exit 0
 fi
-git -c user.email="kumahsu1118-ui@users.noreply.github.com" -c user.name="AI EPS Monitor" commit -m "Update dashboard data $(date -u +%Y-%m-%dT%H:%MZ)"
-git push origin main
+git -c user.email="kumahsu1118-ui@users.noreply.github.com" -c user.name="AI EPS Monitor" \
+  commit -m "Update dashboard data $(date -u +%Y-%m-%dT%H:%MZ)"
+if [[ "${AI_EPS_SKIP_GIT_PUSH:-}" == "1" ]]; then
+  echo "COMMITTED_NO_PUSH hash=${HASH:0:12}"
+  exit 0
+fi
+git push origin HEAD
 echo "PUSHED hash=${HASH:0:12}"
-gh api "repos/kumahsu1118-ui/ai-eps-monitor/pages" -q .html_url 2>/dev/null || true

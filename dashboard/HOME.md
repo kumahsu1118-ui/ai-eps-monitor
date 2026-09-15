@@ -7,12 +7,12 @@ Primary estimate source this run: Seeking Alpha
 
 | Ticker | Last Close | Mapped 2027E EPS | Reported FY label | 2027E PE | 1M EPS Rev (SA) | EPS Momentum | Last Earnings | Next Earnings |
 |---|---:|---:|---|---:|---:|---|---|---|
-| NVDA | 210.96 | 15.61 | Jan 2028 | 13.51 | 1.37% | Strong Positive | 8/26/2026 | Nov 25, 2026 · Estimated |
+| NVDA | 210.96 | 15.61 | Jan 2028 | 13.51 | 1.37% | Positive | 8/26/2026 | Nov 25, 2026 · Estimated |
 | AVGO | 344.72 | 19.38 | Oct 2027 | 17.79 | -0.97% | Neutral | 9/2/2026 | Dec 10, 2026 · Estimated |
-| TSM | 418.01 | 21.93 | Dec 2027 | 19.06 | 0.66% | Positive | 7/16/2026 | Oct 16, 2026 · Estimated |
+| TSM | 418.01 | 21.93 | Dec 2027 | 19.06 | 0.66% | Neutral | 7/16/2026 | Oct 16, 2026 · Estimated |
 | MSFT | 505.41 | 19.75 | Jun 2027 | 25.59 | 0.00% | Neutral | 7/29/2026 | Oct 29, 2026 · Estimated |
-| BE | 257.05 | 4.93 | Dec 2027 | 52.14 | 0.17% | Positive | 7/28/2026 | Oct 29, 2026 · Estimated |
-| KEYS | 314.96 | 13.87 | Oct 2027 | 22.71 | 1.62% | Strong Positive | 8/18/2026 | Data unavailable |
+| BE | 257.05 | 4.93 | Dec 2027 | 52.14 | 0.17% | Neutral | 7/28/2026 | Oct 29, 2026 · Estimated |
+| KEYS | 314.96 | 13.87 | Oct 2027 | 22.71 | 1.62% | Positive | 8/18/2026 | Data unavailable |
 
 ### FY-mapped calendar slots (Reported Fiscal Period Ending preserved; not true CY EPS)
 
@@ -50,7 +50,7 @@ Primary estimate source this run: Seeking Alpha
 
 ## 5. Important Alerts
 
-- See `data/alerts/index.json` (activeAlerts + alertHistory).
+- **None** — alerts only after material revision events (baselines preserved separately).
 
 ## 6. EPS Revision History & Daily Snapshots
 
@@ -63,4 +63,5 @@ Primary estimate source this run: Seeking Alpha
 - Missing years are Data unavailable. Never backfilled from adjacent years.
 - Mapping rule: Slot mapping only (not true calendar-year EPS): Fiscal Period Ending Jan–Mar → prior calendar year slot; otherwise ending year slot. Reported Fiscal Period Ending labels are always preserved. True calendar-year EPS requires summing Q1+Q2+Q3+Q4 consensus with all four present (never interpolated).
 - True CY EPS status: unavailable — need quarterly consensus
+- Momentum: Deterministic EPS momentum from mapped Y+1 and Y+2 SA 1M revision % only (no management guidance / drivers): both >= +3 → Strong Positive; both >= +1 → Positive; both <= -3 → Strong Negative; both <= -1 → Negative; else Neutral. Missing either leg → Neutral.
 - Fiscal vs calendar: see `sources/fiscal_year_map.md`.

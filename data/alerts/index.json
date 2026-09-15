@@ -1663,5 +1663,16 @@
   "alertEngineLastEvaluated": "2026-09-15T08:06:48Z",
   "alertEngineStatus": "ok",
   "alertEngineError": null,
-  "oneShotActiveDays": 21
+  "oneShotActiveDays": 21,
+  "rules": [
+    "single_revision_gt_2pct: |revisionPct| > 2% (revision events)",
+    "cumulative_revision_gt_5pct: daily.jsonl nearest@D-30 vs latest > 5%; else alertDiagnostics insufficient history",
+    "results_vs_consensus / guidance_vs_consensus: split; guidance only if above/below; results uses consensusComparison provenance",
+    "gross_margin_pressure / gross_margin_guidance_revision (prev+current guidance)",
+    "driver_status_change: improving/deteriorating with reason (unique per driver); eventAt from changedAt priority",
+    "source_reported_1m_revision: SA 1M stateful hysteresis ≥5% open, <4% resolve; stable ID (no daily spam); <5 analysts not High",
+    "lifecycle: one-shot active 21d; history retained; diagnostics excluded from history"
+  ],
+  "alertEngineLastAttempt": "2026-09-15T08:06:48Z",
+  "alertEngineLastSuccessfulEvaluation": "2026-09-15T08:06:48Z"
 }

@@ -13,6 +13,10 @@
     "fyNote": "Annual view; table column shown as 'Fiscal Period Ending'.",
     "momentum": "Positive",
     "momentumFormula": "Deterministic EPS momentum from mapped Y+1 and Y+2 SA 1M revision % only (no management guidance / drivers): both >= +3 → Strong Positive; both >= +1 → Positive; both <= -3 → Strong Negative; both <= -1 → Negative; else Neutral. Missing either leg → Neutral.",
+    "nearTermRevision": 1.37,
+    "longTermRevision": 2.98,
+    "revisionRegime": "Mild Upward",
+    "revisionRegimeDoc": "Revision regime from mapped Y+1 (nearTerm) and Y+2 (longTerm) SA 1M %: Y+1<0 and Y+2>=+5 → Back-end Loaded / Divergent; Y+1>=+5 and Y+2<0 → Front-loaded / Divergent; both >= +3 → Broad Upward Revision; both <= -3 → Broad Downward Revision; both near 0 (|x|<1) → Stable; else Mixed / Neutral-adjacent. Complements Momentum (which can be Neutral when legs diverge).",
     "eps": {
       "2026E": {
         "consensus": 9.31,
@@ -148,6 +152,7 @@
     "dataAsOf": "2026-09-15T01:36:00Z",
     "lastSuccessfulCollection": "2026-09-15T01:36:00Z",
     "collectionFailed": false,
+    "usingLastKnownGood": false,
     "drivers": {
       "ticker": "NVDA",
       "updated": "2026-09-15T05:30:00Z",
@@ -260,6 +265,10 @@
     "fyNote": "Annual view; table column shown as 'Fiscal Period Ending'.",
     "momentum": "Neutral",
     "momentumFormula": "Deterministic EPS momentum from mapped Y+1 and Y+2 SA 1M revision % only (no management guidance / drivers): both >= +3 → Strong Positive; both >= +1 → Positive; both <= -3 → Strong Negative; both <= -1 → Negative; else Neutral. Missing either leg → Neutral.",
+    "nearTermRevision": -0.97,
+    "longTermRevision": 15.7,
+    "revisionRegime": "Back-end Loaded / Divergent",
+    "revisionRegimeDoc": "Revision regime from mapped Y+1 (nearTerm) and Y+2 (longTerm) SA 1M %: Y+1<0 and Y+2>=+5 → Back-end Loaded / Divergent; Y+1>=+5 and Y+2<0 → Front-loaded / Divergent; both >= +3 → Broad Upward Revision; both <= -3 → Broad Downward Revision; both near 0 (|x|<1) → Stable; else Mixed / Neutral-adjacent. Complements Momentum (which can be Neutral when legs diverge).",
     "eps": {
       "2026E": {
         "consensus": 11.66,
@@ -395,6 +404,7 @@
     "dataAsOf": "2026-09-15T01:36:00Z",
     "lastSuccessfulCollection": "2026-09-15T01:36:00Z",
     "collectionFailed": false,
+    "usingLastKnownGood": false,
     "drivers": {
       "ticker": "AVGO",
       "updated": "2026-09-15T05:30:00Z",
@@ -497,6 +507,10 @@
     "fyNote": "Annual view; table column shown as 'Fiscal Period Ending'.",
     "momentum": "Neutral",
     "momentumFormula": "Deterministic EPS momentum from mapped Y+1 and Y+2 SA 1M revision % only (no management guidance / drivers): both >= +3 → Strong Positive; both >= +1 → Positive; both <= -3 → Strong Negative; both <= -1 → Negative; else Neutral. Missing either leg → Neutral.",
+    "nearTermRevision": 0.66,
+    "longTermRevision": 0.25,
+    "revisionRegime": "Stable",
+    "revisionRegimeDoc": "Revision regime from mapped Y+1 (nearTerm) and Y+2 (longTerm) SA 1M %: Y+1<0 and Y+2>=+5 → Back-end Loaded / Divergent; Y+1>=+5 and Y+2<0 → Front-loaded / Divergent; both >= +3 → Broad Upward Revision; both <= -3 → Broad Downward Revision; both near 0 (|x|<1) → Stable; else Mixed / Neutral-adjacent. Complements Momentum (which can be Neutral when legs diverge).",
     "eps": {
       "2026E": {
         "consensus": 16.93,
@@ -624,6 +638,7 @@
     "dataAsOf": "2026-09-15T01:36:00Z",
     "lastSuccessfulCollection": "2026-09-15T01:36:00Z",
     "collectionFailed": false,
+    "usingLastKnownGood": false,
     "drivers": {
       "ticker": "TSM",
       "updated": "2026-09-15T01:36:00Z",
@@ -691,6 +706,10 @@
     "fyNote": "Annual view; table column shown as 'Fiscal Period Ending'.",
     "momentum": "Neutral",
     "momentumFormula": "Deterministic EPS momentum from mapped Y+1 and Y+2 SA 1M revision % only (no management guidance / drivers): both >= +3 → Strong Positive; both >= +1 → Positive; both <= -3 → Strong Negative; both <= -1 → Negative; else Neutral. Missing either leg → Neutral.",
+    "nearTermRevision": 0.0,
+    "longTermRevision": -0.0,
+    "revisionRegime": "Stable",
+    "revisionRegimeDoc": "Revision regime from mapped Y+1 (nearTerm) and Y+2 (longTerm) SA 1M %: Y+1<0 and Y+2>=+5 → Back-end Loaded / Divergent; Y+1>=+5 and Y+2<0 → Front-loaded / Divergent; both >= +3 → Broad Upward Revision; both <= -3 → Broad Downward Revision; both near 0 (|x|<1) → Stable; else Mixed / Neutral-adjacent. Complements Momentum (which can be Neutral when legs diverge).",
     "eps": {
       "2026E": {
         "consensus": null,
@@ -811,6 +830,7 @@
     "dataAsOf": "2026-09-15T01:36:00Z",
     "lastSuccessfulCollection": "2026-09-15T01:36:00Z",
     "collectionFailed": false,
+    "usingLastKnownGood": false,
     "drivers": {
       "ticker": "MSFT",
       "updated": "2026-09-15T01:36:00Z",
@@ -883,6 +903,10 @@
     "fyNote": "Annual view; table column shown as 'Fiscal Period Ending'.",
     "momentum": "Neutral",
     "momentumFormula": "Deterministic EPS momentum from mapped Y+1 and Y+2 SA 1M revision % only (no management guidance / drivers): both >= +3 → Strong Positive; both >= +1 → Positive; both <= -3 → Strong Negative; both <= -1 → Negative; else Neutral. Missing either leg → Neutral.",
+    "nearTermRevision": 0.17,
+    "longTermRevision": 0.65,
+    "revisionRegime": "Stable",
+    "revisionRegimeDoc": "Revision regime from mapped Y+1 (nearTerm) and Y+2 (longTerm) SA 1M %: Y+1<0 and Y+2>=+5 → Back-end Loaded / Divergent; Y+1>=+5 and Y+2<0 → Front-loaded / Divergent; both >= +3 → Broad Upward Revision; both <= -3 → Broad Downward Revision; both near 0 (|x|<1) → Stable; else Mixed / Neutral-adjacent. Complements Momentum (which can be Neutral when legs diverge).",
     "eps": {
       "2026E": {
         "consensus": 2.71,
@@ -1026,6 +1050,7 @@
     "dataAsOf": "2026-09-15T01:36:00Z",
     "lastSuccessfulCollection": "2026-09-15T01:36:00Z",
     "collectionFailed": false,
+    "usingLastKnownGood": false,
     "drivers": {
       "ticker": "BE",
       "updated": "2026-09-15T01:36:00Z",
@@ -1088,6 +1113,10 @@
     "fyNote": "Annual view; table column shown as 'Fiscal Period Ending'.",
     "momentum": "Positive",
     "momentumFormula": "Deterministic EPS momentum from mapped Y+1 and Y+2 SA 1M revision % only (no management guidance / drivers): both >= +3 → Strong Positive; both >= +1 → Positive; both <= -3 → Strong Negative; both <= -1 → Negative; else Neutral. Missing either leg → Neutral.",
+    "nearTermRevision": 1.62,
+    "longTermRevision": 16.31,
+    "revisionRegime": "Mild Upward",
+    "revisionRegimeDoc": "Revision regime from mapped Y+1 (nearTerm) and Y+2 (longTerm) SA 1M %: Y+1<0 and Y+2>=+5 → Back-end Loaded / Divergent; Y+1>=+5 and Y+2<0 → Front-loaded / Divergent; both >= +3 → Broad Upward Revision; both <= -3 → Broad Downward Revision; both near 0 (|x|<1) → Stable; else Mixed / Neutral-adjacent. Complements Momentum (which can be Neutral when legs diverge).",
     "eps": {
       "2026E": {
         "consensus": 11.47,
@@ -1224,6 +1253,7 @@
     "dataAsOf": "2026-09-15T01:36:00Z",
     "lastSuccessfulCollection": "2026-09-15T01:36:00Z",
     "collectionFailed": false,
+    "usingLastKnownGood": false,
     "drivers": {
       "ticker": "KEYS",
       "updated": "2026-09-15T01:36:00Z",
