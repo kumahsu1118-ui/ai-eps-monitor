@@ -18,13 +18,18 @@ REPO="$ROOT/site-repo"
 export PATH="/home/box/.local/bin:$PATH"
 
 # Alert evaluation is post-gate only via export_web_data.run_build_alerts()
-set +e
-python3 "$ROOT/tools/export_web_data.py"
-EXP_RC=$?
-set -e
-if [[ "$EXP_RC" -ne 0 ]]; then
-  echo "ERROR: export_web_data.py exited $EXP_RC — abort publish (fail-closed)" >&2
-  exit "$EXP_RC"
+# SKIP_EXPORT=1 / PUBLISH_PREBUILT=1: publish already-exported web/ (ingest --publish)
+if [[ "${SKIP_EXPORT:-}" == "1" || "${PUBLISH_PREBUILT:-}" == "1" ]]; then
+  echo "publish_prebuilt_site: skipping export (prebuilt web/)"
+else
+  set +e
+  python3 "$ROOT/tools/export_web_data.py"
+  EXP_RC=$?
+  set -e
+  if [[ "$EXP_RC" -ne 0 ]]; then
+    echo "ERROR: export_web_data.py exited $EXP_RC — abort publish (fail-closed)" >&2
+    exit "$EXP_RC"
+  fi
 fi
 
 # Second line of defense: qualityGate.publishable must be true
@@ -110,12 +115,18 @@ if [[ -n "$PREV" && "$PREV" == "$HASH" ]]; then
   exit 0
 fi
 
-# Payload changed — stamp sitePublished + ensure dataVersion/buildId in meta, then commit
-python3 - <<PY
+# Payload changed — stamp sitePublished + atomically sync meta.json AND dashboard.json.meta
+EXPORT_HASH="$HASH" python3 - <<'PYSTAMP'
 import json
+import os
+import sys
 from pathlib import Path
 from datetime import datetime, timezone, timedelta
+sys.path.insert(0, "/workspace/ai-eps-monitor/tools")
+from atomic_io import atomic_write_json
+
 meta_path = Path("/workspace/ai-eps-monitor/web/data/meta.json")
+dash_path = Path("/workspace/ai-eps-monitor/web/data/dashboard.json")
 meta = json.loads(meta_path.read_text(encoding="utf-8"))
 now = datetime.now(timezone(timedelta(hours=8)))
 utc = now.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -125,29 +136,90 @@ meta["sitePublished"] = utc
 meta["sitePublishedDisplay"] = display
 meta.pop("latestSuccessfulRefresh", None)
 meta.pop("siteRepoCommit", None)
-if not meta.get("dataVersion"):
-    meta["dataVersion"] = "$HASH"
-    meta["buildId"] = "$HASH"
-meta_path.write_text(json.dumps(meta, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
-print("stamped sitePublished", display)
-PY
+hash_val = os.environ.get("EXPORT_HASH") or ""
+if not meta.get("dataVersion") and hash_val:
+    meta["dataVersion"] = hash_val
+    meta["buildId"] = hash_val
+# Atomic sync: meta.json AND dashboard.json.meta must match (frontend prefers dashboard)
+atomic_write_json(meta_path, meta)
+if dash_path.exists():
+    dash = json.loads(dash_path.read_text(encoding="utf-8"))
+    if not isinstance(dash, dict):
+        dash = {}
+    dash_meta = dict(dash.get("meta") or {})
+    for k in (
+        "sitePublished", "sitePublishedDisplay", "dataVersion", "refreshVersion",
+        "buildId", "lastSuccessfulCollection", "lastSuccessfulCollectionDisplay",
+        "consensusDataAsOf", "consensusDataAsOfDisplay", "collectionStatus",
+        "collectionStatusLabel", "alertEngineStatus", "qualityGate",
+    ):
+        if k in meta:
+            dash_meta[k] = meta[k]
+    dash["meta"] = dash_meta
+    if meta.get("buildId"):
+        dash["buildId"] = meta["buildId"]
+    atomic_write_json(dash_path, dash)
+print("stamped sitePublished", display, "(meta.json + dashboard.json.meta synced)")
+PYSTAMP
 
 mkdir -p "$REPO/data"
 cp -a "$WEB/index.html" "$WEB/styles.css" "$WEB/app.js" "$REPO/"
 cp -a "$WEB/data/." "$REPO/data/"
 cp "$REPO/index.html" "$REPO/404.html"
 touch "$REPO/.nojekyll"
-echo "$HASH" > "$VERSION_FILE"
 rm -f "$REPO/ORIGIN.txt" "$REPO/overview-verify.png"
+# Do NOT write .data-version before push (push-fail retry must still push)
 
 cd "$REPO"
 gh auth setup-git >/dev/null
 git add -A
+NEED_COMMIT=1
 if git diff --cached --quiet; then
-  echo "NO_CHANGES"
-  exit 0
+  NEED_COMMIT=0
 fi
-git -c user.email="kumahsu1118-ui@users.noreply.github.com" -c user.name="AI EPS Monitor" commit -m "Update dashboard data $(date -u +%Y-%m-%dT%H:%MZ)"
+
+# Recovery: if local HEAD is ahead of origin/main, we still need to push
+AHEAD=0
+if git rev-parse --verify origin/main >/dev/null 2>&1; then
+  if [[ "$(git rev-parse HEAD)" != "$(git rev-parse origin/main)" ]]; then
+    # Count commits not in origin
+    AHEAD_N=$(git rev-list --count origin/main..HEAD 2>/dev/null || echo 0)
+    if [[ "${AHEAD_N:-0}" -gt 0 ]]; then
+      AHEAD=1
+    fi
+  fi
+fi
+
+if [[ "$NEED_COMMIT" -eq 0 && "$AHEAD" -eq 0 ]]; then
+  # Truly nothing to publish — only then treat as NO_CHANGES
+  # Still allow when HASH differs from VERSION_FILE but working tree empty after prior failed push? handled by AHEAD
+  if [[ -n "$PREV" && "$PREV" == "$HASH" ]]; then
+    echo "NO_CHANGES"
+    exit 0
+  fi
+  # HASH changed (e.g. sitePublished stamp) but git sees no diff — force-update a stamp file
+  echo "$HASH" > "$REPO/.publish-hash-stamp"
+  git add -A
+  if git diff --cached --quiet; then
+    echo "NO_CHANGES"
+    exit 0
+  fi
+  NEED_COMMIT=1
+fi
+
+if [[ "$NEED_COMMIT" -eq 1 ]]; then
+  git -c user.email="kumahsu1118-ui@users.noreply.github.com" -c user.name="AI EPS Monitor" commit -m "Update dashboard data $(date -u +%Y-%m-%dT%H:%MZ)" || true
+fi
+
+set +e
 git push origin main
+PUSH_RC=$?
+set -e
+if [[ "$PUSH_RC" -ne 0 ]]; then
+  echo "ERROR: git push failed (rc=$PUSH_RC) — .data-version NOT updated; retry will still push" >&2
+  exit "$PUSH_RC"
+fi
+# Update .data-version only AFTER successful push
+echo "$HASH" > "$VERSION_FILE"
 echo "PUSHED hash=${HASH:0:12}"
 gh api "repos/kumahsu1118-ui/ai-eps-monitor/pages" -q .html_url 2>/dev/null || true

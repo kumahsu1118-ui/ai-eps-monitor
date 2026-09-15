@@ -5,8 +5,8 @@
       "rule": "source_reported_1m_revision",
       "severity": "high",
       "ticker": "AVGO",
-      "message": "AVGO Oct 2028: Seeking Alpha 1M revision upgrade +15.70% (≥5%) [Hold] — Source window: Seeking Alpha 1M · Confidence: High",
-      "title": "AVGO Oct 2028: Seeking Alpha 1M revision upgrade +15.70% (≥5%) [Hold] — Source window: Seeking Alpha 1M · Confidence: High",
+      "message": "AVGO Oct 2028: Seeking Alpha 1M revision upgrade +15.70% (≥5%) [Hold] — Source window: Seeking Alpha 1M · Coverage: High",
+      "title": "AVGO Oct 2028: Seeking Alpha 1M revision upgrade +15.70% (≥5%) [Hold] — Source window: Seeking Alpha 1M · Coverage: High",
       "fiscalPeriod": "Oct 2028",
       "eventPeriod": "Oct 2028",
       "eventDate": "2026-09-15",
@@ -42,8 +42,8 @@
       "rule": "source_reported_1m_revision",
       "severity": "high",
       "ticker": "KEYS",
-      "message": "KEYS Oct 2028: Seeking Alpha 1M revision upgrade +16.31% (≥5%) [Hold] — Source window: Seeking Alpha 1M · Confidence: High",
-      "title": "KEYS Oct 2028: Seeking Alpha 1M revision upgrade +16.31% (≥5%) [Hold] — Source window: Seeking Alpha 1M · Confidence: High",
+      "message": "KEYS Oct 2028: Seeking Alpha 1M revision upgrade +16.31% (≥5%) [Hold] — Source window: Seeking Alpha 1M · Coverage: High",
+      "title": "KEYS Oct 2028: Seeking Alpha 1M revision upgrade +16.31% (≥5%) [Hold] — Source window: Seeking Alpha 1M · Coverage: High",
       "fiscalPeriod": "Oct 2028",
       "eventPeriod": "Oct 2028",
       "eventDate": "2026-09-15",
@@ -167,8 +167,8 @@
       "rule": "source_reported_1m_revision",
       "severity": "medium",
       "ticker": "NVDA",
-      "message": "NVDA Jan 2030: Seeking Alpha 1M revision upgrade +11.02% (≥5%) [Hold] — Source window: Seeking Alpha 1M · Confidence: Low",
-      "title": "NVDA Jan 2030: Seeking Alpha 1M revision upgrade +11.02% (≥5%) [Hold] — Source window: Seeking Alpha 1M · Confidence: Low",
+      "message": "NVDA Jan 2030: Seeking Alpha 1M revision upgrade +11.02% (≥5%) [Hold] — Source window: Seeking Alpha 1M · Coverage: Low",
+      "title": "NVDA Jan 2030: Seeking Alpha 1M revision upgrade +11.02% (≥5%) [Hold] — Source window: Seeking Alpha 1M · Coverage: Low",
       "fiscalPeriod": "Jan 2030",
       "eventPeriod": "Jan 2030",
       "eventDate": "2026-09-15",
@@ -204,8 +204,8 @@
       "rule": "source_reported_1m_revision",
       "severity": "medium",
       "ticker": "AVGO",
-      "message": "AVGO Oct 2029: Seeking Alpha 1M revision upgrade +26.48% (≥5%) [Hold] — Source window: Seeking Alpha 1M · Confidence: Low",
-      "title": "AVGO Oct 2029: Seeking Alpha 1M revision upgrade +26.48% (≥5%) [Hold] — Source window: Seeking Alpha 1M · Confidence: Low",
+      "message": "AVGO Oct 2029: Seeking Alpha 1M revision upgrade +26.48% (≥5%) [Hold] — Source window: Seeking Alpha 1M · Coverage: Low",
+      "title": "AVGO Oct 2029: Seeking Alpha 1M revision upgrade +26.48% (≥5%) [Hold] — Source window: Seeking Alpha 1M · Coverage: Low",
       "fiscalPeriod": "Oct 2029",
       "eventPeriod": "Oct 2029",
       "eventDate": "2026-09-15",
@@ -241,8 +241,8 @@
       "rule": "source_reported_1m_revision",
       "severity": "medium",
       "ticker": "KEYS",
-      "message": "KEYS Oct 2029: Seeking Alpha 1M revision upgrade +35.49% (≥5%) [Hold] — Source window: Seeking Alpha 1M · Confidence: Single estimate",
-      "title": "KEYS Oct 2029: Seeking Alpha 1M revision upgrade +35.49% (≥5%) [Hold] — Source window: Seeking Alpha 1M · Confidence: Single estimate",
+      "message": "KEYS Oct 2029: Seeking Alpha 1M revision upgrade +35.49% (≥5%) [Hold] — Source window: Seeking Alpha 1M · Coverage: Single estimate",
+      "title": "KEYS Oct 2029: Seeking Alpha 1M revision upgrade +35.49% (≥5%) [Hold] — Source window: Seeking Alpha 1M · Coverage: Single estimate",
       "fiscalPeriod": "Oct 2029",
       "eventPeriod": "Oct 2029",
       "eventDate": "2026-09-15",
@@ -910,8 +910,8 @@
       "rule": "source_reported_1m_revision",
       "severity": "medium",
       "ticker": "NVDA",
-      "message": "NVDA Jan 2030: Seeking Alpha 1M revision upgrade +11.02% (≥5%) [Hold] — Source window: Seeking Alpha 1M · Confidence: Low",
-      "title": "NVDA Jan 2030: Seeking Alpha 1M revision upgrade +11.02% (≥5%) [Hold] — Source window: Seeking Alpha 1M · Confidence: Low",
+      "message": "NVDA Jan 2030: Seeking Alpha 1M revision upgrade +11.02% (≥5%) [Hold] — Source window: Seeking Alpha 1M · Coverage: Low",
+      "title": "NVDA Jan 2030: Seeking Alpha 1M revision upgrade +11.02% (≥5%) [Hold] — Source window: Seeking Alpha 1M · Coverage: Low",
       "fiscalPeriod": "Jan 2030",
       "eventPeriod": "Jan 2030",
       "eventDate": "2026-09-15",
@@ -947,8 +947,8 @@
       "rule": "source_reported_1m_revision",
       "severity": "high",
       "ticker": "AVGO",
-      "message": "AVGO Oct 2028: Seeking Alpha 1M revision upgrade +15.70% (≥5%) [Hold] — Source window: Seeking Alpha 1M · Confidence: High",
-      "title": "AVGO Oct 2028: Seeking Alpha 1M revision upgrade +15.70% (≥5%) [Hold] — Source window: Seeking Alpha 1M · Confidence: High",
+      "message": "AVGO Oct 2028: Seeking Alpha 1M revision upgrade +15.70% (≥5%) [Hold] — Source window: Seeking Alpha 1M · Coverage: High",
+      "title": "AVGO Oct 2028: Seeking Alpha 1M revision upgrade +15.70% (≥5%) [Hold] — Source window: Seeking Alpha 1M · Coverage: High",
       "fiscalPeriod": "Oct 2028",
       "eventPeriod": "Oct 2028",
       "eventDate": "2026-09-15",
@@ -984,8 +984,8 @@
       "rule": "source_reported_1m_revision",
       "severity": "medium",
       "ticker": "AVGO",
-      "message": "AVGO Oct 2029: Seeking Alpha 1M revision upgrade +26.48% (≥5%) [Hold] — Source window: Seeking Alpha 1M · Confidence: Low",
-      "title": "AVGO Oct 2029: Seeking Alpha 1M revision upgrade +26.48% (≥5%) [Hold] — Source window: Seeking Alpha 1M · Confidence: Low",
+      "message": "AVGO Oct 2029: Seeking Alpha 1M revision upgrade +26.48% (≥5%) [Hold] — Source window: Seeking Alpha 1M · Coverage: Low",
+      "title": "AVGO Oct 2029: Seeking Alpha 1M revision upgrade +26.48% (≥5%) [Hold] — Source window: Seeking Alpha 1M · Coverage: Low",
       "fiscalPeriod": "Oct 2029",
       "eventPeriod": "Oct 2029",
       "eventDate": "2026-09-15",
@@ -1021,8 +1021,8 @@
       "rule": "source_reported_1m_revision",
       "severity": "high",
       "ticker": "KEYS",
-      "message": "KEYS Oct 2028: Seeking Alpha 1M revision upgrade +16.31% (≥5%) [Hold] — Source window: Seeking Alpha 1M · Confidence: High",
-      "title": "KEYS Oct 2028: Seeking Alpha 1M revision upgrade +16.31% (≥5%) [Hold] — Source window: Seeking Alpha 1M · Confidence: High",
+      "message": "KEYS Oct 2028: Seeking Alpha 1M revision upgrade +16.31% (≥5%) [Hold] — Source window: Seeking Alpha 1M · Coverage: High",
+      "title": "KEYS Oct 2028: Seeking Alpha 1M revision upgrade +16.31% (≥5%) [Hold] — Source window: Seeking Alpha 1M · Coverage: High",
       "fiscalPeriod": "Oct 2028",
       "eventPeriod": "Oct 2028",
       "eventDate": "2026-09-15",
@@ -1058,8 +1058,8 @@
       "rule": "source_reported_1m_revision",
       "severity": "medium",
       "ticker": "KEYS",
-      "message": "KEYS Oct 2029: Seeking Alpha 1M revision upgrade +35.49% (≥5%) [Hold] — Source window: Seeking Alpha 1M · Confidence: Single estimate",
-      "title": "KEYS Oct 2029: Seeking Alpha 1M revision upgrade +35.49% (≥5%) [Hold] — Source window: Seeking Alpha 1M · Confidence: Single estimate",
+      "message": "KEYS Oct 2029: Seeking Alpha 1M revision upgrade +35.49% (≥5%) [Hold] — Source window: Seeking Alpha 1M · Coverage: Single estimate",
+      "title": "KEYS Oct 2029: Seeking Alpha 1M revision upgrade +35.49% (≥5%) [Hold] — Source window: Seeking Alpha 1M · Coverage: Single estimate",
       "fiscalPeriod": "Oct 2029",
       "eventPeriod": "Oct 2029",
       "eventDate": "2026-09-15",
@@ -1101,7 +1101,7 @@
       "lookbackDays": 30,
       "windowPointCount": 1,
       "status": "insufficient history",
-      "eventAt": "2026-09-15T08:36:48Z",
+      "eventAt": "2026-09-15T09:04:26Z",
       "diagnostic": true
     },
     {
@@ -1113,7 +1113,7 @@
       "lookbackDays": 30,
       "windowPointCount": 1,
       "status": "insufficient history",
-      "eventAt": "2026-09-15T08:36:48Z",
+      "eventAt": "2026-09-15T09:04:26Z",
       "diagnostic": true
     },
     {
@@ -1125,7 +1125,7 @@
       "lookbackDays": 30,
       "windowPointCount": 1,
       "status": "insufficient history",
-      "eventAt": "2026-09-15T08:36:48Z",
+      "eventAt": "2026-09-15T09:04:26Z",
       "diagnostic": true
     },
     {
@@ -1137,7 +1137,7 @@
       "lookbackDays": 30,
       "windowPointCount": 1,
       "status": "insufficient history",
-      "eventAt": "2026-09-15T08:36:48Z",
+      "eventAt": "2026-09-15T09:04:26Z",
       "diagnostic": true
     },
     {
@@ -1149,7 +1149,7 @@
       "lookbackDays": 30,
       "windowPointCount": 1,
       "status": "insufficient history",
-      "eventAt": "2026-09-15T08:36:48Z",
+      "eventAt": "2026-09-15T09:04:26Z",
       "diagnostic": true
     },
     {
@@ -1161,7 +1161,7 @@
       "lookbackDays": 30,
       "windowPointCount": 1,
       "status": "insufficient history",
-      "eventAt": "2026-09-15T08:36:48Z",
+      "eventAt": "2026-09-15T09:04:26Z",
       "diagnostic": true
     },
     {
@@ -1173,7 +1173,7 @@
       "lookbackDays": 30,
       "windowPointCount": 1,
       "status": "insufficient history",
-      "eventAt": "2026-09-15T08:36:48Z",
+      "eventAt": "2026-09-15T09:04:26Z",
       "diagnostic": true
     },
     {
@@ -1185,7 +1185,7 @@
       "lookbackDays": 30,
       "windowPointCount": 1,
       "status": "insufficient history",
-      "eventAt": "2026-09-15T08:36:48Z",
+      "eventAt": "2026-09-15T09:04:26Z",
       "diagnostic": true
     },
     {
@@ -1197,7 +1197,7 @@
       "lookbackDays": 30,
       "windowPointCount": 1,
       "status": "insufficient history",
-      "eventAt": "2026-09-15T08:36:48Z",
+      "eventAt": "2026-09-15T09:04:26Z",
       "diagnostic": true
     },
     {
@@ -1209,7 +1209,7 @@
       "lookbackDays": 30,
       "windowPointCount": 1,
       "status": "insufficient history",
-      "eventAt": "2026-09-15T08:36:48Z",
+      "eventAt": "2026-09-15T09:04:26Z",
       "diagnostic": true
     },
     {
@@ -1221,7 +1221,7 @@
       "lookbackDays": 30,
       "windowPointCount": 1,
       "status": "insufficient history",
-      "eventAt": "2026-09-15T08:36:48Z",
+      "eventAt": "2026-09-15T09:04:26Z",
       "diagnostic": true
     },
     {
@@ -1233,7 +1233,7 @@
       "lookbackDays": 30,
       "windowPointCount": 1,
       "status": "insufficient history",
-      "eventAt": "2026-09-15T08:36:48Z",
+      "eventAt": "2026-09-15T09:04:26Z",
       "diagnostic": true
     },
     {
@@ -1245,7 +1245,7 @@
       "lookbackDays": 30,
       "windowPointCount": 1,
       "status": "insufficient history",
-      "eventAt": "2026-09-15T08:36:48Z",
+      "eventAt": "2026-09-15T09:04:26Z",
       "diagnostic": true
     },
     {
@@ -1257,7 +1257,7 @@
       "lookbackDays": 30,
       "windowPointCount": 1,
       "status": "insufficient history",
-      "eventAt": "2026-09-15T08:36:48Z",
+      "eventAt": "2026-09-15T09:04:26Z",
       "diagnostic": true
     },
     {
@@ -1269,7 +1269,7 @@
       "lookbackDays": 30,
       "windowPointCount": 1,
       "status": "insufficient history",
-      "eventAt": "2026-09-15T08:36:48Z",
+      "eventAt": "2026-09-15T09:04:26Z",
       "diagnostic": true
     },
     {
@@ -1281,7 +1281,7 @@
       "lookbackDays": 30,
       "windowPointCount": 1,
       "status": "insufficient history",
-      "eventAt": "2026-09-15T08:36:48Z",
+      "eventAt": "2026-09-15T09:04:26Z",
       "diagnostic": true
     },
     {
@@ -1293,7 +1293,7 @@
       "lookbackDays": 30,
       "windowPointCount": 1,
       "status": "insufficient history",
-      "eventAt": "2026-09-15T08:36:48Z",
+      "eventAt": "2026-09-15T09:04:26Z",
       "diagnostic": true
     },
     {
@@ -1305,7 +1305,7 @@
       "lookbackDays": 30,
       "windowPointCount": 1,
       "status": "insufficient history",
-      "eventAt": "2026-09-15T08:36:48Z",
+      "eventAt": "2026-09-15T09:04:26Z",
       "diagnostic": true
     },
     {
@@ -1317,7 +1317,7 @@
       "lookbackDays": 30,
       "windowPointCount": 1,
       "status": "insufficient history",
-      "eventAt": "2026-09-15T08:36:48Z",
+      "eventAt": "2026-09-15T09:04:26Z",
       "diagnostic": true
     },
     {
@@ -1329,7 +1329,7 @@
       "lookbackDays": 30,
       "windowPointCount": 1,
       "status": "insufficient history",
-      "eventAt": "2026-09-15T08:36:48Z",
+      "eventAt": "2026-09-15T09:04:26Z",
       "diagnostic": true
     },
     {
@@ -1341,7 +1341,7 @@
       "lookbackDays": 30,
       "windowPointCount": 1,
       "status": "insufficient history",
-      "eventAt": "2026-09-15T08:36:48Z",
+      "eventAt": "2026-09-15T09:04:26Z",
       "diagnostic": true
     },
     {
@@ -1353,7 +1353,7 @@
       "lookbackDays": 30,
       "windowPointCount": 1,
       "status": "insufficient history",
-      "eventAt": "2026-09-15T08:36:48Z",
+      "eventAt": "2026-09-15T09:04:26Z",
       "diagnostic": true
     }
   ],
@@ -1451,8 +1451,8 @@
       "rule": "source_reported_1m_revision",
       "severity": "high",
       "ticker": "KEYS",
-      "message": "KEYS Oct 2028: Seeking Alpha 1M revision upgrade +16.31% (≥5%) [Hold] — Source window: Seeking Alpha 1M · Confidence: High",
-      "title": "KEYS Oct 2028: Seeking Alpha 1M revision upgrade +16.31% (≥5%) [Hold] — Source window: Seeking Alpha 1M · Confidence: High",
+      "message": "KEYS Oct 2028: Seeking Alpha 1M revision upgrade +16.31% (≥5%) [Hold] — Source window: Seeking Alpha 1M · Coverage: High",
+      "title": "KEYS Oct 2028: Seeking Alpha 1M revision upgrade +16.31% (≥5%) [Hold] — Source window: Seeking Alpha 1M · Coverage: High",
       "fiscalPeriod": "Oct 2028",
       "eventPeriod": "Oct 2028",
       "eventDate": "2026-09-15",
@@ -1491,8 +1491,8 @@
       "rule": "source_reported_1m_revision",
       "severity": "high",
       "ticker": "AVGO",
-      "message": "AVGO Oct 2028: Seeking Alpha 1M revision upgrade +15.70% (≥5%) [Hold] — Source window: Seeking Alpha 1M · Confidence: High",
-      "title": "AVGO Oct 2028: Seeking Alpha 1M revision upgrade +15.70% (≥5%) [Hold] — Source window: Seeking Alpha 1M · Confidence: High",
+      "message": "AVGO Oct 2028: Seeking Alpha 1M revision upgrade +15.70% (≥5%) [Hold] — Source window: Seeking Alpha 1M · Coverage: High",
+      "title": "AVGO Oct 2028: Seeking Alpha 1M revision upgrade +15.70% (≥5%) [Hold] — Source window: Seeking Alpha 1M · Coverage: High",
       "fiscalPeriod": "Oct 2028",
       "eventPeriod": "Oct 2028",
       "eventDate": "2026-09-15",
@@ -1528,8 +1528,8 @@
       "rule": "source_reported_1m_revision",
       "severity": "high",
       "ticker": "KEYS",
-      "message": "KEYS Oct 2028: Seeking Alpha 1M revision upgrade +16.31% (≥5%) [Hold] — Source window: Seeking Alpha 1M · Confidence: High",
-      "title": "KEYS Oct 2028: Seeking Alpha 1M revision upgrade +16.31% (≥5%) [Hold] — Source window: Seeking Alpha 1M · Confidence: High",
+      "message": "KEYS Oct 2028: Seeking Alpha 1M revision upgrade +16.31% (≥5%) [Hold] — Source window: Seeking Alpha 1M · Coverage: High",
+      "title": "KEYS Oct 2028: Seeking Alpha 1M revision upgrade +16.31% (≥5%) [Hold] — Source window: Seeking Alpha 1M · Coverage: High",
       "fiscalPeriod": "Oct 2028",
       "eventPeriod": "Oct 2028",
       "eventDate": "2026-09-15",
@@ -1653,8 +1653,8 @@
       "rule": "source_reported_1m_revision",
       "severity": "medium",
       "ticker": "NVDA",
-      "message": "NVDA Jan 2030: Seeking Alpha 1M revision upgrade +11.02% (≥5%) [Hold] — Source window: Seeking Alpha 1M · Confidence: Low",
-      "title": "NVDA Jan 2030: Seeking Alpha 1M revision upgrade +11.02% (≥5%) [Hold] — Source window: Seeking Alpha 1M · Confidence: Low",
+      "message": "NVDA Jan 2030: Seeking Alpha 1M revision upgrade +11.02% (≥5%) [Hold] — Source window: Seeking Alpha 1M · Coverage: Low",
+      "title": "NVDA Jan 2030: Seeking Alpha 1M revision upgrade +11.02% (≥5%) [Hold] — Source window: Seeking Alpha 1M · Coverage: Low",
       "fiscalPeriod": "Jan 2030",
       "eventPeriod": "Jan 2030",
       "eventDate": "2026-09-15",
@@ -1690,8 +1690,8 @@
       "rule": "source_reported_1m_revision",
       "severity": "medium",
       "ticker": "AVGO",
-      "message": "AVGO Oct 2029: Seeking Alpha 1M revision upgrade +26.48% (≥5%) [Hold] — Source window: Seeking Alpha 1M · Confidence: Low",
-      "title": "AVGO Oct 2029: Seeking Alpha 1M revision upgrade +26.48% (≥5%) [Hold] — Source window: Seeking Alpha 1M · Confidence: Low",
+      "message": "AVGO Oct 2029: Seeking Alpha 1M revision upgrade +26.48% (≥5%) [Hold] — Source window: Seeking Alpha 1M · Coverage: Low",
+      "title": "AVGO Oct 2029: Seeking Alpha 1M revision upgrade +26.48% (≥5%) [Hold] — Source window: Seeking Alpha 1M · Coverage: Low",
       "fiscalPeriod": "Oct 2029",
       "eventPeriod": "Oct 2029",
       "eventDate": "2026-09-15",
@@ -1727,8 +1727,8 @@
       "rule": "source_reported_1m_revision",
       "severity": "medium",
       "ticker": "KEYS",
-      "message": "KEYS Oct 2029: Seeking Alpha 1M revision upgrade +35.49% (≥5%) [Hold] — Source window: Seeking Alpha 1M · Confidence: Single estimate",
-      "title": "KEYS Oct 2029: Seeking Alpha 1M revision upgrade +35.49% (≥5%) [Hold] — Source window: Seeking Alpha 1M · Confidence: Single estimate",
+      "message": "KEYS Oct 2029: Seeking Alpha 1M revision upgrade +35.49% (≥5%) [Hold] — Source window: Seeking Alpha 1M · Coverage: Single estimate",
+      "title": "KEYS Oct 2029: Seeking Alpha 1M revision upgrade +35.49% (≥5%) [Hold] — Source window: Seeking Alpha 1M · Coverage: Single estimate",
       "fiscalPeriod": "Oct 2029",
       "eventPeriod": "Oct 2029",
       "eventDate": "2026-09-15",
@@ -2015,11 +2015,11 @@
       "ageDays": 20
     }
   ],
-  "alertEngineLastEvaluated": "2026-09-15T08:36:48Z",
-  "alertEngineLastAttempt": "2026-09-15T08:36:48Z",
-  "alertEngineLastSuccessfulEvaluation": "2026-09-15T08:36:48Z",
+  "alertEngineLastEvaluated": "2026-09-15T09:04:26Z",
+  "alertEngineLastAttempt": "2026-09-15T09:04:26Z",
+  "alertEngineLastSuccessfulEvaluation": "2026-09-15T09:04:26Z",
   "alertEngineStatus": "ok",
   "alertEngineError": null,
   "oneShotActiveDays": 21,
-  "buildId": "a5dbdeb3d0ed5fc6510d2c2b211737d2dee47b0e15e9321daa697cfa212fa5bd"
+  "buildId": "7f93184951a93aef15985e40abd73ff0ac5e796069798909ac17b85730a8ba8b"
 }

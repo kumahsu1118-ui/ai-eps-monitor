@@ -153,7 +153,7 @@
     if (Number.isNaN(last)) return true;
     const now = nowMs == null ? Date.now() : nowMs;
     const grace = graceHours != null ? graceHours : ((state.meta && state.meta.graceHours) != null ? Number(state.meta.graceHours) : DEFAULT_GRACE_HOURS);
-    /* Prefer server-exported staleAfter / nextExpected when present */
+    /* Prefer server-exported staleAfter (= nextExpected+grace) / lastDueGraceDeadline / nextExpected */
     const m = state.meta || {};
     if (m.staleAfter && m.nextExpected) {
       /* If server already computed dataStale with same lastSuccessfulCollection, trust combined OR */
@@ -748,12 +748,24 @@
         const item = el("div", { className: "alert-item" });
         const age = typeof a === "object" ? alertAgeLabel(a) : "";
         item.appendChild(el("span", { className: "alert-msg", text: msg }));
-        if (typeof a === "object" && a.confidence) {
+        if (typeof a === "object" && (a.confidence || a.coverage)) {
+          const cov = a.coverage || a.confidence;
+          const covText = "Coverage: " + cov + (a.analystCount != null ? " · " + a.analystCount + " analysts" : "");
           item.appendChild(el("span", {
             className: "alert-confidence",
-            text: "Confidence: " + a.confidence + (a.analystCount != null ? " (" + a.analystCount + " analysts)" : ""),
-            title: "Analyst coverage confidence",
+            text: covText,
+            title: "Analyst coverage (count), not consensus confidence",
           }));
+          if (a.dispersion != null && !Number.isNaN(Number(a.dispersion))) {
+            const dispPct = fmtDispersion(a.dispersion);
+            const wide = Math.abs(Number(a.dispersion)) >= 0.25 || (dispPct && parseFloat(dispPct) >= 25);
+            const band = wide ? "Wide" : (parseFloat(dispPct) >= 15 ? "Moderate" : "Tight");
+            item.appendChild(el("span", {
+              className: "alert-dispersion",
+              text: "Dispersion: " + (dispPct || String(a.dispersion)) + " · " + band,
+              title: "High-Low range vs consensus",
+            }));
+          }
         }
         if (age) item.appendChild(el("span", { className: "alert-age", text: age }));
         box.appendChild(item);

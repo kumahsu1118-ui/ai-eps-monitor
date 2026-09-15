@@ -1,49 +1,56 @@
-# AI EPS Monitor — Final Review Package (Long-term Reliability)
+# AI EPS Monitor — Review Pack (Transactional & Idempotent Pipeline)
 
-## Public site
+**Generated:** 2026-09-15 17:04 Taipei  
+**Round:** Transactional & Idempotent Pipeline (auto-generated — replaces prior round README metadata)
+
+## Build identity
+
+| Field | Value |
+|-------|-------|
+| sitePublished | `2026-09-15T08:36:48Z` |
+| sitePublishedDisplay | Sep 15, 2026 16:36 Taipei Time |
+| dataVersion | `7f93184951a93aef15985e40abd73ff0ac5e796069798909ac17b85730a8ba8b` |
+| refreshVersion | `13b6e576e814b2f5cdbbfd778ce61edb4e1f7a7df9dd9a13a3922bab864f9bb0` |
+| buildId | `7f93184951a93aef15985e40abd73ff0ac5e796069798909ac17b85730a8ba8b` |
+| lastSuccessfulCollection | `2026-09-15T01:36:00Z` |
+| collectionStatus | COMPLETE |
+| alertEngineStatus | ok |
+| qualityGate | ok |
+| acceptance tests | **89/89 PASS** (this round only) |
+
+## Public URL
+
 https://kumahsu1118-ui.github.io/ai-eps-monitor/
 
-## Same-build metadata (web/data/meta.json)
-- consensusDataAsOfDisplay: Sep 15, 2026 09:36 Taipei Time
-- sitePublishedDisplay: Sep 15, 2026 13:31 Taipei Time
-- dataStale: False
-- dataVersion / buildId: 86d789ae6f387604c51b0105eb9baf648133ffaa2607d55466ddaaad3410c5b5
-- alertEngineStatus: ok
-- displayMappedYears: ['2026E', '2027E', '2028E', '2029E']
-- mappingRule: Slot mapping only (not true calendar-year EPS): Fiscal Period Ending Jan–Mar → prior calendar year slot; otherwise ending year slot. Reported Fiscal Period Ending labels are always preserved. True calendar-year EPS requires summing Q1+Q2+Q3+Q4 consensus with all four present (never interpolated).
+## Screenshot SHA256 (this build)
 
-## Automated tests
-`python3 tools/run_acceptance_tests.py` → **10/10 PASS** (isolated tempfile). See TEST_RESULTS_LONGTERM.md.
+| File | SHA256 |
+|------|--------|
+| `01-overview-latest.png` | `2163d1d0fa497816105fcfe91c11acbf97e844e49e7a11ad8f3035979539be1a` |
+| `02-valuation-latest.png` | `0658746299bbb7765607d7fcd48ce57be93138eb91769ce16824b9eff3745676` |
+| `03-eps-revisions-latest.png` | `9a0a73585127e717c468461447f13f872a090df9cb07717779ce6961f920f924` |
+| `04-nvda-company-latest.png` | `1b313a6dfd78902ef510f79ed4dcaed46106bd2ce157b674719fb5c631e8c4c7` |
+| `05-avgo-company-latest.png` | `76ea6f4ef5fc7905f5b3f877002d186ca2f6df16841d39336f5cda1036922b4a` |
+| `06-nvda-earnings-latest.png` | `af9429a11f93beee45f3271e1b0e02d13019815eefd10584bce6a65fb7b091ae` |
+| `07-avgo-earnings-latest.png` | `942f8a0dc0bf659e699995418093ed1f27517cbf3a612870b3d9840c5afeefc5` |
+| `08-mobile-overview-latest.png` | `6d916982bd5799d89b3fdec43d78e2cb0ac081a339f44bbdebe2550ba9cf94cb` |
 
-## Screenshot SHA256
+## Transactional & Idempotent Pipeline highlights
 
-```
-935cb7dace446fbedcbc898b6e6f1c28b541b04d3a0c7b07f5b901e2bfae4853  01-overview-latest.png
-da9f7836208631b513b6dab29576d9a600ff7d8a0ee843fa3903ed3f54fded16  02-valuation-latest.png
-5b4631c871ed2c709b0dd8ce19653d70fc884b8719c9051dcc6410725d888786  03-eps-revisions-latest.png
-4ad3557d374e0c6130caff58b4d32de75516345ff3d5bbdce3e8619105db5b08  04-nvda-company-latest.png
-ef3fced7c29cf88da6bc95ab3afac2c52cc3b53dc5cd9c3310ba0cdac200a0f4  05-avgo-company-latest.png
-04d047d9172bf4b86a33f9f38300176d75c5265eb486af804b319ec2ae2373df  06-nvda-earnings-latest.png
-cda1929aacf7f73d602033f7fb930219c5c71e68b0decd58dec6241e9c8fee6c  07-avgo-earnings-latest.png
-c5a7bcd197786380831256df578d9401b93479a3c1cfcebb4179bf6edea1b27f  08-mobile-overview-latest.png
-```
+- Transactional ingest: stage → export → atomic COMMIT; export failure ABORT (no LKG / no revisions / incoming unprocessed)
+- Revision eventId idempotency (exact replay → 0 new); immutable validated snapshots (timestamp+contentHash)
+- ingest --publish: single export + publish_prebuilt_site (no second export / no duplicate revisions)
+- refreshVersion excludes sitePublished; .data-version written only after successful git push
+- Unknown analystCount severity capped at Medium; UI Coverage (not Confidence) + Dispersion
+- Earnings provenance: results.sourceUrl survives missing guidanceDetail; Reuters≠Tier1 classifier
+- Revision generation fail-closed; null consensus skipped in daily observations
 
+## Review ZIP
 
-## What changed (reliability only)
-- Client-side DATA STALE (>48h from consensusDataAsOf) + per-ticker freshness
-- Deterministic `tools/build_alerts.py` + alertEngineLastEvaluated / Status
-- Fiscal identity: ticker + reportedFiscalPeriodEnding; display years dynamic
-- Publish only when public data content hash changes (dataVersion)
-- NVDA/AVGO digests: Company IR + SEC URLs; null Tier1–3 URLs omitted
-- Drivers: previousStatus / currentStatus / changedAt / reason / sourceUrl
-- Acceptance tests never mutate production ROOT
-- Dispersion as % + range UI; sticky ticker column on mobile
+`/workspace/ai-eps-monitor-review.zip` — `bash tools/build_review_zip.sh`
 
-## Not included (sensitive)
-Browser profiles, cookies, Seeking Alpha credentials, private tokens.
+Clean unzip: `unzip … && cd ai-eps-monitor-review && python3 tools/run_acceptance_tests.py`
 
-## Git commit at publish
-`d920e4e3df2abb95d01cd4b5a40abe8b12054e51` (site-repo main)
+---
 
-## Pages note
-GitHub Pages API may show `errored` on recent pushes; live HTTPS served matching meta (curl + browser) used for screenshot acceptance.
+_This file is regenerated from `web/data/meta.json` + `TEST_RESULTS_TRANSACTIONAL_IDEMPOTENT.md`. It MUST NOT retain leftover prior-round score metadata._

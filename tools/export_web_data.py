@@ -144,19 +144,26 @@ def snapshot_sort_key(path: Path) -> str:
 
 
 def list_full_snapshots() -> list[Path]:
-    """Full snapshots including same-day timestamped multiples; exclude raw_/quarantine/latest."""
-    out = []
-    for p in SNAP_DIR.glob("20*.json"):
-        if p.name.startswith("raw_"):
-            continue
-        if p.name in {"latest.json", "manifest.json"}:
-            continue
-        if "quarantine" in p.parts:
-            continue
-        # Accept YYYY-MM-DD.json or YYYY-MM-DDTHHMMSSZ.json
-        if re.match(r"^\d{4}-\d{2}-\d{2}(T\d{6}Z)?\.json$", p.name):
-            out.append(p)
-    return sorted(out, key=snapshot_sort_key)
+    """Validated snapshots only (same-day timestamped OK).
+
+    Excludes raw_/quarantine/latest/manifest and non-publishable stamped files.
+    load_latest_snapshot() and history comparison read ONLY these.
+    """
+    try:
+        import snapshot_quality as sq
+        return sq.list_validated_snapshots(SNAP_DIR)
+    except Exception:
+        out = []
+        for p in SNAP_DIR.glob("20*.json"):
+            if p.name.startswith("raw_"):
+                continue
+            if p.name in {"latest.json", "manifest.json"}:
+                continue
+            if "quarantine" in p.parts:
+                continue
+            if re.match(r"^\d{4}-\d{2}-\d{2}(T\d{6}Z)?(_[A-Za-z0-9]+)?(_\d+)?\.json$", p.name):
+                out.append(p)
+        return sorted(out, key=snapshot_sort_key)
 
 
 def persist_full_snapshot(snap: dict, snap_utc: str | None = None) -> Path:
@@ -174,12 +181,49 @@ def persist_full_snapshot(snap: dict, snap_utc: str | None = None) -> Path:
         day = str(utc)[:10] if utc else datetime.now(timezone.utc).strftime("%Y-%m-%d")
         fname = f"{day}.json"
     path = SNAP_DIR / fname
+    SNAP_DIR.mkdir(parents=True, exist_ok=True)
+
+    def _content_hash(obj: dict) -> str:
+        payload = {k: v for k, v in (obj or {}).items() if k not in {"qualityGate", "runId", "runStatus"}}
+        return hashlib.sha256(
+            json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+        ).hexdigest()[:12]
+
     if path.exists():
-        # Do not overwrite — keep first same-day / same-timestamp snapshot
-        # If collision on day-only legacy name, write timestamped sibling when utc known
-        if m and path.exists():
-            return path  # identical timestamp identity preserved
-        if not m:
+        # Immutable: never overwrite. Same content → reuse; different → timestamp+contentHash.
+        try:
+            existing = json.loads(path.read_text(encoding="utf-8"))
+            if _content_hash(existing) == _content_hash(snap):
+                # identical — update pointers only
+                try:
+                    atomic_write_json(SNAP_DIR / "latest.json", snap)
+                    manifest = {
+                        "latest": path.name,
+                        "snapshot_utc": snap.get("snapshot_utc"),
+                        "files": [x.name for x in list_full_snapshots()],
+                        "immutable": True,
+                    }
+                    atomic_write_json(SNAP_DIR / "manifest.json", manifest)
+                except Exception:
+                    pass
+                return path
+        except Exception:
+            existing = None
+        if m:
+            ch = _content_hash(snap)
+            stem = fname.replace(".json", "")
+            path = SNAP_DIR / f"{stem}_{ch}.json"
+            n = 0
+            while path.exists():
+                try:
+                    ex2 = json.loads(path.read_text(encoding="utf-8"))
+                    if _content_hash(ex2) == _content_hash(snap):
+                        return path
+                except Exception:
+                    pass
+                n += 1
+                path = SNAP_DIR / f"{stem}_{ch}_{n}.json"
+        else:
             # legacy day file exists — write a timestamped unique name
             now = datetime.now(timezone.utc)
             fname = now.strftime("%Y-%m-%dT%H%M%SZ.json")
@@ -189,7 +233,6 @@ def persist_full_snapshot(snap: dict, snap_utc: str | None = None) -> Path:
                 n += 1
                 fname = now.strftime("%Y-%m-%dT%H%M%SZ") + f"_{n}.json"
                 path = SNAP_DIR / fname
-    SNAP_DIR.mkdir(parents=True, exist_ok=True)
     atomic_write_json(path, snap)
     # Convenience pointers
     try:
@@ -202,19 +245,30 @@ def persist_full_snapshot(snap: dict, snap_utc: str | None = None) -> Path:
 
 
 def load_latest_snapshot():
-    # Prefer latest.json pointer when present
-    latest_ptr = SNAP_DIR / "latest.json"
+    """Load newest VALIDATED snapshot only.
+
+    Never treats data/incoming/ or quarantine as validated history.
+    Prefer INGEST_GATED_SNAPSHOT env when set (this-run gated path).
+    """
+    gated = os.environ.get("INGEST_GATED_SNAPSHOT")
+    if gated:
+        gp = Path(gated)
+        if gp.exists():
+            return gp, json.loads(gp.read_text(encoding="utf-8"))
     dated = list_full_snapshots()
-    if latest_ptr.exists() and dated:
-        # Prefer newest timestamped file over possibly-stale latest.json content path
-        path = dated[-1]
-        return path, json.loads(path.read_text(encoding="utf-8"))
     if dated:
         path = dated[-1]
         return path, json.loads(path.read_text(encoding="utf-8"))
+    # latest.json only if it looks publishable
+    latest_ptr = SNAP_DIR / "latest.json"
     if latest_ptr.exists():
-        return latest_ptr, json.loads(latest_ptr.read_text(encoding="utf-8"))
-    raise SystemExit(f"No snapshot found in {SNAP_DIR}")
+        data = json.loads(latest_ptr.read_text(encoding="utf-8"))
+        qg = (data or {}).get("qualityGate") or {}
+        if qg.get("publishable") is not False and qg.get("status") not in {
+            "reject", "needs_verification"
+        }:
+            return latest_ptr, data
+    raise SystemExit(f"No validated snapshot found in {SNAP_DIR}")
 
 
 def load_watchlist():
@@ -591,16 +645,19 @@ def compute_freshness(last_success_iso: str | None, now: datetime | None = None,
 
     due = most_recent_due_collection_start(now_tp, grace_hours=grace_hours)
     nxt = next_expected_collection(now_tp)
-    stale_after = None
-    if due is not None:
-        stale_after = (due + timedelta(hours=grace_hours)).astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     next_expected = nxt.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    # staleAfter = nextExpected + grace (client/server shared definition)
+    stale_after = (nxt + timedelta(hours=grace_hours)).astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    last_due_grace = None
+    if due is not None:
+        last_due_grace = (due + timedelta(hours=grace_hours)).astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
     if last_tp is None:
         return {
             "dataStale": True,
             "nextExpected": next_expected,
             "staleAfter": stale_after,
+            "lastDueGraceDeadline": last_due_grace,
             "freshnessRule": "weekday_0800_taipei_plus_grace",
             "graceHours": grace_hours,
         }
@@ -613,6 +670,7 @@ def compute_freshness(last_success_iso: str | None, now: datetime | None = None,
         "dataStale": stale,
         "nextExpected": next_expected,
         "staleAfter": stale_after,
+        "lastDueGraceDeadline": last_due_grace,
         "freshnessRule": "weekday_0800_taipei_plus_grace",
         "graceHours": grace_hours,
         "lastDueCollectionStart": due.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ") if due else None,
@@ -1081,6 +1139,10 @@ def seed_and_append_daily_snapshots(
             identity = fiscal or slot
             key = (snap_date, t, identity)
             new_eps = e.get("consensus")
+            # P2: null/unavailable consensus → do not append historical observation
+            # (day summary JSON may still keep unavailable slots below)
+            if new_eps is None or to_num(new_eps) is None:
+                continue
             if key in last_consensus:
                 if eps_same(last_consensus[key], new_eps):
                     continue  # unchanged → do not append
@@ -1543,8 +1605,15 @@ def write_json(path: Path, obj):
     atomic_write_json(Path(path), obj)
 
 
-def run_build_alerts() -> dict:
+def run_build_alerts(
+    current_snapshot: dict | None = None,
+    snapshot_utc: str | None = None,
+    display_years: list[str] | None = None,
+) -> dict:
     """Call deterministic alert engine before writing web/data/alerts.json.
+
+    Pass THIS RUN's Quality-Gated snapshot — do not let Alert Engine rediscover
+    current generation from snapshots dir (manifest.json breaks Source 1M).
 
     On evaluate_alerts() exception: preserve last-known-good alertHistory and
     previous active alerts; set alertEngineStatus=error. Never overwrite with
@@ -1560,7 +1629,11 @@ def run_build_alerts() -> dict:
         prior = {}
 
     try:
-        payload = ba.evaluate_alerts()
+        payload = ba.evaluate_alerts(
+            current_snapshot=current_snapshot,
+            snapshot_utc=snapshot_utc,
+            display_years=display_years,
+        )
         ba.write_alerts(payload)
         # Stamp last successful evaluation
         payload = dict(payload)
@@ -1737,6 +1810,28 @@ def apply_last_known_good_for_missing(
     return companies
 
 
+def classify_source_tier(url: str | None) -> str | int | None:
+    """Deterministic source classifier.
+
+    Company IR / SEC → Tier1; official transcript → official;
+    Reuters/Bloomberg/WSJ/CNBC → Tier3; Seeking Alpha → Tier4;
+    Unknown → Unknown. Never Tier1 merely because a URL exists.
+    """
+    if not url:
+        return None
+    u = str(url).lower()
+    if "sec.gov" in u or "investor." in u or "investors." in u or "/ir/" in u or "investor-relations" in u:
+        return 1
+    if "transcript" in u and ("company" in u or "ir." in u or "investor" in u or "sec.gov" in u):
+        return "official"
+    if any(d in u for d in ("reuters.com", "bloomberg.com", "wsj.com", "cnbc.com", "dowjones.com")):
+        return 3
+    if "seekingalpha.com" in u or "seekingalpha" in u:
+        return 4
+    # Known press domains without IR → Unknown (not Tier1)
+    return "Unknown"
+
+
 def ensure_earnings_provenance(data: dict) -> dict:
     """Ensure hasDigest digests carry actuals + consensusComparison with tiers.
 
@@ -1778,12 +1873,10 @@ def ensure_earnings_provenance(data: dict) -> dict:
                 if isinstance(row, dict) and "gross" in str(row.get("label") or "").lower() and row.get("value"):
                     metrics["grossMargin"] = row.get("value")
                     break
-        src_url = (
-            results.get("sourceUrl")
-            or (out.get("guidanceDetail") or {}).get("sourceUrl")
-            if isinstance(out.get("guidanceDetail"), dict)
-            else None
-        )
+        # Parentheses matter: missing guidanceDetail must NOT null results.sourceUrl
+        gd = out.get("guidanceDetail")
+        gd_url = gd.get("sourceUrl") if isinstance(gd, dict) else None
+        src_url = results.get("sourceUrl") or gd_url
         # Prefer IR / sec from results
         if not src_url:
             for row in (out.get("eps") or []) + (out.get("revenue") or []):
@@ -1791,13 +1884,15 @@ def ensure_earnings_provenance(data: dict) -> dict:
                     src_url = row.get("sourceUrl")
                     break
         tier = results.get("sourceTier")
-        if tier is None:
-            # Heuristic: company IR / sec.gov → 1
-            u = str(src_url or "").lower()
-            if "sec.gov" in u or "investor." in u or "investors." in u:
-                tier = 1
-            else:
-                tier = 1 if src_url else None
+        classified = classify_source_tier(src_url)
+        if classified is not None:
+            # Never retain Tier1 when the URL is clearly not Company IR/SEC
+            if tier is None or (tier == 1 and classified != 1):
+                tier = classified
+            elif tier is None:
+                tier = classified
+        elif tier is None and not src_url:
+            tier = None
         # Always materialize actuals for hasDigest (may be sparse)
         actuals = {
             "metrics": metrics,
@@ -2020,6 +2115,14 @@ def main() -> int:
 
 def _main_locked() -> int:
     """Core export under pipeline lock."""
+    fault = os.environ.get("FAULT_INJECT_EXPORT_EXIT")
+    if fault:
+        try:
+            code = int(fault)
+        except Exception:
+            code = 9
+        print(f"FAULT_INJECT_EXPORT_EXIT={code}", flush=True)
+        return code
     snap_path, snap = load_latest_snapshot()
     tickers = load_watchlist()
     prior_snap = None
@@ -2032,6 +2135,16 @@ def _main_locked() -> int:
             break
         except Exception:
             continue
+
+    # Per-ticker LKG from validated history (not only previous whole snapshot)
+    lkg_by_ticker = {}
+    try:
+        import snapshot_quality as sq
+        lkg_by_ticker = sq.load_last_known_good_by_ticker(
+            SNAP_DIR, exclude_path=snap_path, expected_tickers=tickers, root=ROOT
+        )
+    except Exception:
+        lkg_by_ticker = {}
 
     gate = {
         "status": "ok",
@@ -2046,7 +2159,15 @@ def _main_locked() -> int:
     }
     try:
         import snapshot_quality as sq
-        gate = sq.gate_snapshot(snap, prior_snap, expected_tickers=tickers)
+        gate = sq.gate_snapshot(
+            snap,
+            prior_snap,
+            expected_tickers=tickers,
+            lkg_by_ticker=lkg_by_ticker,
+            root=ROOT,
+        )
+        if gate.get("normalizedSnapshot"):
+            snap = gate["normalizedSnapshot"]
     except Exception as exc:
         print(f"quality gate error (fail-closed): {exc}")
         gate = {
@@ -2112,15 +2233,50 @@ def _main_locked() -> int:
     history_raw = load_history()
     revisions = [map_history_row(r) for r in history_raw]
 
-    # Only append daily snapshots when publishable (already gated)
-    daily_rows = seed_and_append_daily_snapshots(
-        companies, tickers, snap, snap_path, year_keys=year_keys
-    )
+    # Only append daily snapshots when publishable (already gated).
+    # When ingest owns commit (INGEST_DEFER_HISTORY=1), skip mutating daily here.
+    if os.environ.get("INGEST_DEFER_HISTORY") == "1":
+        daily_rows = []
+        jsonl_path = DAILY_SNAP_DIR / "daily.jsonl"
+        if jsonl_path.exists():
+            for line in jsonl_path.read_text(encoding="utf-8").splitlines():
+                line = line.strip()
+                if line:
+                    try:
+                        daily_rows.append(json.loads(line))
+                    except Exception:
+                        pass
+        print("INGEST_DEFER_HISTORY=1 — skip daily append (ingest will commit)")
+    else:
+        daily_rows = seed_and_append_daily_snapshots(
+            companies, tickers, snap, snap_path, year_keys=year_keys
+        )
     eps_history = build_eps_history_from_daily(daily_rows)
 
     earnings = load_or_init_earnings(companies, tickers)
 
-    alerts_payload = run_build_alerts()
+    # Auto-generate revision events BEFORE Alert Engine when not already done by ingest.
+    # Identity: ticker + reportedFiscalPeriodEnding. Must complete so single_revision_gt_2pct works.
+    if os.environ.get("INGEST_REVISIONS_DONE") != "1":
+        try:
+            import ingest_snapshot as ing
+            hist_for_rev = ing.load_revision_history(REV_PATH)
+            events = ing.generate_revision_events(
+                snap, lkg_by_ticker, existing_history=hist_for_rev
+            )
+            n_rev = ing.append_revision_events(events)
+            if n_rev:
+                print(f"revision events appended: +{n_rev}")
+        except Exception as exc:
+            # Fail-closed: do not continue COMPLETE with stale revision history
+            print(f"ERROR: revision event generation failed — aborting export: {exc}")
+            return 1
+
+    alerts_payload = run_build_alerts(
+        current_snapshot=snap,
+        snapshot_utc=snap_utc,
+        display_years=year_keys,
+    )
     active = alerts_payload.get("activeAlerts") or alerts_payload.get("alerts") or []
     history_alerts = alerts_payload.get("alertHistory") or active
     alerts = {
@@ -2157,13 +2313,20 @@ def _main_locked() -> int:
             f"PARTIAL · {coll['successfulCount']}/{coll['totalCount']}"
         )
 
+    # refreshVersion: operational collection state ONLY — exclude sitePublished
+    # (changing only sitePublished must NOT change refreshVersion / publish loop)
+    collection_run_id = (
+        os.environ.get("INGEST_COLLECTION_RUN_ID")
+        or snap.get("collectionRunId")
+        or snap_path.name
+    )
     refresh_version = hashlib.sha256(
         canonical_json_bytes(
             {
+                "collectionRunId": collection_run_id,
                 "lastSuccessfulCollection": snap_utc,
-                "alertEngineLastEvaluated": alerts.get("alertEngineLastEvaluated"),
-                "sitePublished": site_published,
                 "collectionStatus": coll.get("collectionStatus"),
+                "alertEngineStatus": alerts.get("alertEngineStatus"),
             }
         )
     ).hexdigest()
@@ -2204,6 +2367,7 @@ def _main_locked() -> int:
         "dataStale": data_stale,
         "nextExpected": freshness.get("nextExpected"),
         "staleAfter": freshness.get("staleAfter"),
+        "lastDueGraceDeadline": freshness.get("lastDueGraceDeadline"),
         "freshnessRule": freshness.get("freshnessRule"),
         "graceHours": freshness.get("graceHours"),
         "displayMappedYears": year_keys,

@@ -90,14 +90,21 @@ def consensus_confidence(analyst_count) -> str:
 
 
 def severity_for_source_1m(rev_pct, analyst_count, *, far_forward: bool = False) -> str:
-    """analystCount <5 on far-forward revisions must NOT default High severity."""
+    """Cap severity when coverage is thin or analystCount unknown.
+
+    - analystCount missing/unknown → never High (cap at Medium)
+    - analystCount <5 on far-forward → not High
+    """
     n = to_num(analyst_count)
     conf = consensus_confidence(n)
-    if n is not None and n < 5 and far_forward:
-        # Cap severity for thin coverage far-forward
-        return "medium" if abs(to_num(rev_pct) or 0) >= 10 else "low"
-    if conf in {"Low", "Single estimate"}:
-        return "medium" if abs(to_num(rev_pct) or 0) >= SOURCE_1M_ALERT_PCT else "low"
+    abs_rev = abs(to_num(rev_pct) or 0)
+    if n is None:
+        # Unknown coverage must not map to High severity
+        return "medium" if abs_rev >= SOURCE_1M_ALERT_PCT else "low"
+    if n < 5 and far_forward:
+        return "medium" if abs_rev >= 10 else "low"
+    if conf in {"Low", "Single estimate", "Unknown"}:
+        return "medium" if abs_rev >= SOURCE_1M_ALERT_PCT else "low"
     return "high"
 
 
@@ -1039,39 +1046,58 @@ def rule6_source_reported_1m(
     tickers: list[str] | None = None,
     prior_history: list | None = None,
     now: datetime | None = None,
+    current_snapshot: dict | None = None,
+    display_years: list[str] | None = None,
 ) -> list[dict]:
     """SA-supplied 1M revision — stateful Open / Update / Resolve (no daily spam).
 
     ID must NOT include snapshot date as daily spam key.
     Open when |1M| >= 5%; stay open with Update while |1M| >= 5%; Resolve when |1M| < 4%.
     Label: "Source window: Seeking Alpha 1M". NEVER call this Internal 30D.
+
+    Must use THIS RUN's Quality-Gated snapshot when provided — do NOT rediscover
+    current generation from snapshots dir (manifest.json lexicographic win breaks Source 1M).
     """
     now = now or datetime.now(timezone.utc)
     out = []
-    snap_dir = ROOT / "data" / "snapshots"
-    snap = None
-    if snap_dir.exists():
-        files = sorted(snap_dir.glob("*.json"), reverse=True)
-        for p in files:
-            if p.name.startswith("raw_") or "quarantine" in p.parts:
-                continue
+    snap = current_snapshot
+    if snap is None:
+        # Fallback for standalone CLI: newest validated dated snapshot only
+        # (exclude manifest.json / latest.json / raw_ / quarantine)
+        snap_dir = ROOT / "data" / "snapshots"
+        if snap_dir.exists():
             try:
-                snap = load_json(p)
-                if snap:
-                    break
+                import snapshot_quality as sq
+                files = sq.list_validated_snapshots(snap_dir)
             except Exception:
-                continue
+                files = sorted(
+                    [
+                        p for p in snap_dir.glob("20*.json")
+                        if not p.name.startswith("raw_")
+                        and p.name not in {"latest.json", "manifest.json"}
+                    ],
+                    key=lambda p: p.name,
+                )
+            for p in reversed(files):
+                try:
+                    snap = load_json(p)
+                    if snap:
+                        break
+                except Exception:
+                    continue
     if not snap:
         return out
     tickers = tickers or load_tickers()
-    year_keys = []
-    try:
-        # Prefer meta display years when available
-        meta_p = ROOT / "web" / "data" / "meta.json"
-        if meta_p.exists():
-            year_keys = (json.loads(meta_p.read_text(encoding="utf-8")) or {}).get("displayMappedYears") or []
-    except Exception:
-        year_keys = []
+    year_keys = list(display_years) if display_years else []
+    if not year_keys:
+        try:
+            # Prefer meta display years when available — but NEVER for rollover
+            # when caller already provided this-run display_years.
+            meta_p = ROOT / "web" / "data" / "meta.json"
+            if meta_p.exists():
+                year_keys = (json.loads(meta_p.read_text(encoding="utf-8")) or {}).get("displayMappedYears") or []
+        except Exception:
+            year_keys = []
 
     # Index prior open source_1m alerts by (ticker, slot)
     prior_open: dict[tuple, dict] = {}
@@ -1161,7 +1187,7 @@ def rule6_source_reported_1m(
                         (
                             f"{t} {fiscal}: Seeking Alpha 1M revision {direction} {rev:+.2f}% (≥5%) [Open] "
                             f"— Source window: Seeking Alpha 1M"
-                            + (f" · Confidence: {conf}" if conf else "")
+                            + (f" · Coverage: {conf}" if conf else "")
                         ),
                         period=fiscal,
                         event_date="stateful",  # NOT snapshot date — prevents daily spam IDs
@@ -1201,7 +1227,7 @@ def rule6_source_reported_1m(
                         a["message"] = (
                             f"{t} {fiscal}: Seeking Alpha 1M revision {direction} {rev:+.2f}% (≥5%) "
                             f"[Updated] — Source window: Seeking Alpha 1M"
-                            + (f" · Confidence: {conf}" if conf else "")
+                            + (f" · Coverage: {conf}" if conf else "")
                         )
                         a["title"] = a["message"]
                     else:
@@ -1214,7 +1240,7 @@ def rule6_source_reported_1m(
                         a["message"] = (
                             f"{t} {fiscal}: Seeking Alpha 1M revision {direction} {rev:+.2f}% (≥5%) "
                             f"[Hold] — Source window: Seeking Alpha 1M"
-                            + (f" · Confidence: {conf}" if conf else "")
+                            + (f" · Coverage: {conf}" if conf else "")
                         )
                         a["title"] = a["message"]
                         a["_skipHistoryAppend"] = True
@@ -1363,7 +1389,18 @@ def events_since_last_collection(
     return out
 
 
-def evaluate_alerts(now: datetime | None = None) -> dict:
+def evaluate_alerts(
+    now: datetime | None = None,
+    current_snapshot: dict | None = None,
+    snapshot_utc: str | None = None,
+    display_years: list[str] | None = None,
+) -> dict:
+    """Evaluate alerts against THIS RUN's Quality-Gated snapshot context.
+
+    Alert Engine must NOT guess current generation from snapshots dir
+    (manifest.json would win lexicographic reverse sort → Source 1M Alerts=0).
+    Pass current_snapshot + display_years from the gated ingest/export path.
+    """
     now = now or datetime.now(timezone.utc)
     tickers = load_tickers()
     history = load_history()
@@ -1382,7 +1419,15 @@ def evaluate_alerts(now: datetime | None = None) -> dict:
     generated.extend(rule3_results_and_guidance(tickers))
     generated.extend(rule4_gm(tickers))
     generated.extend(rule5_driver_or_digest_flags(tickers))
-    generated.extend(rule6_source_reported_1m(tickers, prior_history=prior_hist, now=now))
+    generated.extend(
+        rule6_source_reported_1m(
+            tickers,
+            prior_history=prior_hist,
+            now=now,
+            current_snapshot=current_snapshot,
+            display_years=display_years,
+        )
+    )
 
     # Deduplicate ONLY by full unique Alert ID (keep first / prefer newer generated)
     seen = set()
@@ -1521,7 +1566,7 @@ def evaluate_alerts(now: datetime | None = None) -> dict:
         "rules": [
             "single_revision_gt_2pct: |revisionPct| > 2% (revision events)",
             "cumulative_revision_gt_5pct: Internal 30D stateful (≥5% Open / Update same ID; <4% Resolve); diagnostics for insufficient history",
-            "source_reported_1m_revision: SA |1M|≥5% stateful Open/Update/Resolve (ID without snapshot date); Source window: Seeking Alpha 1M; confidence from analystCount",
+            "source_reported_1m_revision: SA |1M|≥5% stateful Open/Update/Resolve (ID without snapshot date); Source window: Seeking Alpha 1M; coverage from analystCount (not consensus confidence)",
             "results_vs_consensus / guidance_vs_consensus: split; guidance only if above/below; results uses consensusComparison provenance",
             "gross_margin_pressure / gross_margin_guidance_revision (prev+current guidance)",
             "driver_status_change: all transitions retained by unique Alert ID (no ticker+driver collapse); eventAt from changedAt priority",

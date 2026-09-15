@@ -5,6 +5,12 @@ Validates ticker EPS payloads before treating a snapshot as successful.
 Parser 0 rows must NOT write as a successful snapshot.
 Extreme EPS consensus swings vs last-known-good (>30%) → needs_verification.
 Full watchlist: expected vs received; missing tickers → not ok/complete.
+
+Per-ticker LKG: Extreme EPS / Price Outlier / Fiscal Coverage use ticker-specific
+last-known-good from validated snapshot history (not only the previous whole snapshot).
+
+Fiscal identity: numeric consensus rows require normalized reportedFiscalPeriodEnding
+(month+year). FY2027-only labels are normalized via universe.json fiscalEndMonthByTicker.
 """
 from __future__ import annotations
 
@@ -19,12 +25,16 @@ _MONTH = {
     "aug": 8, "august": 8, "sep": 9, "sept": 9, "september": 9,
     "oct": 10, "october": 10, "nov": 11, "november": 11, "dec": 12, "december": 12,
 }
+_MONTH_ABBR = {
+    1: "Jan", 2: "Feb", 3: "Mar", 4: "Apr", 5: "May", 6: "Jun",
+    7: "Jul", 8: "Aug", 9: "Sep", 10: "Oct", 11: "Nov", 12: "Dec",
+}
 
 EXTREME_EPS_CHANGE_PCT = 30.0
 MIN_EXPECTED_FISCAL_ROWS = 2
-PRICE_OUTLIER_PCT = 30.0  # abnormal single-day move vs LKG → needs_verification
-PRICE_SCALE_FACTORS = (10.0, 100.0)  # ×10/×100/÷10/÷100 patterns
-FISCAL_COVERAGE_DROP_MIN = 2  # e.g. 4→2 periods without rollover
+PRICE_OUTLIER_PCT = 30.0
+PRICE_SCALE_FACTORS = (10.0, 100.0)
+FISCAL_COVERAGE_DROP_MIN = 2
 
 
 def to_num(x):
@@ -48,12 +58,73 @@ def is_explicit_unavailable(x) -> bool:
     return s in {"", "n/a", "na", "data unavailable", "unavailable", "null", "none", "—", "-"}
 
 
+def load_fiscal_end_config(root: Path | None = None) -> dict[str, int]:
+    """Load ticker → fiscal-end month (1-12) from universe.json."""
+    if root is None:
+        root = Path(__file__).resolve().parent.parent
+    path = root / "data" / "universe.json"
+    if not path.exists():
+        return {}
+    try:
+        u = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+    cfg = u.get("fiscalEndMonthByTicker") or {}
+    out: dict[str, int] = {}
+    for k, v in cfg.items():
+        try:
+            out[str(k).upper()] = int(v)
+        except Exception:
+            continue
+    return out
+
+
+def normalize_reported_fiscal(
+    label,
+    ticker: str | None = None,
+    fiscal_end_by_ticker: dict[str, int] | None = None,
+    slot: str | None = None,
+) -> tuple[str | None, bool]:
+    """Return (normalized 'Mon YYYY' or None, was_normalized).
+
+    Accepts: 'Jan 2027', 'January 2027', '2027-01', 'FY2027', '2027E'.
+    FY/year-only forms require ticker fiscal-end config (or slot year + config).
+    """
+    if label is None or is_explicit_unavailable(label):
+        # Slot (2027E) is a calendar mapping key — NOT a Reported Fiscal Period Ending.
+        # Missing fiscal identity must fail closed (do not invent from slot).
+        return None, False
+    s = str(label).strip()
+    # Already Mon YYYY
+    m = re.match(r"^(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)[a-z]*\s+(\d{4})$", s, re.I)
+    if m:
+        mon = _MONTH.get(m.group(1).lower()[:3], _MONTH.get(m.group(1).lower()))
+        if mon:
+            return f"{_MONTH_ABBR[mon]} {m.group(2)}", False
+    # YYYY-MM
+    m = re.match(r"^(\d{4})-(\d{2})$", s)
+    if m:
+        mon = int(m.group(2))
+        if 1 <= mon <= 12:
+            return f"{_MONTH_ABBR[mon]} {m.group(1)}", False
+    # FY2027 / 2027E / 2027
+    m = re.match(r"^(?:FY\s*)?(\d{4})E?$", s, re.I)
+    if m:
+        year = int(m.group(1))
+        cfg = fiscal_end_by_ticker or {}
+        mon = cfg.get(str(ticker or "").upper())
+        if mon and 1 <= int(mon) <= 12:
+            return f"{_MONTH_ABBR[int(mon)]} {year}", True
+        return None, False
+    return None, False
+
+
 def fiscal_label_parsable(label) -> bool:
     if label is None:
         return False
     s = str(label).strip()
     if is_explicit_unavailable(s):
-        return True  # explicit unavailable is allowed (not a parse failure)
+        return True
     if re.match(r"^(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)[a-z]*\s+\d{4}$", s, re.I):
         return True
     if re.match(r"^\d{4}-\d{2}$", s):
@@ -65,16 +136,61 @@ def fiscal_label_parsable(label) -> bool:
     return False
 
 
-def validate_eps_row(row: dict, *, slot: str | None = None) -> list[str]:
+def fiscal_identity_ok(label, ticker=None, fiscal_end_by_ticker=None, slot=None) -> bool:
+    """True when we can produce a normalized month+year fiscal identity."""
+    norm, _ = normalize_reported_fiscal(label, ticker, fiscal_end_by_ticker, slot=slot)
+    return norm is not None
+
+
+def calendar_mapping_from_fiscal(fiscal_label: str | None) -> str | None:
+    """Jan–Mar → prior CY; else ending year. Slot mapping only."""
+    if not fiscal_label:
+        return None
+    m = re.match(
+        r"^(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)[a-z]*\s+(\d{4})$",
+        str(fiscal_label).strip(),
+        re.I,
+    )
+    if not m:
+        return None
+    mon = _MONTH.get(m.group(1).lower()[:3])
+    year = int(m.group(2))
+    if mon is None:
+        return None
+    if mon <= 3:
+        return f"CY{year - 1}"
+    return f"CY{year}"
+
+
+def validate_eps_row(
+    row: dict,
+    *,
+    slot: str | None = None,
+    ticker: str | None = None,
+    fiscal_end_by_ticker: dict[str, int] | None = None,
+    require_fiscal_identity: bool = True,
+) -> list[str]:
     errs = []
     if not isinstance(row, dict):
         return ["row_not_object"]
-    label = row.get("reported_fiscal_label") or row.get("reportedFiscalLabel") or row.get("fiscalPeriodEnding")
-    if label is not None and str(label).strip() and not fiscal_label_parsable(label):
-        if not re.match(r"^\d{4}E$", str(label).strip(), re.I):
-            errs.append(f"fiscal_label_unparsable:{label}")
+    label = (
+        row.get("reported_fiscal_label")
+        or row.get("reportedFiscalLabel")
+        or row.get("reportedFiscalPeriodEnding")
+        or row.get("fiscalPeriodEnding")
+    )
     cons_raw = row.get("consensus") if "consensus" in row else row.get("eps")
     cons = to_num(cons_raw)
+    # Numeric consensus requires normalized month+year fiscal identity
+    if cons is not None and require_fiscal_identity:
+        if not fiscal_identity_ok(label, ticker, fiscal_end_by_ticker, slot=slot):
+            if label is None or is_explicit_unavailable(label):
+                errs.append("missing_fiscal_identity")
+            else:
+                errs.append(f"fiscal_identity_unnormalizable:{label}")
+    elif label is not None and str(label).strip() and not fiscal_label_parsable(label):
+        if not re.match(r"^\d{4}E$", str(label).strip(), re.I):
+            errs.append(f"fiscal_label_unparsable:{label}")
     high = to_num(row.get("high"))
     low = to_num(row.get("low"))
     if cons is None and not is_explicit_unavailable(cons_raw):
@@ -105,7 +221,55 @@ def validate_eps_row(row: dict, *, slot: str | None = None) -> list[str]:
     return errs
 
 
-def validate_ticker_payload(ticker: str, td: dict, *, min_fiscal_rows: int = MIN_EXPECTED_FISCAL_ROWS) -> dict:
+def apply_fiscal_normalization(
+    snap: dict,
+    fiscal_end_by_ticker: dict[str, int] | None = None,
+) -> dict:
+    """In-place normalize fiscal labels on a copy; set fiscalPeriodNormalized flags."""
+    snap = dict(snap) if isinstance(snap, dict) else {"tickers": {}}
+    tickers = dict(snap.get("tickers") or {})
+    cfg = fiscal_end_by_ticker if fiscal_end_by_ticker is not None else load_fiscal_end_config()
+    for t, td in list(tickers.items()):
+        if not isinstance(td, dict):
+            continue
+        td = dict(td)
+        eps = dict(td.get("eps") or {})
+        for slot, row in list(eps.items()):
+            if not isinstance(row, dict):
+                continue
+            row = dict(row)
+            label = (
+                row.get("reported_fiscal_label")
+                or row.get("reportedFiscalLabel")
+                or row.get("reportedFiscalPeriodEnding")
+                or row.get("fiscalPeriodEnding")
+            )
+            norm, was_norm = normalize_reported_fiscal(label, t, cfg, slot=slot)
+            if norm:
+                row["reported_fiscal_label"] = norm
+                row["reportedFiscalLabel"] = norm
+                row["reportedFiscalPeriodEnding"] = norm
+                if was_norm:
+                    row["fiscalPeriodNormalized"] = True
+                if not row.get("calendar_alignment") and not row.get("calendarAlignment"):
+                    cm = calendar_mapping_from_fiscal(norm)
+                    if cm:
+                        row["calendar_alignment"] = cm
+                        row["calendarAlignment"] = cm
+            eps[slot] = row
+        td["eps"] = eps
+        tickers[t] = td
+    snap["tickers"] = tickers
+    return snap
+
+
+def validate_ticker_payload(
+    ticker: str,
+    td: dict,
+    *,
+    min_fiscal_rows: int = MIN_EXPECTED_FISCAL_ROWS,
+    fiscal_end_by_ticker: dict[str, int] | None = None,
+) -> dict:
     """Validate one ticker block from a snapshot. Returns gate result dict."""
     errors: list[str] = []
     warnings: list[str] = []
@@ -129,10 +293,19 @@ def validate_ticker_payload(ticker: str, td: dict, *, min_fiscal_rows: int = MIN
         if not isinstance(row, dict):
             continue
         rows.append((slot, row))
-        lab = row.get("reported_fiscal_label") or row.get("reportedFiscalLabel")
+        lab = (
+            row.get("reported_fiscal_label")
+            or row.get("reportedFiscalLabel")
+            or row.get("reportedFiscalPeriodEnding")
+        )
         if lab and not is_explicit_unavailable(lab):
             labels_seen.append(str(lab).strip())
-        errors.extend([f"{slot}:{e}" for e in validate_eps_row(row, slot=slot)])
+        errors.extend([
+            f"{slot}:{e}"
+            for e in validate_eps_row(
+                row, slot=slot, ticker=ticker, fiscal_end_by_ticker=fiscal_end_by_ticker
+            )
+        ])
         cons_raw = row.get("consensus") if "consensus" in row else row.get("eps")
         if to_num(cons_raw) is not None:
             usable.append((slot, row))
@@ -208,24 +381,27 @@ def fiscal_coverage_regression(
     old_n = count_usable_fiscal_periods(prior_td)
     if old_n < FISCAL_COVERAGE_DROP_MIN:
         return None
-    # Rollover detection: if new labels are a shifted/superset calendar of old, OK
+
     def labels(td):
         out = []
         for row in ((td or {}).get("eps") or {}).values():
             if not isinstance(row, dict):
                 continue
-            lab = row.get("reported_fiscal_label") or row.get("reportedFiscalLabel")
+            lab = (
+                row.get("reported_fiscal_label")
+                or row.get("reportedFiscalLabel")
+                or row.get("reportedFiscalPeriodEnding")
+            )
             if lab and not is_explicit_unavailable(lab):
                 out.append(str(lab).strip())
         return out
+
     old_labs = labels(prior_td)
     new_labs = labels(new_td)
-    # Normal rollover: at least one shared label OR new max year > old max year with similar count
     shared = set(old_labs) & set(new_labs)
-    if new_n >= old_n - 0:  # no drop
+    if new_n >= old_n - 0:
         return None
     if new_n <= old_n - FISCAL_COVERAGE_DROP_MIN or (old_n >= 4 and new_n <= old_n // 2):
-        # Allow if clearly a fiscal rollover (shared nonempty and new has forward labels)
         if shared and new_n >= MIN_EXPECTED_FISCAL_ROWS and abs(new_n - old_n) <= 1:
             return None
         return {
@@ -260,7 +436,6 @@ def price_outlier(
             if abs(ratio - f) < 0.05 * f or abs(ratio - 1.0 / f) < 0.05 / f:
                 scale_hit = True
                 break
-            # also exact-ish decade factors
             if abs(ratio - f) / f < 0.02 or abs(ratio * f - 1.0) < 0.02:
                 scale_hit = True
                 break
@@ -300,6 +475,99 @@ def zero_analyst_consensus_issues(ticker: str, td: dict) -> list[dict]:
     return hits
 
 
+def _snapshot_sort_key(path: Path) -> str:
+    return path.stem
+
+
+def list_validated_snapshots(snap_dir: Path) -> list[Path]:
+    """Validated snapshot candidates only (exclude raw_/quarantine/incoming/latest/manifest)."""
+    if not snap_dir.exists():
+        return []
+    out = []
+    for p in snap_dir.glob("20*.json"):
+        if p.name.startswith("raw_"):
+            continue
+        if p.name in {"latest.json", "manifest.json"}:
+            continue
+        if "quarantine" in p.parts:
+            continue
+        if not re.match(r"^\d{4}-\d{2}-\d{2}(T\d{6}Z)?(_[A-Za-z0-9]+)?(_\d+)?\.json$", p.name):
+            continue
+        # Skip explicitly non-publishable stamped snapshots
+        try:
+            data = json.loads(p.read_text(encoding="utf-8"))
+            qg = (data or {}).get("qualityGate") or {}
+            if qg.get("publishable") is False:
+                continue
+            if qg.get("status") in {"reject", "needs_verification"}:
+                continue
+        except Exception:
+            continue
+        out.append(p)
+    return sorted(out, key=_snapshot_sort_key)
+
+
+def load_last_known_good_by_ticker(
+    snap_dir: Path | None = None,
+    *,
+    exclude_path: Path | None = None,
+    expected_tickers: list[str] | None = None,
+    root: Path | None = None,
+) -> dict[str, dict]:
+    """For each ticker, walk validated snapshots (newest→oldest) for latest successful fresh observation.
+
+    A successful fresh observation means the ticker is present in that snapshot's tickers
+    block with usable EPS (not a collectionFailed / LKG-only stub).
+    Returns {TICKER: ticker_payload_dict}.
+    """
+    if snap_dir is None:
+        if root is None:
+            root = Path(__file__).resolve().parent.parent
+        snap_dir = root / "data" / "snapshots"
+    validated = list_validated_snapshots(snap_dir)
+    # newest first
+    validated = list(reversed(validated))
+    exclude_res = exclude_path.resolve() if exclude_path else None
+    found: dict[str, dict] = {}
+    needed = set(str(t).upper() for t in (expected_tickers or []))
+    for p in validated:
+        if exclude_res and p.resolve() == exclude_res:
+            continue
+        try:
+            snap = json.loads(p.read_text(encoding="utf-8"))
+        except Exception:
+            continue
+        tickers = (snap or {}).get("tickers") or {}
+        if not isinstance(tickers, dict):
+            continue
+        for t, td in tickers.items():
+            tu = str(t).upper()
+            if tu in found:
+                continue
+            if not isinstance(td, dict):
+                continue
+            if td.get("collectionFailed") or td.get("usingLastKnownGood"):
+                continue
+            # Must have at least one numeric consensus to count as fresh observation
+            eps = td.get("eps") or {}
+            has_cons = False
+            if isinstance(eps, dict):
+                for row in eps.values():
+                    if isinstance(row, dict) and to_num(
+                        row.get("consensus") if "consensus" in row else row.get("eps")
+                    ) is not None:
+                        has_cons = True
+                        break
+            if not has_cons:
+                continue
+            found[tu] = td
+        if needed and needed.issubset(set(found.keys())):
+            break
+        if not needed and expected_tickers is None:
+            # keep scanning until all seen tickers filled — no early break
+            pass
+    return found
+
 
 def gate_snapshot(
     snap: dict,
@@ -307,14 +575,23 @@ def gate_snapshot(
     *,
     min_fiscal_rows: int = MIN_EXPECTED_FISCAL_ROWS,
     expected_tickers: list[str] | None = None,
+    lkg_by_ticker: dict[str, dict] | None = None,
+    fiscal_end_by_ticker: dict[str, int] | None = None,
+    root: Path | None = None,
 ) -> dict:
     """Full snapshot gate. status: ok | partial | needs_verification | reject.
 
     - Parser/collector 0 ticker rows → reject (do not publish as successful)
     - expectedTickers missing → not ok/complete (partial if some received; reject if none)
     - Per-ticker validation failures → reject those tickers
-    - Extreme EPS vs last-known-good → needs_verification (do not publish)
+    - Extreme EPS / price / coverage vs per-ticker LKG → needs_verification
     """
+    if fiscal_end_by_ticker is None:
+        fiscal_end_by_ticker = load_fiscal_end_config(root)
+
+    # Normalize FY-only labels before validation
+    snap = apply_fiscal_normalization(snap, fiscal_end_by_ticker)
+
     tickers = snap.get("tickers") if isinstance(snap, dict) else None
     if not isinstance(tickers, dict):
         tickers = {}
@@ -342,10 +619,10 @@ def gate_snapshot(
             "tickerResults": [],
             "extremeChanges": [],
             "publishable": False,
+            "normalizedSnapshot": snap,
             **base_watch,
         }
 
-    # Missing expected watchlist tickers: not COMPLETE / not ok
     if missing and len(received) == 0:
         return {
             "status": "reject",
@@ -357,10 +634,23 @@ def gate_snapshot(
             ],
             "extremeChanges": [],
             "publishable": False,
+            "normalizedSnapshot": snap,
             **base_watch,
         }
 
+    # Build LKG map: prefer explicit lkg_by_ticker; else prior_snap tickers; else empty
     prior_tickers = (prior_snap or {}).get("tickers") if isinstance(prior_snap, dict) else {}
+    lkg_map: dict[str, dict] = {}
+    if lkg_by_ticker:
+        for k, v in lkg_by_ticker.items():
+            if isinstance(v, dict):
+                lkg_map[str(k).upper()] = v
+    if prior_tickers:
+        for k, v in (prior_tickers or {}).items():
+            ku = str(k).upper()
+            if ku not in lkg_map and isinstance(v, dict):
+                lkg_map[ku] = v
+
     results = []
     extreme = []
     any_reject = False
@@ -383,20 +673,24 @@ def gate_snapshot(
     any_zero_an = False
 
     for t, td in tickers.items():
-        tr = validate_ticker_payload(t, td, min_fiscal_rows=min_fiscal_rows)
+        tu = str(t).upper()
+        tr = validate_ticker_payload(
+            t, td, min_fiscal_rows=min_fiscal_rows, fiscal_end_by_ticker=fiscal_end_by_ticker
+        )
         results.append(tr)
         if tr["status"] == "reject":
             any_reject = True
-        hits = extreme_eps_change(t, td, (prior_tickers or {}).get(t))
+        lkg_td = lkg_map.get(tu)
+        hits = extreme_eps_change(t, td, lkg_td)
         if hits:
             any_extreme = True
             extreme.extend(hits)
-        cre = fiscal_coverage_regression(t, td, (prior_tickers or {}).get(t))
+        cre = fiscal_coverage_regression(t, td, lkg_td)
         if cre:
             any_coverage = True
             coverage_regs.append(cre)
             tr.setdefault("warnings", []).append("fiscal_coverage_regression")
-        po = price_outlier(t, td, (prior_tickers or {}).get(t))
+        po = price_outlier(t, td, lkg_td)
         if po:
             any_price = True
             price_outliers.append(po)
@@ -447,8 +741,6 @@ def gate_snapshot(
         reason = "validation_failed"
         message = "One or more tickers failed snapshot quality validation"
     elif missing:
-        # Partial: some expected tickers missing — not ok/complete; still publishable
-        # so export can fill last-known-good + STALE/FAILED and set collectionStatus=PARTIAL.
         status = "partial"
         publishable = True
         reason = "missing_watchlist_tickers"
@@ -472,6 +764,7 @@ def gate_snapshot(
         "priceOutliers": price_outliers,
         "zeroAnalystConsensus": zero_analyst,
         "publishable": publishable,
+        "normalizedSnapshot": snap,
         **base_watch,
     }
 
@@ -483,8 +776,13 @@ def persist_snapshot_if_ok(
     *,
     force: bool = False,
     expected_tickers: list[str] | None = None,
+    lkg_by_ticker: dict[str, dict] | None = None,
+    quarantine_dir: Path | None = None,
 ) -> dict:
-    """Write snapshot only when gate says publishable (unless force)."""
+    """Write snapshot only when gate says publishable (unless force).
+
+    REJECT/needs_verification → quarantine only; never leave as validated snapshot candidate.
+    """
     try:
         from atomic_io import atomic_write_json
     except ImportError:
@@ -492,25 +790,44 @@ def persist_snapshot_if_ok(
         _sys.path.insert(0, str(Path(__file__).resolve().parent))
         from atomic_io import atomic_write_json
 
-    gate = gate_snapshot(snap, prior_snap, expected_tickers=expected_tickers)
+    gate = gate_snapshot(
+        snap, prior_snap, expected_tickers=expected_tickers, lkg_by_ticker=lkg_by_ticker
+    )
+    snap_out = gate.get("normalizedSnapshot") or snap
     if gate["publishable"] or force:
         if not force:
-            snap = dict(snap)
-            snap["qualityGate"] = {
+            snap_out = dict(snap_out)
+            snap_out["qualityGate"] = {
                 "status": gate["status"],
                 "checked": True,
                 "publishable": gate.get("publishable"),
                 "missingTickers": gate.get("missingTickers") or [],
             }
-        atomic_write_json(path, snap)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        atomic_write_json(path, snap_out)
         gate["wrote"] = True
         gate["path"] = str(path)
     else:
-        qpath = path.with_suffix(path.suffix + ".quarantine")
-        quarantine = dict(snap)
+        if quarantine_dir is None:
+            qpath = path.with_suffix(path.suffix + ".quarantine")
+            # Prefer dedicated quarantine dir when writing into snapshots/
+            if path.parent.name == "snapshots":
+                quarantine_dir = path.parent / "quarantine"
+        if quarantine_dir is not None:
+            quarantine_dir.mkdir(parents=True, exist_ok=True)
+            qpath = quarantine_dir / f"{path.name}.quarantine"
+        else:
+            qpath = path.with_suffix(path.suffix + ".quarantine")
+        quarantine = dict(snap_out)
         quarantine["qualityGate"] = gate
         quarantine["status"] = gate["status"]
         atomic_write_json(qpath, quarantine)
+        # Ensure no validated candidate remains at target path
+        if path.exists() and "quarantine" not in path.parts:
+            try:
+                path.unlink()
+            except Exception:
+                pass
         gate["wrote"] = False
         gate["quarantinePath"] = str(qpath)
     return gate

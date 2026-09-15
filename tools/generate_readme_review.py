@@ -18,7 +18,9 @@ def main() -> int:
     if mp.exists():
         meta = json.loads(mp.read_text(encoding="utf-8"))
 
-    test_results = ROOT / "TEST_RESULTS_PIPELINE_INTEGRITY.md"
+    test_results = ROOT / "TEST_RESULTS_INGESTION_INTEGRITY.md"
+    if not test_results.exists():
+        test_results = ROOT / "TEST_RESULTS_PIPELINE_INTEGRITY.md"
     if not test_results.exists():
         test_results = ROOT / "TEST_RESULTS_FAILCLOSED_SIGNAL.md"
     if not test_results.exists():
@@ -46,10 +48,10 @@ def main() -> int:
 
     now = datetime.now(TAIPEI).strftime("%Y-%m-%d %H:%M Taipei")
     lines = [
-        "# AI EPS Monitor — Review Pack (Pipeline Integrity)",
+        "# AI EPS Monitor — Review Pack (Ingestion Integrity)",
         "",
         f"**Generated:** {now}  ",
-        f"**Round:** Pipeline Integrity (auto-generated — replaces prior round README metadata)",
+        f"**Round:** Ingestion Integrity (auto-generated — replaces prior round README metadata)",
         "",
         "## Build identity",
         "",
@@ -78,17 +80,15 @@ def main() -> int:
     lines.extend(hashes or ["| _(none)_ | |"])
     lines += [
         "",
-        "## Pipeline Integrity highlights",
+        "## Ingestion Integrity highlights",
         "",
-        "- Quality Gate before Alert mutation; rejected snapshot cannot mutate Alert DB",
-        "- Partial collection / LKG does not create fake daily EPS observations",
-        "- comparisonCheckpoint advances after successful export (What Changed)",
-        "- SA 1M Hold preserves business event age (lastMaterialChangeAt / openedAt)",
-        "- JSONL atomic failure fail-closed; global data/.pipeline.lock",
-        "- Fiscal coverage regression + price outlier → needs_verification",
-        "- dashboard.json + buildId consistency; frontend rejects mixed generations",
-        "- Same-day UTC timestamp raw snapshots preserved",
-        "- Persist all displayMappedYears in daily EPS; analystCount=0 → needs_verification",
+        "- Collection → `data/incoming/` only; Quality Gate → validated `data/snapshots/` or quarantine",
+        "- Per-ticker LKG (`load_last_known_good_by_ticker`) for Extreme EPS / Price / Fiscal Coverage",
+        "- Auto revision events before Alert Engine; Alert Engine uses gated snapshot (not manifest.json)",
+        "- Reported Fiscal Period Ending required; FY-only normalized via universe.json fiscal-end config",
+        "- Publish stamps meta.json AND dashboard.json.meta atomically",
+        "- Single entrypoint `tools/ingest_snapshot.py`; screenshot DOM sidecars + secret content scan",
+        "- Prior Pipeline Integrity: Quality Gate before Alert mutation; no fake daily LKG observations",
         "",
         "## Review ZIP",
         "",
@@ -98,7 +98,7 @@ def main() -> int:
         "",
         "---",
         "",
-        "_This file is regenerated from `web/data/meta.json` + `TEST_RESULTS_FAILCLOSED_SIGNAL.md`. "
+        "_This file is regenerated from `web/data/meta.json` + `TEST_RESULTS_INGESTION_INTEGRITY.md`. "
         "It MUST NOT retain leftover 10/10, 17/17, or 30/30 round metadata._",
         "",
     ]
