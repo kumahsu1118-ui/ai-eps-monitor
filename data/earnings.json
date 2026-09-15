@@ -1,6 +1,7 @@
 {
   "NVDA": {
     "ticker": "NVDA",
+    "hasDigest": true,
     "lastEarnings": "8/26/2026",
     "nextEarnings": "11/25/2026 (Post-Market)",
     "revenue": [],
@@ -8,15 +9,20 @@
     "margins": [],
     "guidance": null,
     "comparison": null,
-    "positives": [],
+    "positives": [
+      "PERSISTENCE_MARKER_P0P1_TEST"
+    ],
     "negatives": [],
     "uncertainties": [],
-    "commentary": null,
+    "commentary": "Marker commentary must survive second export",
     "qa": [],
-    "sources": []
+    "results": [],
+    "sources": [],
+    "_testMarker": "survive-me-2026-09-15"
   },
   "AVGO": {
     "ticker": "AVGO",
+    "hasDigest": false,
     "lastEarnings": "9/2/2026",
     "nextEarnings": "12/10/2026 (Post-Market)",
     "revenue": [],
@@ -29,10 +35,12 @@
     "uncertainties": [],
     "commentary": null,
     "qa": [],
+    "results": [],
     "sources": []
   },
   "TSM": {
     "ticker": "TSM",
+    "hasDigest": false,
     "lastEarnings": "7/16/2026",
     "nextEarnings": "10/16/2026 (Estimated)",
     "revenue": [],
@@ -45,10 +53,12 @@
     "uncertainties": [],
     "commentary": null,
     "qa": [],
+    "results": [],
     "sources": []
   },
   "MSFT": {
     "ticker": "MSFT",
+    "hasDigest": false,
     "lastEarnings": "7/29/2026",
     "nextEarnings": "10/29/2026 (Post-Market)",
     "revenue": [],
@@ -61,10 +71,12 @@
     "uncertainties": [],
     "commentary": null,
     "qa": [],
+    "results": [],
     "sources": []
   },
   "BE": {
     "ticker": "BE",
+    "hasDigest": false,
     "lastEarnings": "7/28/2026",
     "nextEarnings": "10/29/2026 (Post-Market)",
     "revenue": [],
@@ -77,10 +89,12 @@
     "uncertainties": [],
     "commentary": null,
     "qa": [],
+    "results": [],
     "sources": []
   },
   "KEYS": {
     "ticker": "KEYS",
+    "hasDigest": false,
     "lastEarnings": "8/18/2026",
     "nextEarnings": null,
     "revenue": [],
@@ -93,6 +107,7 @@
     "uncertainties": [],
     "commentary": null,
     "qa": [],
+    "results": [],
     "sources": []
   }
 }

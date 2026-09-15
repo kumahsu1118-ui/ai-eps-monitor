@@ -20,6 +20,7 @@
     revFilters: { ticker: "", year: "", date: "" },
     chartTicker: null,
     chartYear: "2027E",
+    chartMode: "absolute", /* absolute | index */
   };
 
   /* ---------- utils ---------- */
@@ -123,9 +124,39 @@
     return el("span", { className: momentumClass(m), text: String(m) });
   }
 
+  function companyPrice(c) {
+    if (!c) return null;
+    if (!isMissing(c.lastClose)) return c.lastClose;
+    if (!isMissing(c.price)) return c.price;
+    return null;
+  }
+
   function pe(price, eps) {
     if (isMissing(price) || isMissing(eps) || Number(eps) === 0) return null;
     return Number(price) / Number(eps);
+  }
+
+  function toIndexSeries(values) {
+    /* first non-null point = 100 */
+    let base = null;
+    return values.map((v) => {
+      if (v == null || Number.isNaN(Number(v))) return null;
+      if (base == null) {
+        if (Number(v) === 0) return null;
+        base = Number(v);
+        return 100;
+      }
+      return (Number(v) / base) * 100;
+    });
+  }
+
+  function valueWithFy(valueNode, fyLabel) {
+    const wrap = el("div");
+    wrap.appendChild(valueNode);
+    if (fyLabel && !isMissing(fyLabel)) {
+      wrap.appendChild(el("span", { className: "fy-sub", text: fyLabel }));
+    }
+    return wrap;
   }
 
   function driverLabel(status) {
@@ -245,9 +276,24 @@
       const n = $(id);
       if (n) n.textContent = val || "—";
     };
-    set("#meta-last-updated", m.lastUpdatedDisplay || m.lastUpdated);
+    set(
+      "#meta-consensus",
+      m.consensusDataAsOfDisplay || m.lastUpdatedDisplay || m.consensusDataAsOf || m.lastUpdated
+    );
+    set(
+      "#meta-collection",
+      m.lastSuccessfulCollectionDisplay ||
+        m.latestSuccessfulRefresh ||
+        m.lastSuccessfulCollection ||
+        m.lastUpdatedDisplay
+    );
+    set("#meta-published", m.sitePublishedDisplay || m.sitePublished || m.latestSuccessfulRefresh);
     set("#meta-source", m.primarySource);
-    set("#meta-refresh", m.latestSuccessfulRefresh || m.lastUpdatedDisplay);
+    const staleRow = $("#meta-stale-row");
+    if (staleRow) {
+      if (m.dataStale) staleRow.removeAttribute("hidden");
+      else staleRow.setAttribute("hidden", "");
+    }
     const fw = $("#footer-watchlist");
     if (fw) fw.textContent = "Watchlist: " + state.watchlist.join(", ");
   }
@@ -257,6 +303,7 @@
     const rows = state.valuation || [];
     let largestUp = null;
     let largestDown = null;
+    let largestUp28 = null;
     let lowestPe = null;
     let fastestCagr = null;
 
@@ -269,10 +316,15 @@
           largestDown = r;
         }
       }
+      if (r.rev1M28 != null && !Number.isNaN(Number(r.rev1M28))) {
+        if (Number(r.rev1M28) > 0 && (!largestUp28 || Number(r.rev1M28) > Number(largestUp28.rev1M28))) {
+          largestUp28 = r;
+        }
+      }
       if (r.pe27 != null && !Number.isNaN(Number(r.pe27))) {
         if (!lowestPe || Number(r.pe27) < Number(lowestPe.pe27)) lowestPe = r;
       }
-      // CAGR only when 2026E exists (cagr2628 already null if missing)
+      // CAGR only when mapped 2026E exists (cagr2628 already null if missing)
       if (r.cagr2628 != null && r.eps26 != null && !Number.isNaN(Number(r.cagr2628))) {
         if (!fastestCagr || Number(r.cagr2628) > Number(fastestCagr.cagr2628)) {
           fastestCagr = r;
@@ -280,7 +332,7 @@
       }
     });
 
-    return { largestUp, largestDown, lowestPe, fastestCagr };
+    return { largestUp, largestDown, largestUp28, lowestPe, fastestCagr };
   }
 
   function renderSummaryCards(parent) {
@@ -313,16 +365,23 @@
 
     grid.appendChild(
       card(
-        "Largest EPS Upgrade (1M)",
+        "Largest 2027E EPS Upgrade (1M)",
         s.largestUp && s.largestUp.ticker,
         s.largestUp ? revCell(s.largestUp.rev1M) : null
       )
     );
     grid.appendChild(
       card(
-        "Largest EPS Downgrade (1M)",
+        "Largest 2027E EPS Downgrade (1M)",
         s.largestDown && s.largestDown.ticker,
         s.largestDown ? revCell(s.largestDown.rev1M) : null
+      )
+    );
+    grid.appendChild(
+      card(
+        "Largest 2028E EPS Upgrade (1M)",
+        s.largestUp28 && s.largestUp28.ticker,
+        s.largestUp28 ? revCell(s.largestUp28.rev1M28) : null
       )
     );
     grid.appendChild(
@@ -334,7 +393,7 @@
     );
     grid.appendChild(
       card(
-        "Fastest 2026–2028 EPS CAGR",
+        "Fastest Mapped 2026–2028 EPS CAGR",
         s.fastestCagr && s.fastestCagr.ticker,
         s.fastestCagr ? growthCell(s.fastestCagr.cagr2628) : null
       )
@@ -365,7 +424,7 @@
     wrap.appendChild(
       el("p", {
         className: "section-note",
-        text: "Calendar-aligned EPS; reported FY labels shown under consensus. 1M rev = Seeking Alpha short-window proxy on CY2027E.",
+        text: "FY-mapped calendar slots (not true CY EPS); Reported Fiscal Period Ending shown under consensus. 1M rev = Seeking Alpha short-window proxy on Mapped 2027E.",
       })
     );
 
@@ -375,10 +434,10 @@
     const hr = el("tr");
     [
       ["Ticker", "left"],
-      ["Price", ""],
-      ["2026E EPS", ""],
-      ["2027E EPS", ""],
-      ["2028E EPS", ""],
+      ["Last Close", ""],
+      ["Mapped 2026E", ""],
+      ["Mapped 2027E", ""],
+      ["Mapped 2028E", ""],
       ["2027E PE", ""],
       ["1M Rev", ""],
       ["Momentum", ""],
@@ -397,7 +456,8 @@
       const e26 = (c.eps && c.eps["2026E"]) || {};
       const e27 = (c.eps && c.eps["2027E"]) || {};
       const e28 = (c.eps && c.eps["2028E"]) || {};
-      const pe27 = pe(c.price, e27.consensus);
+      const px = companyPrice(c);
+      const pe27 = pe(px, e27.consensus);
       const tr = el("tr");
 
       const tdT = el("td", { className: "ticker left" });
@@ -405,7 +465,10 @@
       tr.appendChild(tdT);
 
       const tdP = el("td");
-      tdP.appendChild(numCell(c.price, 2));
+      tdP.appendChild(numCell(px, 2));
+      if (!isMissing(c.afterHours)) {
+        tdP.appendChild(el("span", { className: "price-sub", text: "AH " + fmtNum(c.afterHours, 2) }));
+      }
       tr.appendChild(tdP);
 
       function epsTd(e) {
@@ -480,23 +543,23 @@
     root.appendChild(
       el("p", {
         className: "section-note",
-        text: "Forward PE = Price / Consensus EPS. CAGR 2026–2028 = (EPS28/EPS26)^(1/2)−1. Click headers to sort.",
+        text: "Forward PE = Last Close / Mapped Consensus EPS. Mapped CAGR 2026–2028 = (EPS28/EPS26)^(1/2)−1. FY labels under EPS/PE. Click headers to sort.",
       })
     );
 
     const cols = [
       { key: "ticker", label: "Ticker", align: "left" },
-      { key: "price", label: "Price" },
-      { key: "eps26", label: "2026E EPS" },
-      { key: "eps27", label: "2027E EPS" },
-      { key: "eps28", label: "2028E EPS" },
+      { key: "lastClose", label: "Last Close" },
+      { key: "eps26", label: "Mapped 2026E" },
+      { key: "eps27", label: "Mapped 2027E" },
+      { key: "eps28", label: "Mapped 2028E" },
       { key: "pe26", label: "2026E PE" },
       { key: "pe27", label: "2027E PE" },
       { key: "pe28", label: "2028E PE" },
       { key: "growth27", label: "27E Growth" },
       { key: "growth28", label: "28E Growth" },
-      { key: "cagr2628", label: "CAGR 26–28" },
-      { key: "rev1M", label: "1M Rev" },
+      { key: "cagr2628", label: "Mapped CAGR 26–28" },
+      { key: "rev1M", label: "1M Rev 27E" },
       { key: "momentum", label: "Momentum", align: "left" },
     ];
 
@@ -546,6 +609,18 @@
           td.appendChild(c.key === "cagr2628" ? cagrCell(v) : growthCell(v));
         } else if (c.key === "momentum") {
           td.appendChild(momentumCell(v));
+        } else if (c.key === "lastClose" || c.key === "price") {
+          const px = r.lastClose != null ? r.lastClose : r.price;
+          td.appendChild(numCell(px, 2));
+          if (!isMissing(r.afterHours)) {
+            td.appendChild(el("span", { className: "price-sub", text: "AH " + fmtNum(r.afterHours, 2) }));
+          }
+        } else if (c.key === "eps26" || c.key === "eps27" || c.key === "eps28") {
+          const fyKey = c.key === "eps26" ? "reportedFy26" : c.key === "eps27" ? "reportedFy27" : "reportedFy28";
+          td.appendChild(valueWithFy(numCell(v, 2), r[fyKey]));
+        } else if (c.key === "pe26" || c.key === "pe27" || c.key === "pe28") {
+          const fyKey = c.key === "pe26" ? "reportedFy26" : c.key === "pe27" ? "reportedFy27" : "reportedFy28";
+          td.appendChild(valueWithFy(numCell(v, 2), r[fyKey]));
         } else {
           td.appendChild(numCell(v, 2));
         }
@@ -585,8 +660,14 @@
     destroyChart();
     const ticker = state.chartTicker || state.watchlist[0];
     const year = state.chartYear || "2027E";
+    const mode = state.chartMode || "absolute";
     const series = ((state.epsHistory[ticker] || {})[year] || []).filter((p) => p && !isMissing(p.eps));
     const colors = chartColors();
+    const raw = series.map((p) => p.eps);
+    const data = mode === "index" ? toIndexSeries(raw) : raw;
+    const yTitle = mode === "index" ? "Revision Index (first = 100)" : "Consensus EPS";
+    const label =
+      ticker + " " + year + (mode === "index" ? " Revision Index" : " EPS");
 
     state.chart = new Chart(canvas.getContext("2d"), {
       type: "line",
@@ -594,8 +675,8 @@
         labels: series.map((p) => p.date),
         datasets: [
           {
-            label: ticker + " " + year + " EPS",
-            data: series.map((p) => p.eps),
+            label: label,
+            data: data,
             borderColor: colors.line,
             backgroundColor: "transparent",
             pointBackgroundColor: colors.point,
@@ -616,7 +697,10 @@
             callbacks: {
               afterLabel: function (ctx) {
                 const p = series[ctx.dataIndex];
-                return p && p.reportedFiscalLabel ? "FY: " + p.reportedFiscalLabel : "";
+                const bits = [];
+                if (p && p.reportedFiscalLabel) bits.push("FY: " + p.reportedFiscalLabel);
+                if (mode === "index" && p && !isMissing(p.eps)) bits.push("EPS: " + fmtNum(p.eps, 2));
+                return bits.join(" · ");
               },
             },
           },
@@ -629,7 +713,7 @@
           y: {
             ticks: { color: colors.text, font: { size: 10 } },
             grid: { color: colors.grid },
-            title: { display: true, text: "Consensus EPS", color: colors.text, font: { size: 11 } },
+            title: { display: true, text: yTitle, color: colors.text, font: { size: 11 } },
           },
         },
       },
@@ -657,7 +741,7 @@
     chartSec.appendChild(
       el("p", {
         className: "section-note",
-        text: "Built from revision history Current EPS by calendar slot. One point per year is expected until subsequent snapshots.",
+        text: "Built from daily EPS snapshots (mapped FY slots). Revision Index mode sets the first history point to 100. Table below still uses revision events only.",
       })
     );
 
@@ -696,6 +780,28 @@
     });
     yearWrap.appendChild(btnGroup);
     controls.appendChild(yearWrap);
+
+    const modeWrap = el("div");
+    modeWrap.appendChild(el("span", { className: "section-note", text: "Mode  ", style: "margin:0" }));
+    const modeGroup = el("div", { className: "btn-group chart-mode-toggle" });
+    [
+      ["absolute", "Absolute EPS"],
+      ["index", "Revision Index"],
+    ].forEach(([mode, label]) => {
+      modeGroup.appendChild(
+        el("button", {
+          type: "button",
+          className: (state.chartMode || "absolute") === mode ? "active" : "",
+          text: label,
+          onClick: () => {
+            state.chartMode = mode;
+            route();
+          },
+        })
+      );
+    });
+    modeWrap.appendChild(modeGroup);
+    controls.appendChild(modeWrap);
     chartSec.appendChild(controls);
 
     const panel = el("div", { className: "chart-panel" });
@@ -919,8 +1025,9 @@
       const c = state.companies[t] || {};
       const chip = el("a", { className: "company-chip", href: "#/company/" + t });
       chip.appendChild(document.createTextNode(t));
-      if (c.price != null) {
-        chip.appendChild(document.createTextNode("  " + fmtNum(c.price, 2)));
+      const chipPx = companyPrice(c);
+      if (chipPx != null) {
+        chip.appendChild(document.createTextNode("  " + fmtNum(chipPx, 2)));
       }
       list.appendChild(chip);
     });
@@ -937,27 +1044,10 @@
     const colors = chartColors();
     const palette = ["#58a6ff", "#3fb950", "#d29922", "#f778ba"];
     const years = ["2026E", "2027E", "2028E"];
-    const datasets = years
-      .map((y, i) => {
-        const series = (hist[y] || []).filter((p) => p && !isMissing(p.eps));
-        if (!series.length) return null;
-        return {
-          label: y,
-          data: series.map((p) => ({ x: p.date, y: p.eps })),
-          borderColor: palette[i % palette.length],
-          backgroundColor: "transparent",
-          pointRadius: 4,
-          borderWidth: 2,
-          tension: 0,
-        };
-      })
-      .filter(Boolean);
+    const mode = state.chartMode || "absolute";
 
-    // Use category labels union
     const labels = Array.from(
-      new Set(
-        years.flatMap((y) => (hist[y] || []).map((p) => p.date).filter(Boolean))
-      )
+      new Set(years.flatMap((y) => (hist[y] || []).map((p) => p.date).filter(Boolean)))
     ).sort();
 
     const ds2 = years
@@ -967,10 +1057,11 @@
         series.forEach((p) => {
           if (p && !isMissing(p.eps)) byDate[p.date] = p.eps;
         });
-        const data = labels.map((d) => (byDate[d] != null ? byDate[d] : null));
+        let data = labels.map((d) => (byDate[d] != null ? byDate[d] : null));
         if (data.every((v) => v == null)) return null;
+        if (mode === "index") data = toIndexSeries(data);
         return {
-          label: y,
+          label: y + (mode === "index" ? " idx" : ""),
           data,
           borderColor: palette[i % palette.length],
           backgroundColor: "transparent",
@@ -982,9 +1073,11 @@
       })
       .filter(Boolean);
 
+    const yTitle = mode === "index" ? "Revision Index (first = 100)" : "Consensus EPS";
+
     state.chart = new Chart(canvas.getContext("2d"), {
       type: "line",
-      data: { labels, datasets: ds2.length ? ds2 : datasets },
+      data: { labels, datasets: ds2 },
       options: {
         responsive: true,
         plugins: {
@@ -995,7 +1088,7 @@
           y: {
             ticks: { color: colors.text, font: { size: 10 } },
             grid: { color: colors.grid },
-            title: { display: true, text: "Consensus EPS", color: colors.text },
+            title: { display: true, text: yTitle, color: colors.text },
           },
         },
       },
@@ -1013,9 +1106,15 @@
 
     const header = el("div", { className: "company-header" });
     header.appendChild(el("h2", { text: ticker }));
+    const px = companyPrice(c);
     const priceEl = el("div", { className: "price" });
-    if (isMissing(c.price)) priceEl.appendChild(naCell());
-    else priceEl.textContent = "$" + fmtNum(c.price, 2);
+    if (isMissing(px)) priceEl.appendChild(naCell());
+    else {
+      priceEl.textContent = "$" + fmtNum(px, 2);
+      if (!isMissing(c.afterHours)) {
+        priceEl.appendChild(el("span", { className: "price-sub", text: "After hours $" + fmtNum(c.afterHours, 2) }));
+      }
+    }
     header.appendChild(priceEl);
     const bits = el("div", { className: "meta-bits" });
     bits.appendChild(momentumCell(c.momentum));
@@ -1038,6 +1137,8 @@
       else dd.appendChild(nodeOrText);
       dl.appendChild(dd);
     }
+    kv("Last Close", isMissing(px) ? null : fmtNum(px, 2));
+    kv("After Hours", isMissing(c.afterHours) ? null : fmtNum(c.afterHours, 2));
     kv("Last Earnings", isMissing(c.lastEarnings) ? null : c.lastEarnings);
     kv("Next Earnings", isMissing(c.nextEarnings) ? null : c.nextEarnings);
     kv("FY Note", isMissing(c.fyNote) ? null : c.fyNote);
@@ -1045,11 +1146,18 @@
       const e = (c.eps && c.eps[y]) || {};
       const cons = fmtNum(e.consensus, 2);
       const lab = e.reportedFiscalLabel ? " (" + e.reportedFiscalLabel + ")" : "";
-      kv(y + " EPS", cons == null ? null : cons + lab);
+      const slotLabel = "Mapped " + y;
+      kv(slotLabel, cons == null ? null : cons + lab);
+      if (e.trueCalendarYearEps != null) {
+        kv(y + " true CY EPS", fmtNum(e.trueCalendarYearEps, 2));
+      }
+      if (e.fiscalEqualsCalendar) {
+        kv(y + " note", "fiscalEqualsCalendar: true");
+      }
       kv(y + " 1M Rev", revCell(e.rev1M));
     });
-    const pe27 = pe(c.price, ((c.eps || {})["2027E"] || {}).consensus);
-    kv("2027E PE", pe27 == null ? null : fmtNum(pe27, 2));
+    const pe27 = pe(px, ((c.eps || {})["2027E"] || {}).consensus);
+    kv("2027E PE (Last Close)", pe27 == null ? null : fmtNum(pe27, 2));
     snap.appendChild(dl);
     grid.appendChild(snap);
 
@@ -1083,7 +1191,27 @@
 
     /* chart */
     const chartPanel = el("div", { className: "panel section" });
-    chartPanel.appendChild(el("h3", { text: "EPS History" }));
+    chartPanel.appendChild(el("h3", { text: "EPS History (mapped slots)" }));
+    const modeControls = el("div", { className: "controls" });
+    const modeGroup = el("div", { className: "btn-group chart-mode-toggle" });
+    [
+      ["absolute", "Absolute EPS"],
+      ["index", "Revision Index"],
+    ].forEach(([mode, label]) => {
+      modeGroup.appendChild(
+        el("button", {
+          type: "button",
+          className: (state.chartMode || "absolute") === mode ? "active" : "",
+          text: label,
+          onClick: () => {
+            state.chartMode = mode;
+            route();
+          },
+        })
+      );
+    });
+    modeControls.appendChild(modeGroup);
+    chartPanel.appendChild(modeControls);
     const cp = el("div", { className: "chart-panel" });
     cp.appendChild(el("canvas", { id: "company-eps-chart" }));
     chartPanel.appendChild(cp);

@@ -2,6 +2,8 @@
   "NVDA": {
     "ticker": "NVDA",
     "price": 210.96,
+    "lastClose": 210.96,
+    "afterHours": 212.04,
     "priceAsOf": "4:00 PM 09/14/26; post-market $212.04 at 7:59 PM",
     "lastEarnings": "8/26/2026",
     "nextEarnings": "11/25/2026 (Post-Market)",
@@ -17,7 +19,9 @@
         "rev3M": 4.13,
         "rev6M": 12.19,
         "reportedFiscalLabel": "Jan 2027",
-        "calendarAlignment": "CY2026"
+        "calendarAlignment": "CY2026",
+        "trueCalendarYearEps": null,
+        "slotMappingOnly": true
       },
       "2027E": {
         "consensus": 15.61,
@@ -28,7 +32,9 @@
         "rev3M": 22.85,
         "rev6M": 40.57,
         "reportedFiscalLabel": "Jan 2028",
-        "calendarAlignment": "CY2027"
+        "calendarAlignment": "CY2027",
+        "trueCalendarYearEps": null,
+        "slotMappingOnly": true
       },
       "2028E": {
         "consensus": 21.06,
@@ -39,7 +45,9 @@
         "rev3M": 33.93,
         "rev6M": 58.53,
         "reportedFiscalLabel": "Jan 2029",
-        "calendarAlignment": "CY2028"
+        "calendarAlignment": "CY2028",
+        "trueCalendarYearEps": null,
+        "slotMappingOnly": true
       },
       "2029E": {
         "consensus": 23.4,
@@ -50,7 +58,9 @@
         "rev3M": 33.74,
         "rev6M": 54.8,
         "reportedFiscalLabel": "Jan 2030",
-        "calendarAlignment": "CY2029"
+        "calendarAlignment": "CY2029",
+        "trueCalendarYearEps": null,
+        "slotMappingOnly": true
       }
     },
     "sourceUrl": "https://seekingalpha.com/symbol/NVDA/earnings/estimates",
@@ -116,6 +126,8 @@
   "AVGO": {
     "ticker": "AVGO",
     "price": 344.72,
+    "lastClose": 344.72,
+    "afterHours": 346.22,
     "priceAsOf": "4:00 PM 09/14/26; post-market $346.22 at 7:59 PM",
     "lastEarnings": "9/2/2026",
     "nextEarnings": "12/10/2026 (Post-Market)",
@@ -131,7 +143,9 @@
         "rev3M": 0.29,
         "rev6M": 2.48,
         "reportedFiscalLabel": "Oct 2026",
-        "calendarAlignment": "CY2026"
+        "calendarAlignment": "CY2026",
+        "trueCalendarYearEps": null,
+        "slotMappingOnly": true
       },
       "2027E": {
         "consensus": 19.38,
@@ -142,7 +156,9 @@
         "rev3M": -0.4,
         "rev6M": 8.66,
         "reportedFiscalLabel": "Oct 2027",
-        "calendarAlignment": "CY2027"
+        "calendarAlignment": "CY2027",
+        "trueCalendarYearEps": null,
+        "slotMappingOnly": true
       },
       "2028E": {
         "consensus": 30.56,
@@ -153,7 +169,9 @@
         "rev3M": 18.76,
         "rev6M": 37.83,
         "reportedFiscalLabel": "Oct 2028",
-        "calendarAlignment": "CY2028"
+        "calendarAlignment": "CY2028",
+        "trueCalendarYearEps": null,
+        "slotMappingOnly": true
       },
       "2029E": {
         "consensus": 40.66,
@@ -164,7 +182,9 @@
         "rev3M": 30.45,
         "rev6M": 53.56,
         "reportedFiscalLabel": "Oct 2029",
-        "calendarAlignment": "CY2029"
+        "calendarAlignment": "CY2029",
+        "trueCalendarYearEps": null,
+        "slotMappingOnly": true
       }
     },
     "sourceUrl": "https://seekingalpha.com/symbol/AVGO/earnings/estimates",
@@ -225,6 +245,8 @@
   "TSM": {
     "ticker": "TSM",
     "price": 418.01,
+    "lastClose": 418.01,
+    "afterHours": 419.63,
     "priceAsOf": "4:00 PM 09/14/26; post-market $419.63 at 7:59 PM",
     "lastEarnings": "7/16/2026",
     "nextEarnings": "10/16/2026 (Estimated)",
@@ -240,7 +262,10 @@
         "rev3M": 6.99,
         "rev6M": 17.26,
         "reportedFiscalLabel": "Dec 2026",
-        "calendarAlignment": "CY2026"
+        "calendarAlignment": "CY2026",
+        "trueCalendarYearEps": null,
+        "slotMappingOnly": true,
+        "fiscalEqualsCalendar": true
       },
       "2027E": {
         "consensus": 21.93,
@@ -251,7 +276,10 @@
         "rev3M": 8.9,
         "rev6M": 22.49,
         "reportedFiscalLabel": "Dec 2027",
-        "calendarAlignment": "CY2027"
+        "calendarAlignment": "CY2027",
+        "trueCalendarYearEps": null,
+        "slotMappingOnly": true,
+        "fiscalEqualsCalendar": true
       },
       "2028E": {
         "consensus": 28.33,
@@ -262,7 +290,10 @@
         "rev3M": 8.15,
         "rev6M": null,
         "reportedFiscalLabel": "Dec 2028",
-        "calendarAlignment": "CY2028"
+        "calendarAlignment": "CY2028",
+        "trueCalendarYearEps": null,
+        "slotMappingOnly": true,
+        "fiscalEqualsCalendar": true
       },
       "2029E": {
         "consensus": null,
@@ -273,7 +304,9 @@
         "rev3M": null,
         "rev6M": null,
         "reportedFiscalLabel": null,
-        "calendarAlignment": "CY2029"
+        "calendarAlignment": "CY2029",
+        "trueCalendarYearEps": null,
+        "slotMappingOnly": true
       }
     },
     "sourceUrl": "https://seekingalpha.com/symbol/TSM/earnings/estimates",
@@ -340,6 +373,8 @@
   "MSFT": {
     "ticker": "MSFT",
     "price": 505.41,
+    "lastClose": 505.41,
+    "afterHours": 504.23,
     "priceAsOf": "4:00 PM 09/14/26; post-market $504.23 at 7:59 PM",
     "lastEarnings": "7/29/2026",
     "nextEarnings": "10/29/2026 (Post-Market)",
@@ -355,7 +390,9 @@
         "rev3M": null,
         "rev6M": null,
         "reportedFiscalLabel": null,
-        "calendarAlignment": "CY2026"
+        "calendarAlignment": "CY2026",
+        "trueCalendarYearEps": null,
+        "slotMappingOnly": true
       },
       "2027E": {
         "consensus": 19.75,
@@ -366,7 +403,9 @@
         "rev3M": 1.83,
         "rev6M": 4.9,
         "reportedFiscalLabel": "Jun 2027",
-        "calendarAlignment": "CY2027"
+        "calendarAlignment": "CY2027",
+        "trueCalendarYearEps": null,
+        "slotMappingOnly": true
       },
       "2028E": {
         "consensus": 23.57,
@@ -377,7 +416,9 @@
         "rev3M": 4.18,
         "rev6M": 5.87,
         "reportedFiscalLabel": "Jun 2028",
-        "calendarAlignment": "CY2028"
+        "calendarAlignment": "CY2028",
+        "trueCalendarYearEps": null,
+        "slotMappingOnly": true
       },
       "2029E": {
         "consensus": 28.73,
@@ -388,7 +429,9 @@
         "rev3M": 5.02,
         "rev6M": 5.16,
         "reportedFiscalLabel": "Jun 2029",
-        "calendarAlignment": "CY2029"
+        "calendarAlignment": "CY2029",
+        "trueCalendarYearEps": null,
+        "slotMappingOnly": true
       }
     },
     "sourceUrl": "https://seekingalpha.com/symbol/MSFT/earnings/estimates",
@@ -459,6 +502,8 @@
   "BE": {
     "ticker": "BE",
     "price": 257.05,
+    "lastClose": 257.05,
+    "afterHours": 258.15,
     "priceAsOf": "4:00 PM 09/14/26; post-market $258.15 at 7:59 PM",
     "lastEarnings": "7/28/2026",
     "nextEarnings": "10/29/2026 (Post-Market)",
@@ -474,7 +519,10 @@
         "rev3M": 26.52,
         "rev6M": 94.08,
         "reportedFiscalLabel": "Dec 2026",
-        "calendarAlignment": "CY2026"
+        "calendarAlignment": "CY2026",
+        "trueCalendarYearEps": null,
+        "slotMappingOnly": true,
+        "fiscalEqualsCalendar": true
       },
       "2027E": {
         "consensus": 4.93,
@@ -485,7 +533,10 @@
         "rev3M": 12.95,
         "rev6M": 67.59,
         "reportedFiscalLabel": "Dec 2027",
-        "calendarAlignment": "CY2027"
+        "calendarAlignment": "CY2027",
+        "trueCalendarYearEps": null,
+        "slotMappingOnly": true,
+        "fiscalEqualsCalendar": true
       },
       "2028E": {
         "consensus": 7.79,
@@ -496,7 +547,10 @@
         "rev3M": 9.3,
         "rev6M": 65.19,
         "reportedFiscalLabel": "Dec 2028",
-        "calendarAlignment": "CY2028"
+        "calendarAlignment": "CY2028",
+        "trueCalendarYearEps": null,
+        "slotMappingOnly": true,
+        "fiscalEqualsCalendar": true
       },
       "2029E": {
         "consensus": 10.36,
@@ -507,7 +561,10 @@
         "rev3M": 9.51,
         "rev6M": 99.93,
         "reportedFiscalLabel": "Dec 2029",
-        "calendarAlignment": "CY2029"
+        "calendarAlignment": "CY2029",
+        "trueCalendarYearEps": null,
+        "slotMappingOnly": true,
+        "fiscalEqualsCalendar": true
       }
     },
     "sourceUrl": "https://seekingalpha.com/symbol/BE/earnings/estimates",
@@ -568,6 +625,8 @@
   "KEYS": {
     "ticker": "KEYS",
     "price": 314.96,
+    "lastClose": 314.96,
+    "afterHours": 320.56,
     "priceAsOf": "4:00 PM 09/14/26; post-market $320.56 at 7:58 PM",
     "lastEarnings": "8/18/2026",
     "nextEarnings": null,
@@ -583,7 +642,9 @@
         "rev3M": 12.07,
         "rev6M": 29.28,
         "reportedFiscalLabel": "Oct 2026",
-        "calendarAlignment": "CY2026"
+        "calendarAlignment": "CY2026",
+        "trueCalendarYearEps": null,
+        "slotMappingOnly": true
       },
       "2027E": {
         "consensus": 13.87,
@@ -594,7 +655,9 @@
         "rev3M": 17.0,
         "rev6M": 35.14,
         "reportedFiscalLabel": "Oct 2027",
-        "calendarAlignment": "CY2027"
+        "calendarAlignment": "CY2027",
+        "trueCalendarYearEps": null,
+        "slotMappingOnly": true
       },
       "2028E": {
         "consensus": 15.69,
@@ -605,7 +668,9 @@
         "rev3M": 36.09,
         "rev6M": 52.09,
         "reportedFiscalLabel": "Oct 2028",
-        "calendarAlignment": "CY2028"
+        "calendarAlignment": "CY2028",
+        "trueCalendarYearEps": null,
+        "slotMappingOnly": true
       },
       "2029E": {
         "consensus": 21.99,
@@ -616,7 +681,9 @@
         "rev3M": 48.78,
         "rev6M": 75.92,
         "reportedFiscalLabel": "Oct 2029",
-        "calendarAlignment": "CY2029"
+        "calendarAlignment": "CY2029",
+        "trueCalendarYearEps": null,
+        "slotMappingOnly": true
       }
     },
     "sourceUrl": "https://seekingalpha.com/symbol/KEYS/earnings/estimates",

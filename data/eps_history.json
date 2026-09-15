@@ -1,27 +1,4 @@
 {
-  "NVDA": {
-    "2026E": [
-      {
-        "date": "2026-09-15",
-        "eps": 9.31,
-        "reportedFiscalLabel": "Jan 2027"
-      }
-    ],
-    "2027E": [
-      {
-        "date": "2026-09-15",
-        "eps": 15.61,
-        "reportedFiscalLabel": "Jan 2028"
-      }
-    ],
-    "2028E": [
-      {
-        "date": "2026-09-15",
-        "eps": 21.06,
-        "reportedFiscalLabel": "Jan 2029"
-      }
-    ]
-  },
   "AVGO": {
     "2026E": [
       {
@@ -42,45 +19,6 @@
         "date": "2026-09-15",
         "eps": 30.56,
         "reportedFiscalLabel": "Oct 2028"
-      }
-    ]
-  },
-  "TSM": {
-    "2026E": [
-      {
-        "date": "2026-09-15",
-        "eps": 16.93,
-        "reportedFiscalLabel": "Dec 2026"
-      }
-    ],
-    "2027E": [
-      {
-        "date": "2026-09-15",
-        "eps": 21.93,
-        "reportedFiscalLabel": "Dec 2027"
-      }
-    ],
-    "2028E": [
-      {
-        "date": "2026-09-15",
-        "eps": 28.33,
-        "reportedFiscalLabel": "Dec 2028"
-      }
-    ]
-  },
-  "MSFT": {
-    "2027E": [
-      {
-        "date": "2026-09-15",
-        "eps": 19.75,
-        "reportedFiscalLabel": "Jun 2027"
-      }
-    ],
-    "2028E": [
-      {
-        "date": "2026-09-15",
-        "eps": 23.57,
-        "reportedFiscalLabel": "Jun 2028"
       }
     ]
   },
@@ -127,6 +65,75 @@
         "date": "2026-09-15",
         "eps": 15.69,
         "reportedFiscalLabel": "Oct 2028"
+      }
+    ]
+  },
+  "MSFT": {
+    "2026E": [
+      {
+        "date": "2026-09-15",
+        "eps": null,
+        "reportedFiscalLabel": null
+      }
+    ],
+    "2027E": [
+      {
+        "date": "2026-09-15",
+        "eps": 19.75,
+        "reportedFiscalLabel": "Jun 2027"
+      }
+    ],
+    "2028E": [
+      {
+        "date": "2026-09-15",
+        "eps": 23.57,
+        "reportedFiscalLabel": "Jun 2028"
+      }
+    ]
+  },
+  "NVDA": {
+    "2026E": [
+      {
+        "date": "2026-09-15",
+        "eps": 9.31,
+        "reportedFiscalLabel": "Jan 2027"
+      }
+    ],
+    "2027E": [
+      {
+        "date": "2026-09-15",
+        "eps": 15.61,
+        "reportedFiscalLabel": "Jan 2028"
+      }
+    ],
+    "2028E": [
+      {
+        "date": "2026-09-15",
+        "eps": 21.06,
+        "reportedFiscalLabel": "Jan 2029"
+      }
+    ]
+  },
+  "TSM": {
+    "2026E": [
+      {
+        "date": "2026-09-15",
+        "eps": 16.93,
+        "reportedFiscalLabel": "Dec 2026"
+      }
+    ],
+    "2027E": [
+      {
+        "date": "2026-09-15",
+        "eps": 21.93,
+        "reportedFiscalLabel": "Dec 2027"
+      }
+    ],
+    "2028E": [
+      {
+        "date": "2026-09-15",
+        "eps": 28.33,
+        "reportedFiscalLabel": "Dec 2028"
       }
     ]
   }

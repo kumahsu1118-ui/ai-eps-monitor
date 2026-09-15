@@ -637,3 +637,33 @@ table.data .ticker a:hover {
     grid-template-columns: 1fr;
   }
 }
+
+/* P1 freshness */
+.stale-badge {
+  display: inline-block;
+  padding: 0.15rem 0.55rem;
+  border-radius: 3px;
+  font-weight: 700;
+  font-size: 0.75rem;
+  letter-spacing: 0.04em;
+  color: #fff;
+  background: var(--negative);
+  border: 1px solid var(--negative);
+}
+.meta-stale-row {
+  justify-content: flex-end;
+  margin-top: 0.15rem;
+}
+.summary-grid {
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+}
+.price-sub {
+  display: block;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  margin-top: 0.1rem;
+}
+.chart-mode-toggle {
+  display: inline-flex;
+  gap: 0;
+}
