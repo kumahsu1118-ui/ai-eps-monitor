@@ -26,9 +26,25 @@
     "2027E",
     "2028E"
   ],
-  "dataVersion": "8d6f97ab4b206824d3ca192c9139cd11c233c1cc8a932a6a1f077a1f7d506326",
-  "buildId": "8d6f97ab4b206824d3ca192c9139cd11c233c1cc8a932a6a1f077a1f7d506326",
-  "alertEngineLastEvaluated": "2026-09-15T06:32:19Z",
+  "dataVersion": "06e555c174dff2695d89eea890f979375cfbb2405ff7f7576d3fe82786901af5",
+  "refreshVersion": "b6c4f6c675029386fed89f07c2cfc124438f04d27275b00746a31f231b24e780",
+  "buildId": "06e555c174dff2695d89eea890f979375cfbb2405ff7f7576d3fe82786901af5",
+  "generatedAt": "2026-09-15T06:50:07Z",
+  "momentumFormula": "Deterministic from Y+1 and Y+2 1M EPS revisions only: both >1% → Strong Positive; Y+1>0 and Y+2>=0 → Positive; both <-1% → Strong Negative; Y+1<0 and Y+2<=0 → Negative; else Neutral. No model, guidance, or driver mix-in.",
+  "collectionStatus": "complete",
+  "successfulTickers": [
+    "NVDA",
+    "AVGO",
+    "TSM",
+    "MSFT",
+    "BE",
+    "KEYS"
+  ],
+  "failedTickers": [],
+  "successfulCount": 6,
+  "totalCount": 6,
+  "driverLoadErrors": [],
+  "alertEngineLastEvaluated": "2026-09-15T06:50:07Z",
   "alertEngineStatus": "ok",
   "alertEngineError": null
 }

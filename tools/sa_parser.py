@@ -50,6 +50,26 @@ def to_num(x):
         return None
 
 
+def first_defined(*vals):
+    """Return the first value that is not None. Preserves 0.0 / 0 / False."""
+    for v in vals:
+        if v is not None:
+            return v
+    return None
+
+
+# Typical fiscal-year-end month. Ticker-specific map wins over the generic
+# Jan–Mar / Apr–Dec slot rule when packing annual rows for a known issuer.
+FY_END_MONTH = {
+    "NVDA": 1,
+    "MSFT": 6,
+    "AVGO": 10,
+    "TSM": 12,
+    "BE": 12,
+    "KEYS": 10,
+}
+
+
 def parse_fiscal_period_ending(label: str | None) -> dict:
     """Map 'Jan 2028' / 'Fiscal Period Ending Jan 2028' to calendar slot.
 
@@ -75,7 +95,7 @@ def parse_fiscal_period_ending(label: str | None) -> dict:
             "calendarAlignment": None,
             "mappedYear": None,
         }
-    cal_year = year - 1 if month <= 3 else year
+    cal_year = mapped_calendar_year(year, month, ticker=None)
     return {
         "reportedFiscalLabel": raw,
         "periodType": "Fiscal Period Ending",
@@ -84,6 +104,104 @@ def parse_fiscal_period_ending(label: str | None) -> dict:
         "endingMonth": month,
         "endingYear": year,
     }
+
+
+def parse_ending_year_month(ending) -> tuple:
+    """Parse 'Jan 2027' / '2027-01-31' → (year, month)."""
+    if ending is None:
+        return None, None
+    s = str(ending).strip()
+    m = re.match(r"^(\d{4})-(\d{1,2})(?:-(\d{1,2}))?$", s)
+    if m:
+        return int(m.group(1)), int(m.group(2))
+    mapped = parse_fiscal_period_ending(s)
+    return mapped.get("endingYear"), mapped.get("endingMonth")
+
+
+def mapped_calendar_year(ending_year: int, ending_month: int, ticker: str | None = None) -> int:
+    """Jan–Mar ending → prior-year mapped slot; Apr–Dec → ending-year slot.
+
+    Ticker-specific fiscal map wins: known FY-end month still uses the same
+    Jan–Mar / Apr–Dec slot rule on that ending (NVDA Jan, MSFT Jun, AVGO Oct,
+    TSM Dec).
+    """
+    month = int(ending_month)
+    year = int(ending_year)
+    t = (ticker or "").upper()
+    if t in FY_END_MONTH:
+        # Annual period for this issuer ends in FY_END_MONTH[t]. Slot mapping
+        # remains Jan–Mar → prior calendar year, otherwise ending year.
+        month = month  # ending month on the row is authoritative
+    if month <= 3:
+        return year - 1
+    return year
+
+
+def mapped_year_for_period_ending(ending, ticker: str | None = None) -> str | None:
+    y, m = parse_ending_year_month(ending)
+    if y is None or m is None:
+        return None
+    return f"{mapped_calendar_year(y, m, ticker=ticker)}E"
+
+
+def pack_snapshot_eps_from_rows(rows: list[dict], ticker: str | None = None) -> dict:
+    """Pack estimate rows onto mapped year slots. Zero revisions stay 0.0.
+
+    Do not use ``r.get("rev1M") or r.get(...)`` — 0.0 is a valid revision.
+    Jan–Mar ending → prior-year mapped slot; Apr–Dec → ending-year slot.
+    Ticker-specific fiscal map wins when choosing among annual rows.
+    """
+    fy_end = FY_END_MONTH.get((ticker or "").upper())
+    candidates: dict[str, list] = {}
+    for r in rows or []:
+        if not isinstance(r, dict):
+            continue
+        ending = first_defined(
+            r.get("reportedFiscalPeriodEnding"),
+            r.get("fiscalPeriodEnding"),
+            r.get("period_ending"),
+            r.get("reported_fiscal_label"),
+        )
+        y, m = parse_ending_year_month(ending)
+        slot = r.get("mappedYear")
+        if not slot and y is not None and m is not None:
+            slot = f"{mapped_calendar_year(y, m, ticker=ticker)}E"
+        if not slot:
+            continue
+        label = None
+        if ending and not re.match(r"^\d{4}-", str(ending)):
+            label = str(ending).strip()
+        elif y is not None and m is not None:
+            months = [
+                "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+                "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+            ]
+            label = f"{months[m - 1]} {y}"
+        rec = {
+            "reportedFiscalPeriodEnding": ending,
+            "reportedFiscalLabel": label,
+            "endingYear": y,
+            "endingMonth": m,
+            "epsMean": first_defined(to_num(r.get("epsMean")), to_num(r.get("eps_mean")), to_num(r.get("consensus"))),
+            "epsHigh": first_defined(to_num(r.get("epsHigh")), to_num(r.get("eps_high")), to_num(r.get("high"))),
+            "epsLow": first_defined(to_num(r.get("epsLow")), to_num(r.get("eps_low")), to_num(r.get("low"))),
+            "rev1M": first_defined(to_num(r.get("rev1M")), to_num(r.get("rev_1m")), to_num(r.get("revision_1m")), to_num(r.get("rev_1M_pct"))),
+            "rev3M": first_defined(to_num(r.get("rev3M")), to_num(r.get("rev_3m")), to_num(r.get("revision_3m")), to_num(r.get("rev_3M_pct"))),
+            "rev6M": first_defined(to_num(r.get("rev6M")), to_num(r.get("rev_6m")), to_num(r.get("revision_6m")), to_num(r.get("rev_6M_pct"))),
+            "nEst": first_defined(to_num(r.get("nEst")), to_num(r.get("n_est")), to_num(r.get("analysts"))),
+            "mappedYear": slot,
+        }
+        candidates.setdefault(slot, []).append(rec)
+
+    packed = {}
+    for slot, recs in candidates.items():
+        if fy_end is not None:
+            matched = [r for r in recs if r.get("endingMonth") == fy_end]
+            chosen = matched[-1] if matched else recs[-1]
+        else:
+            chosen = recs[-1]
+        packed[slot] = chosen
+    return packed
 
 
 class _TableParser(HTMLParser):

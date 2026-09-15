@@ -48,6 +48,20 @@
       "secUrl": "https://www.sec.gov/Archives/edgar/data/1045810/000104581026000073/nvda-20260826.htm",
       "sourceTier": 1
     },
+    "actuals": {
+      "sourceUrl": "https://investor.nvidia.com/news/press-release-details/2026/NVIDIA-Announces-Financial-Results-for-Second-Quarter-Fiscal-2027/default.aspx",
+      "sourceTier": 1,
+      "source": "Company IR",
+      "epsActual": "$2.22",
+      "revenue": "$96.22B"
+    },
+    "consensusComparison": {
+      "sourceUrl": "https://seekingalpha.com/article/4940563-nvidia-corporation-nvda-q2-2027-earnings-call-transcript",
+      "sourceTier": 4,
+      "source": "Seeking Alpha",
+      "vsConsensus": "Above",
+      "notes": "SA earnings summary says EPS beat consensus by $0.13 and revenue beat by $4.06B."
+    },
     "guidance": "Next-qtr revenue: $108B +/- 2%; GM guide: Q3 FY27 GAAP and non-GAAP 74% +/- 50 bps; expected Q4 trough 71%-72%; FY28 expected 72%-73%; Annual / LT: Preliminary FY28 revenue growth approximately 70% Y/Y; supply expected to remain a bottleneck through at least FY28; Guide vs consensus: unknown",
     "guidanceDetail": {
       "nextQuarterRevenue": "$108B +/- 2%",
@@ -630,7 +644,21 @@
     "qaSourcePolicy": "SA supplemental Q&A only because no official IR/SEC transcript was located; revenue/EPS/margins remain IR/SEC.",
     "nextEarningsRaw": "12/10/2026 (Post-Market)",
     "resultsVsConsensus": "Above",
-    "guidanceVsConsensus": "unknown"
+    "guidanceVsConsensus": "unknown",
+    "actuals": {
+      "sourceUrl": "https://investors.broadcom.com/news-releases/news-release-details/broadcom-inc-announces-third-quarter-fiscal-year-2026-financial",
+      "sourceTier": 1,
+      "source": "Company IR",
+      "epsActual": "$3.32",
+      "revenue": "$29.6B"
+    },
+    "consensusComparison": {
+      "sourceUrl": "https://seekingalpha.com/article/4942557-broadcom-inc-avgo-q3-2026-earnings-call-transcript",
+      "sourceTier": 4,
+      "source": "Seeking Alpha",
+      "vsConsensus": "Above",
+      "notes": "SA summary says EPS beat by $0.08 and revenue beat by $156.49M. AI semiconductor revenue was $16.7B, +221% Y/Y and +54% sequentially; infrastructure software revenue was $8.8B, +29% Y/Y."
+    }
   },
   "TSM": {
     "ticker": "TSM",
@@ -653,7 +681,21 @@
     "results": [],
     "sources": [],
     "resultsVsConsensus": null,
-    "guidanceVsConsensus": null
+    "guidanceVsConsensus": null,
+    "actuals": {
+      "sourceUrl": null,
+      "sourceTier": null,
+      "source": "Company IR",
+      "epsActual": null,
+      "revenue": null
+    },
+    "consensusComparison": {
+      "sourceUrl": null,
+      "sourceTier": 4,
+      "source": "Seeking Alpha",
+      "vsConsensus": null,
+      "notes": null
+    }
   },
   "MSFT": {
     "ticker": "MSFT",
@@ -676,7 +718,21 @@
     "results": [],
     "sources": [],
     "resultsVsConsensus": null,
-    "guidanceVsConsensus": null
+    "guidanceVsConsensus": null,
+    "actuals": {
+      "sourceUrl": null,
+      "sourceTier": null,
+      "source": "Company IR",
+      "epsActual": null,
+      "revenue": null
+    },
+    "consensusComparison": {
+      "sourceUrl": null,
+      "sourceTier": 4,
+      "source": "Seeking Alpha",
+      "vsConsensus": null,
+      "notes": null
+    }
   },
   "BE": {
     "ticker": "BE",
@@ -699,7 +755,21 @@
     "results": [],
     "sources": [],
     "resultsVsConsensus": null,
-    "guidanceVsConsensus": null
+    "guidanceVsConsensus": null,
+    "actuals": {
+      "sourceUrl": null,
+      "sourceTier": null,
+      "source": "Company IR",
+      "epsActual": null,
+      "revenue": null
+    },
+    "consensusComparison": {
+      "sourceUrl": null,
+      "sourceTier": 4,
+      "source": "Seeking Alpha",
+      "vsConsensus": null,
+      "notes": null
+    }
   },
   "KEYS": {
     "ticker": "KEYS",
@@ -722,6 +792,20 @@
     "results": [],
     "sources": [],
     "resultsVsConsensus": null,
-    "guidanceVsConsensus": null
+    "guidanceVsConsensus": null,
+    "actuals": {
+      "sourceUrl": null,
+      "sourceTier": null,
+      "source": "Company IR",
+      "epsActual": null,
+      "revenue": null
+    },
+    "consensusComparison": {
+      "sourceUrl": null,
+      "sourceTier": 4,
+      "source": "Seeking Alpha",
+      "vsConsensus": null,
+      "notes": null
+    }
   }
 }

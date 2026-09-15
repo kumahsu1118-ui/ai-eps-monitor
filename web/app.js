@@ -49,11 +49,18 @@
     return node;
   }
 
+  function isNm(v) {
+    if (v == null) return false;
+    const s = String(v);
+    return s === "N/M" || s === "n/m" || s === "Turn profitable" || s === "Turn loss";
+  }
+
   function isMissing(v) {
     return v === null || v === undefined || v === "" || v === "Data unavailable";
   }
 
   function fmtNum(v, digits) {
+    if (isNm(v)) return String(v);
     if (isMissing(v) || Number.isNaN(Number(v))) return null;
     const n = Number(v);
     const d = digits == null ? 2 : digits;
@@ -64,6 +71,7 @@
   }
 
   function fmtPct(v, digits, alreadyPercent) {
+    if (isNm(v)) return String(v);
     if (isMissing(v) || Number.isNaN(Number(v))) return null;
     const n = Number(v);
     const pct = alreadyPercent ? n : n * 100;
@@ -82,6 +90,7 @@
 
 
   function fmtDispersion(v) {
+    if (isNm(v)) return String(v);
     /* dispersion stored as fraction (H-L)/Cons — display as percent e.g. 57.3% */
     if (isMissing(v) || Number.isNaN(Number(v))) return null;
     const n = Number(v);
@@ -225,6 +234,7 @@
   }
 
   function numCell(v, digits) {
+    if (isNm(v)) return document.createTextNode(String(v));
     const s = fmtNum(v, digits);
     if (s == null) return naCell();
     return document.createTextNode(s);
@@ -239,6 +249,7 @@
   }
 
   function growthCell(v) {
+    if (isNm(v)) return el("span", { className: "na", text: String(v) });
     /* ratio 0.67 → +67.67% */
     const s = fmtPct(v, 2, false);
     if (s == null) return naCell();
@@ -274,7 +285,8 @@
   }
 
   function pe(price, eps) {
-    if (isMissing(price) || isMissing(eps) || Number(eps) === 0) return null;
+    if (isMissing(price) || isMissing(eps)) return null;
+    if (isNm(eps) || Number(eps) <= 0) return "N/M";
     return Number(price) / Number(eps);
   }
 
@@ -445,6 +457,21 @@
     );
     set("#meta-published", m.sitePublishedDisplay || m.sitePublished);
     set("#meta-source", m.primarySource);
+    const collStatusEl = $("#meta-collection-status");
+    if (collStatusEl && m.successfulCount != null && m.totalCount != null) {
+      /* e.g. PARTIAL · 5/6 */
+      const label = String(m.collectionStatus || "complete").toUpperCase();
+      collStatusEl.textContent = label + " · " + m.successfulCount + "/" + m.totalCount;
+    }
+    const collStatusRow = $("#meta-collection-status-row");
+    if (collStatusRow) {
+      const st = String(m.collectionStatus || "").toLowerCase();
+      if (st && st !== "complete") {
+        collStatusRow.removeAttribute("hidden");
+      } else {
+        collStatusRow.setAttribute("hidden", "");
+      }
+    }
     const staleRow = $("#meta-stale-row");
     if (staleRow) {
       const serverStale = m.dataStale === true || m.dataStale === "true";
@@ -501,10 +528,10 @@
           largestUpY2 = r;
         }
       }
-      if (p1.pe != null && !Number.isNaN(Number(p1.pe))) {
+      if (p1.pe != null && !isNm(p1.pe) && !Number.isNaN(Number(p1.pe)) && Number(p1.pe) > 0) {
         if (!lowestPe || Number(p1.pe) < Number(periodOf(lowestPe, y1).pe)) lowestPe = r;
       }
-      if (r.cagr != null && p0.eps != null && !Number.isNaN(Number(r.cagr))) {
+      if (r.cagr != null && !isNm(r.cagr) && p0.eps != null && !Number.isNaN(Number(r.cagr))) {
         if (!fastestCagr || Number(r.cagr) > Number(fastestCagr.cagr)) {
           fastestCagr = r;
         }
@@ -565,9 +592,9 @@
     );
     grid.appendChild(
       card(
-        "Lowest " + s.y1 + " PE",
+        "Lowest Mapped " + s.y1 + " P/E",
         s.lowestPe && s.lowestPe.ticker,
-        s.lowestPe ? fmtNum(periodOf(s.lowestPe, s.y1).pe, 2) + "x" : null
+        s.lowestPe ? (isNm(periodOf(s.lowestPe, s.y1).pe) ? "N/M" : fmtNum(periodOf(s.lowestPe, s.y1).pe, 2) + "x") : null
       )
     );
     grid.appendChild(
@@ -582,13 +609,16 @@
   }
 
   function alertAgeLabel(a) {
-    const days = a && a.ageDays != null ? Number(a.ageDays) : null;
-    if (days == null || Number.isNaN(days)) {
-      const t = Date.parse((a && (a.eventAt || a.eventDate || a.createdAt)) || "");
-      if (Number.isNaN(t)) return "";
-      const d = Math.max(0, Math.floor((Date.now() - t) / 86400000));
-      return d + "d ago";
+    const eventAt = a && (a.eventAt || a.eventDate);
+    if (eventAt) {
+      const t = Date.parse(String(eventAt).length <= 10 ? String(eventAt) + "T00:00:00Z" : String(eventAt));
+      if (!Number.isNaN(t)) {
+        const d = Math.max(0, Math.floor((Date.now() - t) / 86400000));
+        return d + "d ago";
+      }
     }
+    const days = a && a.ageDays != null ? Number(a.ageDays) : null;
+    if (days == null || Number.isNaN(days)) return "";
     return days + "d ago";
   }
 
@@ -1620,9 +1650,17 @@
       earnPanel.appendChild(el("div", { className: "stub-note", text: "Guidance" }));
       earnPanel.appendChild(el("p", { className: "section-note", text: String(earn.guidance) }));
     }
-    if (earn.resultsVsConsensus || (earn.results && earn.results.vsConsensus) || earn.comparison) {
-      const rv = earn.resultsVsConsensus || (earn.results && earn.results.vsConsensus) || earn.comparison;
-      earnPanel.appendChild(el("div", { className: "stub-note", text: "Results vs consensus: " + String(rv) }));
+    if (earn.resultsVsConsensus || (earn.results && earn.results.vsConsensus) || earn.comparison || (earn.consensusComparison && earn.consensusComparison.vsConsensus)) {
+      const rv = earn.resultsVsConsensus || (earn.consensusComparison && earn.consensusComparison.vsConsensus) || (earn.results && earn.results.vsConsensus) || earn.comparison;
+      const cc = earn.consensusComparison || {};
+      const tier = cc.sourceTier != null ? " Tier " + cc.sourceTier : "";
+      earnPanel.appendChild(el("div", { className: "stub-note", text: "Results vs consensus: " + String(rv) + (tier ? " (" + (cc.source || "Seeking Alpha") + tier + ")" : "") }));
+      if (cc.sourceUrl) {
+        earnPanel.appendChild(el("a", { className: "source-link", href: cc.sourceUrl, target: "_blank", rel: "noopener", text: cc.sourceUrl }));
+      }
+    }
+    if (earn.actuals && (earn.actuals.sourceUrl || earn.actuals.sourceTier)) {
+      earnPanel.appendChild(el("div", { className: "stub-note", text: "Actuals source: " + (earn.actuals.source || "Company IR") + (earn.actuals.sourceTier != null ? " Tier " + earn.actuals.sourceTier : "") }));
     }
     if (earn.guidanceVsConsensus || (earn.guidanceDetail && earn.guidanceDetail.vsConsensus)) {
       const gv = earn.guidanceVsConsensus || (earn.guidanceDetail && earn.guidanceDetail.vsConsensus);

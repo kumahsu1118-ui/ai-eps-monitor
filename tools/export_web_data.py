@@ -33,6 +33,8 @@ import sys as _sys
 if str(_here) not in _sys.path:
     _sys.path.insert(0, str(_here))
 
+from sa_parser import first_defined
+
 SNAP_DIR = ROOT / "data" / "snapshots"
 REV_PATH = ROOT / "data" / "revisions" / "history.jsonl"
 DRIVERS_DIR = ROOT / "data" / "drivers"
@@ -93,6 +95,16 @@ MAPPING_RULE_NOTE = (
 )
 
 TRUE_CY_STATUS = "unavailable — need quarterly consensus"
+
+MOMENTUM_FORMULA = (
+    "Deterministic from Y+1 and Y+2 1M EPS revisions only: "
+    "both >1% → Strong Positive; Y+1>0 and Y+2>=0 → Positive; "
+    "both <-1% → Strong Negative; Y+1<0 and Y+2<=0 → Negative; else Neutral. "
+    "No model, guidance, or driver mix-in."
+)
+NM = "N/M"
+TURN_PROFITABLE = "Turn profitable"
+TURN_LOSS = "Turn loss"
 
 
 def unavailable(x) -> bool:
@@ -175,7 +187,25 @@ def load_drivers(ticker: str):
     p = DRIVERS_DIR / f"{ticker}.json"
     if not p.exists():
         return {"ticker": ticker, "updated": None, "status": None, "drivers": []}
-    return json.loads(p.read_text(encoding="utf-8"))
+    raw = p.read_text(encoding="utf-8")
+    try:
+        data = json.loads(raw)
+        if not isinstance(data, dict) or "drivers" not in data:
+            raise ValueError("invalid driver schema")
+        return data
+    except Exception as exc:
+        bak = p.with_name(p.name + ".corrupt-backup")
+        try:
+            if not bak.exists():
+                bak.write_bytes(p.read_bytes())
+        except Exception:
+            pass
+        return {
+            "ticker": ticker,
+            "drivers": [],
+            "exportError": f"Parse error in data/drivers/{ticker}.json ({type(exc).__name__}); original kept",
+            "originalPreserved": True,
+        }
 
 
 def load_alerts():
@@ -190,8 +220,10 @@ def load_alerts():
 
 def pe(price, eps):
     p, e = to_num(price), to_num(eps)
-    if p is None or e is None or e == 0:
+    if p is None or e is None:
         return None
+    if e <= 0:
+        return NM
     return p / e
 
 
@@ -209,9 +241,14 @@ def eps_same(a, b) -> bool:
 
 def compute_dispersion(high, low, consensus):
     h, l, c = to_num(high), to_num(low), to_num(consensus)
-    if h is None or l is None or c is None or c == 0:
+    if h is None or l is None or c is None:
         return None
-    return (h - l) / c
+    if c <= 0:
+        return NM
+    disp = (h - l) / c
+    if disp < 0:
+        return 0.0
+    return disp
 
 
 def parse_earnings_date_parts(raw) -> tuple[int, int, int] | None:
@@ -269,8 +306,13 @@ def infer_next_earnings_status(next_raw, digest: dict | None = None) -> tuple[st
     return "estimated", "Seeking Alpha"
 
 
-def ensure_driver_files(tickers: list[str]) -> None:
-    """Ensure data/drivers/{T}.json exist from templates without wiping existing content."""
+def ensure_driver_files(tickers: list[str]) -> list[dict]:
+    """Ensure data/drivers/{T}.json exist from templates without wiping existing content.
+
+    On parse error: preserve original, write .corrupt-backup, return export error.
+    NEVER silently reset to a baseline stub.
+    """
+    errors: list[dict] = []
     DRIVERS_DIR.mkdir(parents=True, exist_ok=True)
     templates = {}
     tpl_path = DRIVERS_DIR / "templates.json"
@@ -284,10 +326,25 @@ def ensure_driver_files(tickers: list[str]) -> None:
         if p.exists():
             try:
                 existing = json.loads(p.read_text(encoding="utf-8"))
-                if isinstance(existing, dict) and existing.get("drivers"):
-                    continue  # keep current content
-            except Exception:
-                pass
+                if not isinstance(existing, dict) or "drivers" not in existing:
+                    raise ValueError("invalid driver schema")
+                continue  # keep current content (including empty drivers list)
+            except Exception as exc:
+                bak = p.with_name(p.name + ".corrupt-backup")
+                try:
+                    if not bak.exists():
+                        bak.write_bytes(p.read_bytes())
+                except Exception:
+                    pass
+                errors.append(
+                    {
+                        "ticker": t,
+                        "error": f"Parse error in data/drivers/{t}.json ({type(exc).__name__}); original kept",
+                        "backup": bak.name,
+                        "originalPreserved": True,
+                    }
+                )
+                continue
         names = templates.get(t) or []
         payload = {
             "ticker": t,
@@ -299,20 +356,48 @@ def ensure_driver_files(tickers: list[str]) -> None:
             ],
         }
         write_json(p, payload)
+    return errors
 
 
 def growth_pct(a, b):
     a, b = to_num(a), to_num(b)
-    if a is None or b is None or a == 0:
+    if a is None or b is None:
         return None
+    if a <= 0 and b > 0:
+        return TURN_PROFITABLE
+    if a > 0 and b <= 0:
+        return TURN_LOSS
+    if a <= 0 and b <= 0:
+        return NM
     return (b - a) / abs(a)
 
 
 def cagr_over(first_eps, last_eps, years: int = 2):
     a, b = to_num(first_eps), to_num(last_eps)
-    if a is None or b is None or a <= 0 or years <= 0:
+    if a is None or b is None or years <= 0:
         return None
+    if a <= 0 or b <= 0:
+        return NM
     return (b / a) ** (1.0 / float(years)) - 1.0
+
+
+def momentum_from_revisions(y1_1m, y2_1m) -> str:
+    """Fixed formula from Y+1 / Y+2 1M revisions only."""
+    y1 = to_num(y1_1m)
+    y2 = to_num(y2_1m)
+    if y1 is None:
+        y1 = 0.0
+    if y2 is None:
+        y2 = 0.0
+    if y1 > 1.0 and y2 > 1.0:
+        return "Strong Positive"
+    if y1 > 0 and y2 >= 0:
+        return "Positive"
+    if y1 < -1.0 and y2 < -1.0:
+        return "Strong Negative"
+    if y1 < 0 and y2 <= 0:
+        return "Negative"
+    return "Neutral"
 
 
 def taipei_display_safe(iso_utc: str) -> str | None:
@@ -399,11 +484,23 @@ def pack_eps_year(raw_year: dict | None, mapped_year: str | None = None) -> dict
         "consensus": cons,
         "high": high,
         "low": low,
-        "analysts": to_num(raw_year.get("analysts")),
+        "analysts": first_defined(to_num(raw_year.get("analysts")), to_num(raw_year.get("nEst"))),
         "dispersion": compute_dispersion(high, low, cons),
-        "rev1M": to_num(raw_year.get("rev_1M_pct")),
-        "rev3M": to_num(raw_year.get("rev_3M_pct")),
-        "rev6M": to_num(raw_year.get("rev_6M_pct")),
+        "rev1M": first_defined(
+            to_num(raw_year.get("rev_1M_pct")),
+            to_num(raw_year.get("rev1M")),
+            to_num(raw_year.get("revision_1m")),
+        ),
+        "rev3M": first_defined(
+            to_num(raw_year.get("rev_3M_pct")),
+            to_num(raw_year.get("rev3M")),
+            to_num(raw_year.get("revision_3m")),
+        ),
+        "rev6M": first_defined(
+            to_num(raw_year.get("rev_6M_pct")),
+            to_num(raw_year.get("rev6M")),
+            to_num(raw_year.get("revision_6m")),
+        ),
         "reportedFiscalLabel": reported,
         "calendarAlignment": to_display_str(raw_year.get("calendar_alignment")),
         "mappedYear": mapped_year,
@@ -461,7 +558,12 @@ def build_companies(snap: dict, tickers: list[str], year_keys: list[str] | None 
 
         data_gaps = d.get("data_gaps") or []
         # Optional per-ticker failure: gaps that imply pull failure, or explicit flag
-        collection_failed = bool(d.get("collection_failed")) or any(
+        env_failed = {
+            x.strip().upper()
+            for x in (os.environ.get("AI_EPS_FAILED_TICKERS") or "").split(",")
+            if x.strip()
+        }
+        collection_failed = bool(d.get("collection_failed")) or t in env_failed or any(
             "pull fail" in str(g).lower() or "collection fail" in str(g).lower() or "fetch fail" in str(g).lower()
             for g in data_gaps
         )
@@ -483,7 +585,10 @@ def build_companies(snap: dict, tickers: list[str], year_keys: list[str] | None 
             "nextEarningsStatus": nestatus,
             "nextEarningsSource": nesource,
             "fyNote": to_display_str(d.get("fy_note")),
-            "momentum": to_display_str(d.get("eps_momentum")) or "Neutral",
+            "momentum": momentum_from_revisions(
+                (eps_out.get(year_keys[1]) or {}).get("rev1M") if len(year_keys) > 1 else None,
+                (eps_out.get(year_keys[2]) or {}).get("rev1M") if len(year_keys) > 2 else None,
+            ),
             "eps": eps_out,
             "epsByFiscal": eps_by_fiscal,
             "sourceUrl": to_display_str(d.get("source_url")),
@@ -643,7 +748,9 @@ def seed_and_append_daily_snapshots(
             "mappedYear": slot,
             "fiscalKey": fiscal,
             "consensus": eps,
+            "epsMean": eps,
             "reportedFiscalLabel": fiscal,
+            "reportedFiscalPeriodEnding": fiscal,
             "calendarAlignment": raw.get("Calendar Alignment"),
             "source": "seed_from_revision_history",
             "updateTime": raw.get("Update Time"),
@@ -672,7 +779,9 @@ def seed_and_append_daily_snapshots(
                 "mappedYear": slot,
                 "fiscalKey": fiscal,
                 "consensus": new_eps,
+                "epsMean": new_eps,
                 "reportedFiscalLabel": fiscal,
+                "reportedFiscalPeriodEnding": fiscal,
                 "calendarAlignment": e.get("calendarAlignment"),
                 "source": "daily_export",
                 "updateTime": snap_utc,
@@ -899,23 +1008,64 @@ def load_or_init_earnings(companies: dict, tickers: list[str]) -> dict:
 
 
 def normalize_consensus_comparisons(digest: dict) -> dict:
-    """Split resultsVsConsensus vs guidanceVsConsensus. Do not mix them."""
+    """Split actuals vs consensusComparison provenance. Do not mix them."""
     if not isinstance(digest, dict):
         return digest
     results = digest.get("results") if isinstance(digest.get("results"), dict) else {}
     gd = digest.get("guidanceDetail") if isinstance(digest.get("guidanceDetail"), dict) else {}
     results_vs = results.get("vsConsensus") or digest.get("resultsVsConsensus")
+    cc = digest.get("consensusComparison") if isinstance(digest.get("consensusComparison"), dict) else {}
+    if cc.get("vsConsensus"):
+        results_vs = cc.get("vsConsensus") or results_vs
     guidance_vs = gd.get("vsConsensus") or digest.get("guidanceVsConsensus")
     digest["resultsVsConsensus"] = results_vs
     digest["guidanceVsConsensus"] = guidance_vs
+
+    if not isinstance(digest.get("actuals"), dict):
+        digest["actuals"] = {
+            "sourceUrl": results.get("sourceUrl") if results.get("sourceTier") in (1, 2, 3) else None,
+            "sourceTier": results.get("sourceTier") if results.get("sourceTier") in (1, 2, 3) else None,
+            "source": results.get("source") or "Company IR",
+            "epsActual": results.get("eps"),
+            "revenue": results.get("revenue"),
+        }
+    if not isinstance(digest.get("consensusComparison"), dict) or not digest["consensusComparison"].get("sourceUrl"):
+        sa_url = cc.get("sourceUrl")
+        sa_tier = cc.get("sourceTier")
+        if not sa_url:
+            for item in (digest.get("positives") or []):
+                if isinstance(item, dict) and item.get("url") and (item.get("sourceTier") is None or int(item.get("sourceTier") or 4) >= 4):
+                    sa_url = item.get("url")
+                    sa_tier = item.get("sourceTier") or 4
+                    break
+        digest["consensusComparison"] = {
+            "sourceUrl": sa_url,
+            "sourceTier": int(sa_tier) if sa_tier is not None else 4,
+            "source": cc.get("source") or "Seeking Alpha",
+            "vsConsensus": results_vs,
+            "notes": cc.get("notes") or results.get("notes"),
+        }
     return digest
 
 
 def fmt_md_num(x, digits=2):
+    if isinstance(x, str) and x in {NM, TURN_PROFITABLE, TURN_LOSS}:
+        return x
     v = to_num(x)
     if v is None:
         return "Data unavailable"
     return f"{v:.{digits}f}"
+
+
+def fmt_md_growth(g):
+    if g is None:
+        return "Data unavailable"
+    if isinstance(g, str):
+        return g
+    try:
+        return f"{g * 100:+.2f}%"
+    except TypeError:
+        return str(g)
 
 
 def regenerate_markdown_backups(companies: dict, valuation: list, snap: dict, tickers: list[str], year_keys: list[str] | None = None):
@@ -958,7 +1108,7 @@ def regenerate_markdown_backups(companies: dict, valuation: list, snap: dict, ti
         g_cells = []
         for yk in years[1:]:
             g = growth.get(yk)
-            g_cells.append("Data unavailable" if g is None else f"{g * 100:+.2f}%")
+            g_cells.append(fmt_md_growth(g))
         rev = r.get("rev1M")
         rev_s = "Data unavailable" if rev is None else f"{rev:.2f}%"
         price = r.get("lastClose") if r.get("lastClose") is not None else r.get("price")
@@ -1089,6 +1239,10 @@ def run_build_alerts() -> dict:
     except Exception as exc:
         err = {
             "alerts": [],
+            "activeAlerts": [],
+            "alertHistory": [],
+            "alertDiagnostics": [],
+            "driverLoadErrors": [],
             "alertEngineLastEvaluated": now_utc_iso(),
             "alertEngineStatus": "error",
             "alertEngineError": f"{type(exc).__name__}: {exc}",
@@ -1116,6 +1270,35 @@ def compute_data_version(payload_parts: dict) -> str:
     return h.hexdigest()
 
 
+def alerts_for_data_version(alerts: dict) -> dict:
+    """Substantive alert payload: ids/eventAt/kind — not ageDays or evaluation ticks."""
+
+    def strip_one(a):
+        if not isinstance(a, dict):
+            return a
+        return {k: v for k, v in a.items() if k not in {"ageDays", "lastEvaluatedAt", "alertEngineLastEvaluated"}}
+
+    return {
+        "alerts": [strip_one(a) for a in (alerts.get("alerts") or [])],
+        "activeAlerts": [strip_one(a) for a in (alerts.get("activeAlerts") or [])],
+        "alertEngineStatus": alerts.get("alertEngineStatus"),
+    }
+
+
+def compute_refresh_version(generated_at, last_success, collection_status) -> str:
+    blob = json.dumps(
+        {
+            "generatedAt": generated_at,
+            "lastSuccessfulCollection": last_success,
+            "collectionStatus": collection_status,
+        },
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+    )
+    return hashlib.sha256(blob.encode("utf-8")).hexdigest()
+
+
 def load_prior_meta() -> dict:
     p = WEB_DATA / "meta.json"
     if not p.exists():
@@ -1129,7 +1312,7 @@ def load_prior_meta() -> dict:
 def main():
     snap_path, snap = load_latest_snapshot()
     tickers = load_watchlist()
-    ensure_driver_files(tickers)
+    driver_errors = ensure_driver_files(tickers)
     snap_utc = snap.get("snapshot_utc") or ""
     source = snap.get("source") or "Seeking Alpha"
     display = taipei_display_safe(snap_utc)
@@ -1154,14 +1337,22 @@ def main():
     # Deterministic alert engine — must run before writing alerts.json
     alerts_payload = run_build_alerts()
     active = alerts_payload.get("activeAlerts") or alerts_payload.get("alerts") or []
+    driver_errors = list(driver_errors or []) + list(alerts_payload.get("driverLoadErrors") or [])
     alerts = {
         "alerts": active,
         "activeAlerts": active,
         "alertHistory": alerts_payload.get("alertHistory") or [],
+        "alertDiagnostics": alerts_payload.get("alertDiagnostics") or [],
+        "driverLoadErrors": driver_errors,
         "alertEngineLastEvaluated": alerts_payload.get("alertEngineLastEvaluated"),
         "alertEngineStatus": alerts_payload.get("alertEngineStatus") or "error",
         "alertEngineError": alerts_payload.get("alertEngineError"),
     }
+    if driver_errors and alerts.get("alertEngineStatus") == "ok":
+        alerts["alertEngineStatus"] = "error"
+        alerts["alertEngineError"] = "; ".join(
+            e.get("error") or str(e) for e in driver_errors
+        )
 
     from freshness import is_schedule_stale as _is_schedule_stale
 
@@ -1176,6 +1367,15 @@ def main():
         c["scheduleStale"] = ticker_stale
         c["dataStale"] = ticker_stale
 
+    failed_tickers = [t for t in tickers if (companies.get(t) or {}).get("collectionFailed")]
+    successful_tickers = [t for t in tickers if t not in failed_tickers]
+    if not successful_tickers:
+        collection_status = "failed"
+    elif failed_tickers:
+        collection_status = "partial"
+    else:
+        collection_status = "complete"
+
     # Preserve prior sitePublished until publish actually ships a new payload
     site_published = prior_meta.get("sitePublished")
     site_published_display = prior_meta.get("sitePublishedDisplay")
@@ -1185,19 +1385,19 @@ def main():
         site_published = published_dt.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
         site_published_display = taipei_display_safe(site_published)
 
-    # Payload for dataVersion:
-    # include alertEngineStatus (ok↔error must change hash) but NOT alertEngineLastEvaluated ticks
+    generated_at = now_utc_iso()
+    last_success = snap_utc
+    refresh_version = compute_refresh_version(generated_at, last_success, collection_status)
+
+    # dataVersion = substantive EPS/price/earnings/active-alert payload.
+    # ageDays / lastEvaluated ticks / refresh clocks must NOT bump it.
     payload_parts = {
         "companies": companies,
         "valuation": {"rows": valuation},
         "revisions": {"revisions": revisions},
         "eps_history": eps_history,
         "earnings": earnings,
-        "alerts": {
-            "alerts": alerts.get("alerts") or [],
-            "activeAlerts": alerts.get("activeAlerts") or [],
-            "alertEngineStatus": alerts.get("alertEngineStatus"),
-        },
+        "alerts": alerts_for_data_version(alerts),
         "watchlist": {"tickers": tickers},
     }
     data_version = compute_data_version(payload_parts)
@@ -1214,7 +1414,7 @@ def main():
         "trueCyStatus": TRUE_CY_STATUS,
         "consensusDataAsOf": snap_utc,
         "consensusDataAsOfDisplay": display,
-        "lastSuccessfulCollection": snap_utc,
+        "lastSuccessfulCollection": last_success,
         "lastSuccessfulCollectionDisplay": display,
         "sitePublished": site_published,
         "sitePublishedDisplay": site_published_display,
@@ -1223,7 +1423,16 @@ def main():
         "displayMappedYears": year_keys,
         "chartYears": chart_years,
         "dataVersion": data_version,
+        "refreshVersion": refresh_version,
         "buildId": build_id,
+        "generatedAt": generated_at,
+        "momentumFormula": MOMENTUM_FORMULA,
+        "collectionStatus": collection_status,
+        "successfulTickers": successful_tickers,
+        "failedTickers": failed_tickers,
+        "successfulCount": len(successful_tickers),
+        "totalCount": len(tickers),
+        "driverLoadErrors": driver_errors,
         "alertEngineLastEvaluated": alerts.get("alertEngineLastEvaluated"),
         "alertEngineStatus": alerts.get("alertEngineStatus"),
         "alertEngineError": alerts.get("alertEngineError"),
@@ -1248,7 +1457,9 @@ def main():
     print(f"  consensusDataAsOfDisplay: {display}")
     print(f"  sitePublishedDisplay: {site_published_display}")
     print(f"  dataStale: {data_stale}")
+    print(f"  collectionStatus: {collection_status} · {len(successful_tickers)}/{len(tickers)}")
     print(f"  dataVersion: {data_version[:12]}…")
+    print(f"  refreshVersion: {refresh_version[:12]}…")
     print(f"  alertEngineStatus: {alerts.get('alertEngineStatus')} ({len(alerts.get('alerts') or [])} alerts)")
 
 

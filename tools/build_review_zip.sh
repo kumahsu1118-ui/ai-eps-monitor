@@ -1,7 +1,53 @@
 #!/usr/bin/env bash
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-OUT="${1:-$ROOT/ai-eps-monitor-review.zip}"
+OUT="${REVIEW_OUT:-${1:-$ROOT/ai-eps-monitor-review.zip}}"
+SCREENSHOT_META="${SCREENSHOT_META:-$ROOT/meta-at-screenshot.json}"
+LIVE_META_FILE="${LIVE_META_FILE:-$ROOT/LIVE_META_FROM_BROWSER.txt}"
+
+if [[ ! -f "$SCREENSHOT_META" ]]; then
+  echo "FATAL: meta-at-screenshot.json is required for a same-build review package: $SCREENSHOT_META" >&2
+  exit 1
+fi
+if [[ ! -f "$LIVE_META_FILE" ]]; then
+  echo "FATAL: LIVE_META_FROM_BROWSER.txt is required for a same-build review package: $LIVE_META_FILE" >&2
+  exit 1
+fi
+
+META_JSON="${META_JSON:-$ROOT/web/data/meta.json}"
+if [[ ! -f "$META_JSON" ]]; then
+  echo "FATAL: web/data/meta.json missing; export before packaging" >&2
+  exit 1
+fi
+
+MATCH_CHECK=$(python3 - "$SCREENSHOT_META" "$LIVE_META_FILE" "$META_JSON" <<'PY'
+import json, re, sys
+shot_path, live_path, meta_path = sys.argv[1], sys.argv[2], sys.argv[3]
+meta = json.loads(open(meta_path, encoding="utf-8").read())
+want = str(meta.get("dataVersion") or "").strip()
+shot = json.loads(open(shot_path, encoding="utf-8").read())
+shot_v = str(shot.get("dataVersion") or shot.get("buildId") or "").strip()
+live = open(live_path, encoding="utf-8").read()
+m = re.search(r"dataVersion\s*[:=]\s*([A-Za-z0-9]+)", live)
+live_v = (m.group(1) if m else "").strip()
+if not live_v:
+    try:
+        live_j = json.loads(live)
+        live_v = str(live_j.get("dataVersion") or live_j.get("buildId") or "").strip()
+    except Exception:
+        live_v = ""
+ok = bool(want) and shot_v == want and live_v == want
+print("want=" + want)
+print("shot=" + shot_v)
+print("live=" + live_v)
+sys.exit(0 if ok else 2)
+PY
+) || {
+  echo "FATAL: screenshots must share the final dataVersion from web/data/meta.json" >&2
+  echo "$MATCH_CHECK" >&2
+  exit 1
+}
+
 STAGE=$(mktemp -d)
 DEST="$STAGE/ai-eps-monitor-review"
 mkdir -p "$DEST"/{web/data,tools,data/{earnings,drivers,alerts,daily_eps_snapshots,revisions,snapshots},tests/fixtures,docs}
@@ -31,9 +77,13 @@ for f in README.md TEST_RESULTS.md; do
 done
 cp -a "$ROOT"/docs/*.md "$DEST/docs/" 2>/dev/null || true
 
+cp -a "$SCREENSHOT_META" "$DEST/meta-at-screenshot.json"
+cp -a "$LIVE_META_FILE" "$DEST/LIVE_META_FROM_BROWSER.txt"
+
 find "$DEST" -iname '*cookie*' -o -iname '*credential*' -o -iname '*session*' -o -iname '.env*' | while read -r p; do rm -rf "$p"; done
 find "$DEST" -name '__pycache__' -type d -exec rm -rf {} + 2>/dev/null || true
 
 rm -f "$OUT"
 ( cd "$STAGE" && zip -qr "$OUT" ai-eps-monitor-review )
 echo "Wrote $OUT ($(wc -c < "$OUT") bytes)"
+echo "$MATCH_CHECK"

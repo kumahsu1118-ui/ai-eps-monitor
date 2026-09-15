@@ -11,7 +11,7 @@
     "nextEarningsStatus": "estimated",
     "nextEarningsSource": "Seeking Alpha",
     "fyNote": "Annual view; table column shown as 'Fiscal Period Ending'.",
-    "momentum": "Positive",
+    "momentum": "Strong Positive",
     "eps": {
       "2026E": {
         "consensus": 9.31,
@@ -497,7 +497,7 @@
     "nextEarningsStatus": "estimated",
     "nextEarningsSource": "Seeking Alpha",
     "fyNote": "Annual view; table column shown as 'Fiscal Period Ending'.",
-    "momentum": "Neutral",
+    "momentum": "Positive",
     "eps": {
       "2026E": {
         "consensus": 16.93,
@@ -885,7 +885,7 @@
     "nextEarningsStatus": "estimated",
     "nextEarningsSource": "Seeking Alpha",
     "fyNote": "Annual view; table column shown as 'Fiscal Period Ending'.",
-    "momentum": "Neutral",
+    "momentum": "Positive",
     "eps": {
       "2026E": {
         "consensus": 2.71,
@@ -1091,7 +1091,7 @@
     "nextEarningsStatus": null,
     "nextEarningsSource": null,
     "fyNote": "Annual view; table column shown as 'Fiscal Period Ending'.",
-    "momentum": "Positive",
+    "momentum": "Strong Positive",
     "eps": {
       "2026E": {
         "consensus": 11.47,

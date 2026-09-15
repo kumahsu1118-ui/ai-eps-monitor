@@ -44,6 +44,7 @@ EARNINGS_DIR = ROOT / "data" / "earnings"
 DRIVERS_DIR = ROOT / "data" / "drivers"
 ALERTS_PATH = ROOT / "data" / "alerts" / "index.json"
 UNIVERSE_PATH = ROOT / "data" / "universe.json"
+DAILY_JSONL = ROOT / "data" / "daily_eps_snapshots" / "daily.jsonl"
 
 TICKERS_DEFAULT = ["NVDA", "AVGO", "TSM", "MSFT", "BE", "KEYS"]
 HOMEPAGE_TTL_DAYS = 30
@@ -107,6 +108,39 @@ def load_json(path: Path) -> dict | None:
         return json.loads(path.read_text(encoding="utf-8"))
     except Exception:
         return None
+
+
+def preserve_corrupt_file(path: Path) -> Path | None:
+    """Keep original bytes; write sibling .corrupt-backup. Never overwrite path."""
+    bak = path.with_name(path.name + ".corrupt-backup")
+    try:
+        raw = path.read_bytes()
+        if not bak.exists():
+            bak.write_bytes(raw)
+        return bak
+    except Exception:
+        return None
+
+
+def load_driver_file(path: Path) -> tuple[dict | None, dict | None]:
+    """Return (data, error). On parse/schema failure preserve original + backup."""
+    if not path.exists():
+        return None, None
+    raw_text = path.read_text(encoding="utf-8")
+    try:
+        data = json.loads(raw_text)
+        if not isinstance(data, dict) or "drivers" not in data:
+            raise ValueError("invalid driver schema (missing drivers)")
+        return data, None
+    except Exception as exc:
+        bak = preserve_corrupt_file(path)
+        return None, {
+            "ticker": path.stem,
+            "error": f"{type(exc).__name__}: {exc}",
+            "backup": bak.name if bak else None,
+            "originalPreserved": True,
+            "path": str(path.name),
+        }
 
 
 def parse_date(s: str | None) -> datetime | None:
@@ -325,7 +359,7 @@ def cumulative_30d_status(points: list[tuple], now: datetime, lookback_days: int
 
 
 def rule2_cumulative(history: list[dict], lookback_days: int = 30, now: datetime | None = None) -> list[dict]:
-    """Cumulative first→last revision in a true 30d window > 5% per fiscal slot."""
+    """Legacy revision-history cumulative (kept for unit tests). Production uses daily.jsonl."""
     groups: dict[tuple, list] = {}
     for row in history:
         ticker = row.get("Ticker")
@@ -370,6 +404,185 @@ def rule2_cumulative(history: list[dict], lookback_days: int = 30, now: datetime
     return out
 
 
+def load_daily_eps_snapshots() -> list[dict]:
+    """Load append-only daily consensus rows (shared jsonl + per-ticker files)."""
+    rows: list[dict] = []
+    paths: list[Path] = []
+    daily_dir = ROOT / "data" / "daily_eps_snapshots"
+    if DAILY_JSONL.exists():
+        paths.append(DAILY_JSONL)
+    if daily_dir.exists():
+        for p in sorted(daily_dir.glob("*/daily.jsonl")):
+            paths.append(p)
+    seen = set()
+    for path in paths:
+        key = str(path.resolve()) if path.exists() else str(path)
+        if key in seen:
+            continue
+        seen.add(key)
+        try:
+            text = path.read_text(encoding="utf-8")
+        except Exception:
+            continue
+        for line in text.splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                rec = json.loads(line)
+            except Exception:
+                continue
+            if isinstance(rec, dict):
+                rows.append(rec)
+    return rows
+
+
+def _daily_eps_value(row: dict):
+    return to_num(row.get("epsMean") if row.get("epsMean") is not None else row.get("consensus"))
+
+
+def _daily_period_key(row: dict) -> str | None:
+    return (
+        row.get("reportedFiscalPeriodEnding")
+        or row.get("reportedFiscalLabel")
+        or row.get("fiscalKey")
+    )
+
+
+def rule2_cumulative_from_daily(
+    lookback_days: int = 30, now: datetime | None = None
+) -> tuple[list[dict], list[dict]]:
+    """Cumulative 30D >5% from daily.jsonl: nearest valid obs at window start vs latest.
+
+    Same ticker + reportedFiscalPeriodEnding. Insufficient history → diagnostics
+    only (never Alert History, never daily.jsonl writes).
+    """
+    now = now or now_utc()
+    window_start = now - timedelta(days=lookback_days)
+    groups: dict[tuple, list] = {}
+    for row in load_daily_eps_snapshots():
+        ticker = row.get("ticker")
+        ending = _daily_period_key(row)
+        eps = _daily_eps_value(row)
+        dt = parse_date(row.get("date") or row.get("asOf") or row.get("updateTime"))
+        if not ticker or not ending or eps is None or dt is None:
+            continue
+        groups.setdefault((ticker, ending), []).append((dt, eps, row))
+
+    out: list[dict] = []
+    diagnostics: list[dict] = []
+    for (ticker, ending), pts in groups.items():
+        pts_sorted = sorted(pts, key=lambda x: x[0])
+        on_or_before = [p for p in pts_sorted if p[0] <= window_start]
+        latest = pts_sorted[-1]
+        if not on_or_before:
+            diagnostics.append(
+                {
+                    "kind": "insufficient_history",
+                    "rule": "cumulative_revision_gt_5pct",
+                    "ticker": ticker,
+                    "reportedFiscalPeriodEnding": ending,
+                    "reason": "no daily EPS observation at or before the 30D window start",
+                    "windowPoints": len(pts_sorted),
+                    "lookbackDays": lookback_days,
+                    "labeled30D": False,
+                }
+            )
+            continue
+        start = on_or_before[-1]
+        if start[0] == latest[0]:
+            diagnostics.append(
+                {
+                    "kind": "insufficient_history",
+                    "rule": "cumulative_revision_gt_5pct",
+                    "ticker": ticker,
+                    "reportedFiscalPeriodEnding": ending,
+                    "reason": "fewer than 2 distinct daily EPS observations spanning the 30D window",
+                    "windowPoints": 1,
+                    "lookbackDays": lookback_days,
+                    "labeled30D": False,
+                }
+            )
+            continue
+        first, last = start[1], latest[1]
+        if first is None or last is None or first == 0:
+            diagnostics.append(
+                {
+                    "kind": "insufficient_history",
+                    "rule": "cumulative_revision_gt_5pct",
+                    "ticker": ticker,
+                    "reportedFiscalPeriodEnding": ending,
+                    "reason": "invalid EPS at window start or latest observation",
+                    "windowPoints": len(pts_sorted),
+                    "lookbackDays": lookback_days,
+                    "labeled30D": False,
+                }
+            )
+            continue
+        cum_pct = (last - first) / abs(first) * 100.0
+        if abs(cum_pct) <= 5.0:
+            continue
+        direction = "upgrade" if cum_pct > 0 else "downgrade"
+        event_date = iso_z(latest[0])
+        out.append(
+            alert(
+                "cumulative_revision_gt_5pct",
+                "high",
+                ticker,
+                f"{ticker} {ending}: cumulative 30D EPS {direction} {cum_pct:+.2f}% (>5%) from daily snapshots",
+                period=ending,
+                event_date=event_date,
+                event_key="cumulative_30d",
+                cumulativePct=cum_pct,
+                lookbackDays=lookback_days,
+                windowPoints=2,
+                windowLabel="30D",
+                startEps=first,
+                latestEps=last,
+                startDate=start[0].strftime("%Y-%m-%d"),
+                oneShot=True,
+            )
+        )
+    return out, diagnostics
+
+
+def consensus_comparison_source(dig: dict) -> tuple[str | None, int | None]:
+    """resultsVsConsensus provenance: consensus comparison source, never IR actuals."""
+    cc = dig.get("consensusComparison") if isinstance(dig.get("consensusComparison"), dict) else {}
+    url = cc.get("sourceUrl")
+    tier = cc.get("sourceTier")
+    if url:
+        return url, int(tier) if tier is not None else 4
+    results = dig.get("results") if isinstance(dig.get("results"), dict) else {}
+    # Prefer SA / Tier 4 notes over IR (Tier 1) actuals URL
+    if results.get("sourceTier") not in (1, 2, 3) and results.get("sourceUrl"):
+        return results.get("sourceUrl"), int(results.get("sourceTier") or 4)
+    for bucket in ("positives", "negatives", "uncertainties", "sources"):
+        for item in dig.get(bucket) or []:
+            if not isinstance(item, dict):
+                continue
+            item_url = item.get("url") or item.get("sourceUrl")
+            item_tier = item.get("sourceTier")
+            if item_url and (item_tier is None or int(item_tier) >= 4):
+                return item_url, int(item_tier) if item_tier is not None else 4
+    qa = dig.get("qaSupplemental") if isinstance(dig.get("qaSupplemental"), dict) else {}
+    if qa.get("sourceUrl"):
+        return qa.get("sourceUrl"), int(qa.get("sourceTier") or 4)
+    return None, None
+
+
+def actuals_source(dig: dict) -> tuple[str | None, int | None]:
+    act = dig.get("actuals") if isinstance(dig.get("actuals"), dict) else {}
+    if act.get("sourceUrl"):
+        return act.get("sourceUrl"), act.get("sourceTier")
+    results = dig.get("results") if isinstance(dig.get("results"), dict) else {}
+    if results.get("sourceTier") in (1, 2, 3) or (
+        isinstance(results.get("sourceUrl"), str) and "investor." in results.get("sourceUrl", "")
+    ):
+        return results.get("sourceUrl"), results.get("sourceTier")
+    return None, None
+
+
 def rule3_results_and_guidance(tickers: list[str]) -> list[dict]:
     out = []
     for t in tickers:
@@ -379,8 +592,12 @@ def rule3_results_and_guidance(tickers: list[str]) -> list[dict]:
         period = dig.get("periodLabel")
         event_date = dig.get("reportDate") or dig.get("lastEarnings")
         results_vs = digest_results_vs_consensus(dig)
+        if not results_vs:
+            cc = dig.get("consensusComparison") if isinstance(dig.get("consensusComparison"), dict) else {}
+            results_vs = vs_consensus_label(cc.get("vsConsensus"))
         guidance_vs = digest_guidance_vs_consensus(dig)
         if results_vs:
+            src_url, src_tier = consensus_comparison_source(dig)
             out.append(
                 alert(
                     "results_vs_consensus",
@@ -392,6 +609,9 @@ def rule3_results_and_guidance(tickers: list[str]) -> list[dict]:
                     event_key="results",
                     comparison=results_vs,
                     resultsVsConsensus=results_vs,
+                    sourceUrl=src_url,
+                    sourceTier=src_tier,
+                    provenanceField="consensusComparison",
                     oneShot=True,
                 )
             )
@@ -535,11 +755,38 @@ def rule4_gm(tickers: list[str]) -> list[dict]:
     return out
 
 
-def rule5_driver_or_digest_flags(tickers: list[str]) -> list[dict]:
-    """Driver status changed to improving/deteriorating with reason — unique per driver."""
+def driver_event_date(d: dict, drv: dict) -> tuple[str | None, str | None]:
+    """Business event date. NEVER today.
+
+    Priority: driver.changedAt → driver.eventDate → driver.asOf → file.updated → file.updatedAt.
+    """
+    chain = [
+        (d.get("changedAt"), "driver.changedAt"),
+        (d.get("eventDate"), "driver.eventDate"),
+        (d.get("asOf"), "driver.asOf"),
+        (drv.get("updated"), "file.updated"),
+        (drv.get("updatedAt"), "file.updatedAt"),
+    ]
+    for val, src in chain:
+        if val:
+            return str(val), src
+    return None, None
+
+
+def rule5_driver_or_digest_flags(tickers: list[str]) -> tuple[list[dict], list[dict], list[dict]]:
+    """Driver status changed to improving/deteriorating with reason — unique per driver.
+
+    Returns (alerts, missing_event_date_diagnostics, driver_load_errors).
+    """
     out = []
+    missing = []
+    load_errors = []
     for t in tickers:
-        drv = load_json(DRIVERS_DIR / f"{t}.json")
+        path = DRIVERS_DIR / f"{t}.json"
+        drv, err = load_driver_file(path)
+        if err:
+            load_errors.append(err)
+            continue
         if not drv:
             continue
         earn = load_json(EARNINGS_DIR / f"{t}.json") or {}
@@ -551,14 +798,10 @@ def rule5_driver_or_digest_flags(tickers: list[str]) -> list[dict]:
             prev = str(d.get("previousStatus") or "").lower()
             reason = d.get("reason") or d.get("note")
             name = d.get("name") or "driver"
-            event_date = d.get("changedAt") or drv.get("updated")
+            event_date, date_src = driver_event_date(d, drv)
             period = d.get("eventPeriod") or d.get("fiscalPeriod") or default_period
             if cur not in {"improving", "deteriorating"} or not reason:
                 continue
-            if prev and prev == cur:
-                # still alert first scored change from unchanged implied if previous equals current
-                # but skip no-op unchanged→unchanged already filtered
-                pass
             fire = False
             if prev and prev != cur:
                 fire = True
@@ -570,6 +813,17 @@ def rule5_driver_or_digest_flags(tickers: list[str]) -> list[dict]:
                 fire = True
                 msg = f"{t} driver '{name}': {prev} → {cur} — {reason}"
             if not fire:
+                continue
+            if not event_date or parse_date(event_date) is None:
+                missing.append(
+                    {
+                        "kind": "missing_event_date",
+                        "rule": "driver_status_change",
+                        "ticker": t,
+                        "driverName": name,
+                        "reason": "no changedAt/eventDate/asOf/file.updated/file.updatedAt; never using today",
+                    }
+                )
                 continue
             extra_gm = {}
             lname = str(name).lower()
@@ -590,17 +844,21 @@ def rule5_driver_or_digest_flags(tickers: list[str]) -> list[dict]:
                     currentStatus=cur,
                     sourceUrl=d.get("sourceUrl"),
                     reason=reason,
+                    eventDateSource=date_src,
                     oneShot=True,
                     **extra_gm,
                 )
             )
-    return out
+    return out, missing, load_errors
 
 
-def enrich_lifecycle(a: dict, now: datetime, prior_by_id: dict) -> dict:
+def enrich_lifecycle(a: dict, now: datetime, prior_by_id: dict) -> dict | None:
+    """Stamp lifecycle fields. NEVER use today as a business event date."""
     prior = prior_by_id.get(a.get("id")) or {}
     event_raw = a.get("eventAt") or a.get("eventDate") or a.get("date") or a.get("changedAt")
-    event_dt = parse_date(event_raw) or parse_date(prior.get("eventAt")) or now
+    event_dt = parse_date(event_raw) or parse_date(prior.get("eventAt")) or parse_date(prior.get("eventDate"))
+    if event_dt is None:
+        return None
     created_raw = prior.get("createdAt") or a.get("createdAt")
     created_dt = parse_date(created_raw) or now
     age_days = max(0, int((now - event_dt).total_seconds() // 86400))
@@ -642,11 +900,16 @@ def evaluate_alerts(now: datetime | None = None) -> dict:
     history = load_history()
     now = now or now_utc()
     alerts: list[dict] = []
+    diagnostics: list[dict] = []
     alerts.extend(rule1_single_revision(history))
-    alerts.extend(rule2_cumulative(history, now=now))
+    daily_alerts, daily_diag = rule2_cumulative_from_daily(now=now)
+    alerts.extend(daily_alerts)
+    diagnostics.extend(daily_diag)
     alerts.extend(rule3_results_and_guidance(tickers))
     alerts.extend(rule4_gm(tickers))
-    alerts.extend(rule5_driver_or_digest_flags(tickers))
+    driver_alerts, missing_dates, driver_errors = rule5_driver_or_digest_flags(tickers)
+    alerts.extend(driver_alerts)
+    diagnostics.extend(missing_dates)
 
     prior_payload = load_json(ALERTS_PATH) or {}
     prior_by_id = _index_prior(prior_payload)
@@ -658,11 +921,22 @@ def evaluate_alerts(now: datetime | None = None) -> dict:
         if aid in seen:
             continue
         seen.add(aid)
-        uniq.append(enrich_lifecycle(a, now, prior_by_id))
+        enriched = enrich_lifecycle(a, now, prior_by_id)
+        if enriched is None:
+            diagnostics.append(
+                {
+                    "kind": "missing_event_date",
+                    "rule": a.get("rule"),
+                    "ticker": a.get("ticker"),
+                    "id": aid,
+                    "reason": "unparseable event date; never using today as business event date",
+                }
+            )
+            continue
+        uniq.append(enriched)
 
     active = []
     history_out = []
-    # Retain prior history entries whose ids are not in the current active set
     current_ids = {a["id"] for a in uniq}
     for a in uniq:
         if a.get("oneShot") and not is_homepage_active(a, now):
@@ -675,7 +949,12 @@ def evaluate_alerts(now: datetime | None = None) -> dict:
             continue
         if old["id"] in current_ids:
             continue
+        # Do not promote diagnostics into history
+        if old.get("kind") in {"insufficient_history", "missing_event_date"}:
+            continue
         old_e = enrich_lifecycle(dict(old), now, prior_by_id)
+        if old_e is None:
+            continue
         if old_e["id"] not in {h.get("id") for h in history_out}:
             history_out.append(old_e)
 
@@ -686,21 +965,31 @@ def evaluate_alerts(now: datetime | None = None) -> dict:
         )
     )
 
+    engine_status = "ok"
+    engine_error = None
+    if driver_errors:
+        engine_status = "error"
+        engine_error = "; ".join(
+            f"{e.get('ticker')}: {e.get('error')}" for e in driver_errors
+        )
+
     return {
         "alerts": active,  # homepage alias
         "activeAlerts": active,
         "alertHistory": history_out,
+        "alertDiagnostics": diagnostics,
+        "driverLoadErrors": driver_errors,
         "alertEngineLastEvaluated": iso_z(now),
-        "alertEngineStatus": "ok",
-        "alertEngineError": None,
+        "alertEngineStatus": engine_status,
+        "alertEngineError": engine_error,
         "rules": [
-            "single_revision_gt_2pct: |revisionPct| > 2%",
-            "cumulative_revision_gt_5pct: first-to-last > 5% over true 30d window; else insufficient history",
-            "results_vs_consensus: results vs consensus Above/Below",
+            "single_revision_gt_2pct: |revisionPct| > 2% from revision events",
+            "cumulative_revision_gt_5pct: nearest daily.jsonl obs at 30D window start vs latest, same ticker+reportedFiscalPeriodEnding; else insufficient history (diagnostics only)",
+            "results_vs_consensus: results vs consensus Above/Below (consensusComparison source, not IR actuals)",
             "guidance_vs_consensus: guidanceDetail.vsConsensus Above/Below only (unknown → none)",
             "gross_margin_guidance_revision: Previous+Current Guidance and |Δ| > 200 bps",
             "gross_margin_pressure: GM stress without dual guidance pair",
-            "driver_status_change: improving/deteriorating with reason; unique per driverName",
+            "driver_status_change: improving/deteriorating with reason; eventAt from changedAt (never today)",
         ],
     }
 
@@ -725,6 +1014,8 @@ def main() -> int:
             "alerts": [],
             "activeAlerts": [],
             "alertHistory": [],
+            "alertDiagnostics": [],
+            "driverLoadErrors": [],
             "alertEngineLastEvaluated": now_utc_iso(),
             "alertEngineStatus": "error",
             "alertEngineError": f"{type(exc).__name__}: {exc}",

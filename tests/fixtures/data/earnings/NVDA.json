@@ -47,6 +47,20 @@
     "secUrl": "https://www.sec.gov/Archives/edgar/data/1045810/000104581026000073/nvda-20260826.htm",
     "sourceTier": 1
   },
+  "actuals": {
+    "sourceUrl": "https://investor.nvidia.com/news/press-release-details/2026/NVIDIA-Announces-Financial-Results-for-Second-Quarter-Fiscal-2027/default.aspx",
+    "sourceTier": 1,
+    "source": "Company IR",
+    "epsActual": "$2.22",
+    "revenue": "$96.22B"
+  },
+  "consensusComparison": {
+    "sourceUrl": "https://seekingalpha.com/article/4940563-nvidia-corporation-nvda-q2-2027-earnings-call-transcript",
+    "sourceTier": 4,
+    "source": "Seeking Alpha",
+    "vsConsensus": "Above",
+    "notes": "SA earnings summary says EPS beat consensus by $0.13 and revenue beat by $4.06B."
+  },
   "guidance": "Next-qtr revenue: $108B +/- 2%; GM guide: Q3 FY27 GAAP and non-GAAP 74% +/- 50 bps; expected Q4 trough 71%-72%; FY28 expected 72%-73%; Annual / LT: Preliminary FY28 revenue growth approximately 70% Y/Y; supply expected to remain a bottleneck through at least FY28; Guide vs consensus: unknown",
   "guidanceDetail": {
     "nextQuarterRevenue": "$108B +/- 2%",

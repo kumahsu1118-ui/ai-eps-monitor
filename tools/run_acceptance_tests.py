@@ -68,7 +68,7 @@ def build_fixture(dest: Path) -> Path:
     # tools
     tools = dest / "tools"
     tools.mkdir(parents=True, exist_ok=True)
-    for name in ("export_web_data.py", "build_alerts.py", "freshness.py", "sa_parser.py"):
+    for name in ("export_web_data.py", "build_alerts.py", "freshness.py", "sa_parser.py", "build_review_zip.sh"):
         src = ROOT / "tools" / name
         if src.exists():
             shutil.copy2(src, tools / name)
@@ -463,11 +463,12 @@ def test_dynamic_rollover_full_ui(parent: Path) -> None:
             f"Mapped {y2}",
             f"Largest {y1} EPS Upgrade",
             f"Largest {y2} EPS Upgrade",
-            f"Lowest {y1} PE",
+            f"Lowest Mapped {y1} P/E",
             f"{y0} {y1} {y2}",
         ]
     )
     ok = ok and "2026E" not in simulated and all(y in simulated for y in want)
+    ok = ok and "Lowest Mapped" in app_js and "48h" not in app_js and "48h" not in html
 
     home = (fixture / "dashboard" / "HOME.md").read_text(encoding="utf-8") if (fixture / "dashboard" / "HOME.md").exists() else ""
     val_md = (fixture / "dashboard" / "VALUATION.md").read_text(encoding="utf-8") if (fixture / "dashboard" / "VALUATION.md").exists() else ""
@@ -804,6 +805,391 @@ def test_collector_parser_fixture() -> None:
     )
 
 
+def test_driver_changed_at(parent: Path) -> None:
+    fixture = build_fixture(parent / "drv_changed")
+    drivers = {
+        "ticker": "NVDA",
+        "updated": "2026-09-15T12:00:00Z",
+        "updatedAt": None,
+        "status": "fixture",
+        "drivers": [
+            {
+                "name": "GPU shipment",
+                "previousStatus": "unchanged",
+                "currentStatus": "improving",
+                "changedAt": "2026-08-26",
+                "eventPeriod": "Q2 FY27",
+                "reason": "GPU improving (changedAt fixture)",
+            }
+        ],
+    }
+    (fixture / "data" / "drivers" / "NVDA.json").write_text(
+        json.dumps(drivers, indent=2) + "\n", encoding="utf-8"
+    )
+    sys.path.insert(0, str(fixture / "tools"))
+    for mod in list(sys.modules):
+        if mod in ("build_alerts", "export_web_data"):
+            del sys.modules[mod]
+    import build_alerts as ba
+
+    now = datetime(2026, 9, 15, 12, 0, 0, tzinfo=timezone.utc)
+    payload = ba.evaluate_alerts(now=now)
+    hits = [
+        a
+        for a in (payload.get("activeAlerts") or [])
+        if a.get("ticker") == "NVDA"
+        and a.get("rule") == "driver_status_change"
+        and "gpu" in str(a.get("driverName") or a.get("eventKey") or "").lower()
+    ]
+    ok = len(hits) >= 1
+    if hits:
+        event_at = str(hits[0].get("eventAt") or "")
+        ok = ok and event_at.startswith("2026-08-26")
+        ok = ok and not event_at.startswith("2026-09-15")
+        ok = ok and int(hits[0].get("ageDays") or -1) == 20
+    record(
+        "driver_changed_at_test",
+        ok,
+        f"n={len(hits)} eventAt={hits[0].get('eventAt') if hits else None} age={hits[0].get('ageDays') if hits else None}",
+    )
+
+
+def test_full_export_2027_rollover(parent: Path) -> None:
+    """Must run full exporter main() (not only build_companies/build_valuation)."""
+    fixture = build_fixture(parent / "full_2027")
+    run_export(fixture, extra_env={"AI_EPS_TAIPEI_YEAR": "2027"})
+    meta = json.loads((fixture / "web" / "data" / "meta.json").read_text(encoding="utf-8"))
+    years = meta.get("displayMappedYears") or []
+    home = (fixture / "dashboard" / "HOME.md").read_text(encoding="utf-8")
+    val_md = (fixture / "dashboard" / "VALUATION.md").read_text(encoding="utf-8")
+    src = (fixture / "tools" / "export_web_data.py").read_text(encoding="utf-8")
+    ok = years[:3] == ["2027E", "2028E", "2029E"]
+    ok = ok and "Mapped 2027E" in home and "Mapped 2028E" in home and "Mapped 2029E" in home
+    ok = ok and "Mapped 2026E" not in home and "Mapped 2026E" not in val_md
+    ok = ok and "2027E PE" in val_md
+    ok = ok and '"2026E"' not in src and "'2026E'" not in src
+    record(
+        "full_export_2027_rollover_test",
+        ok,
+        f"years={years[:3]} home_has_2027={'Mapped 2027E' in home}",
+    )
+
+
+def test_parser_zero_revision() -> None:
+    sys.path.insert(0, str(ROOT / "tools"))
+    import sa_parser as sp
+
+    rows = [
+        {
+            "reportedFiscalPeriodEnding": "2027-01-31",
+            "epsMean": 4.5,
+            "rev1M": 0.0,
+            "rev3M": 1.2,
+            "rev_1m": 99.0,
+        }
+    ]
+    packed = sp.pack_snapshot_eps_from_rows(rows, "NVDA")
+    slot = packed.get("2026E") or {}
+    ok = slot.get("rev1M") == 0.0 and slot.get("rev1M") is not None
+    ok = ok and sp.first_defined(0.0, 1.2) == 0.0
+    ok = ok and sp.first_defined(None, 0.0, 3.0) == 0.0
+    record("parser_zero_revision_test", ok, f"rev1M={slot.get('rev1M')} keys={list(packed)}")
+
+
+def test_parser_all_fiscal_months() -> None:
+    sys.path.insert(0, str(ROOT / "tools"))
+    import sa_parser as sp
+
+    def slot(ticker, ending):
+        packed = sp.pack_snapshot_eps_from_rows(
+            [{"reportedFiscalPeriodEnding": ending, "epsMean": 1.0, "rev1M": 0.0}],
+            ticker,
+        )
+        return list(packed.keys())
+
+    ok = slot("NVDA", "2027-01-31") == ["2026E"]  # Jan → prior-year mapped slot
+    ok = ok and slot("MSFT", "2026-06-30") == ["2026E"]
+    ok = ok and slot("AVGO", "2026-10-31") == ["2026E"]
+    ok = ok and slot("TSM", "2026-12-31") == ["2026E"]
+    # All 12 months under generic Jan–Mar / Apr–Dec rule
+    for month in range(1, 13):
+        ending = f"2027-{month:02d}-28"
+        got = slot(None, ending)
+        want = "2026E" if month <= 3 else "2027E"
+        ok = ok and got == [want]
+    ok = ok and sp.mapped_year_for_period_ending("Jan 2027", "NVDA") == "2026E"
+    record(
+        "parser_all_fiscal_months_test",
+        ok,
+        f"NVDA Jan={slot('NVDA', '2027-01-31')} MSFT Jun={slot('MSFT', '2026-06-30')} AVGO Oct={slot('AVGO', '2026-10-31')} TSM Dec={slot('TSM', '2026-12-31')}",
+    )
+
+
+def test_driver_corruption_preservation(parent: Path) -> None:
+    fixture = build_fixture(parent / "drv_corrupt")
+    path = fixture / "data" / "drivers" / "NVDA.json"
+    corrupt = b'{ "ticker": "NVDA", "drivers": [ BROKEN'
+    path.write_bytes(corrupt)
+    run_export(fixture)
+    after = path.read_bytes()
+    bak = Path(str(path) + ".corrupt-backup")
+    meta = json.loads((fixture / "web" / "data" / "meta.json").read_text(encoding="utf-8"))
+    alerts = json.loads((fixture / "web" / "data" / "alerts.json").read_text(encoding="utf-8"))
+    companies = json.loads((fixture / "web" / "data" / "companies.json").read_text(encoding="utf-8"))
+    drv = (companies.get("NVDA") or {}).get("drivers") or {}
+    names = [d.get("name") for d in drv.get("drivers") or [] if isinstance(d, dict)]
+    blob = json.dumps(meta) + json.dumps(alerts) + json.dumps(drv)
+    ok = after == corrupt and bak.exists()
+    ok = ok and "GPU" not in "".join(str(n) for n in names)
+    ok = ok and ("exportError" in drv or "driverLoadErrors" in meta or alerts.get("alertEngineStatus") == "error")
+    ok = ok and "error" in blob.lower()
+    record(
+        "driver_corruption_preservation_test",
+        ok,
+        f"preserved={after == corrupt} backup={bak.exists()} names={names} status={alerts.get('alertEngineStatus')}",
+    )
+
+
+def test_cumulative_30d_from_daily_snapshots(parent: Path) -> None:
+    fixture = build_fixture(parent / "cum_daily")
+    (fixture / "data" / "revisions" / "history.jsonl").write_text("", encoding="utf-8")
+    daily = fixture / "data" / "daily_eps_snapshots" / "daily.jsonl"
+    rows = [
+        {
+            "date": "2026-08-16",
+            "ticker": "NVDA",
+            "epsMean": 15,
+            "consensus": 15,
+            "reportedFiscalPeriodEnding": "Jan 2028",
+            "reportedFiscalLabel": "Jan 2028",
+        },
+        {
+            "date": "2026-09-15",
+            "ticker": "NVDA",
+            "epsMean": 16,
+            "consensus": 16,
+            "reportedFiscalPeriodEnding": "Jan 2028",
+            "reportedFiscalLabel": "Jan 2028",
+        },
+    ]
+    daily.write_text("".join(json.dumps(r) + "\n" for r in rows), encoding="utf-8")
+    sys.path.insert(0, str(fixture / "tools"))
+    for mod in list(sys.modules):
+        if mod in ("build_alerts", "export_web_data"):
+            del sys.modules[mod]
+    import build_alerts as ba
+
+    now = datetime(2026, 9, 15, 12, 0, 0, tzinfo=timezone.utc)
+    payload = ba.evaluate_alerts(now=now)
+    hits = [
+        a
+        for a in (payload.get("activeAlerts") or [])
+        if a.get("rule") == "cumulative_revision_gt_5pct" and a.get("ticker") == "NVDA"
+    ]
+    ok = len(hits) >= 1
+    if hits:
+        pct = float(hits[0].get("cumulativePct"))
+        ok = ok and abs(pct - (1.0 / 15.0 * 100.0)) < 0.05
+        ok = ok and abs(pct) > 5.0
+    record(
+        "cumulative_30d_from_daily_snapshots_test",
+        ok,
+        f"n={len(hits)} pct={hits[0].get('cumulativePct') if hits else None}",
+    )
+
+
+def test_insufficient_history_no_pollution(parent: Path) -> None:
+    fixture = build_fixture(parent / "insuff")
+    (fixture / "data" / "revisions" / "history.jsonl").write_text("", encoding="utf-8")
+    daily = fixture / "data" / "daily_eps_snapshots" / "daily.jsonl"
+    daily.write_text(
+        json.dumps(
+            {
+                "date": "2026-09-15",
+                "ticker": "NVDA",
+                "epsMean": 16,
+                "consensus": 16,
+                "reportedFiscalPeriodEnding": "Jan 2028",
+                "reportedFiscalLabel": "Jan 2028",
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    before_lines = [ln for ln in daily.read_text(encoding="utf-8").splitlines() if ln.strip()]
+    sys.path.insert(0, str(fixture / "tools"))
+    for mod in list(sys.modules):
+        if mod in ("build_alerts", "export_web_data"):
+            del sys.modules[mod]
+    import build_alerts as ba
+
+    now = datetime(2026, 9, 15, 12, 0, 0, tzinfo=timezone.utc)
+    payload = ba.evaluate_alerts(now=now)
+    after_lines = [ln for ln in daily.read_text(encoding="utf-8").splitlines() if ln.strip()]
+    active = payload.get("activeAlerts") or []
+    history = payload.get("alertHistory") or []
+    diag = payload.get("alertDiagnostics") or []
+    cum_active = [a for a in active if a.get("rule") == "cumulative_revision_gt_5pct" and a.get("ticker") == "NVDA"]
+    cum_hist = [a for a in history if a.get("rule") == "cumulative_revision_gt_5pct" and a.get("ticker") == "NVDA"]
+    insuff = [
+        d
+        for d in diag
+        if d.get("kind") == "insufficient_history" and d.get("ticker") == "NVDA"
+    ]
+    ok = len(cum_active) == 0 and len(cum_hist) == 0 and len(insuff) >= 1
+    ok = ok and after_lines == before_lines
+    record(
+        "insufficient_history_no_pollution_test",
+        ok,
+        f"diag={len(insuff)} daily={len(after_lines)} hist={len(cum_hist)}",
+    )
+
+
+def test_field_level_provenance(parent: Path) -> None:
+    fixture = build_fixture(parent / "prov")
+    sys.path.insert(0, str(fixture / "tools"))
+    for mod in list(sys.modules):
+        if mod in ("build_alerts", "export_web_data"):
+            del sys.modules[mod]
+    import build_alerts as ba
+
+    payload = ba.evaluate_alerts()
+    hits = [
+        a
+        for a in (payload.get("activeAlerts") or [])
+        if a.get("ticker") == "NVDA" and a.get("rule") == "results_vs_consensus"
+    ]
+    ok = len(hits) >= 1
+    if hits:
+        url = str(hits[0].get("sourceUrl") or "")
+        tier = hits[0].get("sourceTier")
+        ok = ok and "seekingalpha.com" in url
+        ok = ok and "investor.nvidia.com" not in url
+        ok = ok and int(tier or 0) == 4
+    run_export(fixture)
+    earn = json.loads((fixture / "web" / "data" / "earnings.json").read_text(encoding="utf-8"))
+    n = earn.get("NVDA") or {}
+    act = n.get("actuals") or {}
+    cc = n.get("consensusComparison") or {}
+    ok = ok and "investor.nvidia.com" in str(act.get("sourceUrl") or "")
+    ok = ok and int(act.get("sourceTier") or 0) == 1
+    ok = ok and "seekingalpha.com" in str(cc.get("sourceUrl") or "")
+    ok = ok and int(cc.get("sourceTier") or 0) == 4
+    record(
+        "field_level_provenance_test",
+        ok,
+        f"alert_url={hits[0].get('sourceUrl') if hits else None} actuals_tier={act.get('sourceTier')} cc_tier={cc.get('sourceTier')}",
+    )
+
+
+def test_negative_eps_math() -> None:
+    sys.path.insert(0, str(ROOT / "tools"))
+    for mod in list(sys.modules):
+        if mod == "export_web_data":
+            del sys.modules[mod]
+    import export_web_data as exp
+
+    ok = exp.pe(100, 0) == "N/M" and exp.pe(100, -2) == "N/M"
+    ok = ok and isinstance(exp.pe(100, 5), float)
+    ok = ok and exp.cagr_over(-1, 5, 1) == "N/M" and exp.cagr_over(5, -1, 1) == "N/M"
+    ok = ok and exp.growth_pct(-1, 2) == "Turn profitable"
+    ok = ok and exp.growth_pct(2, -1) == "Turn loss"
+    ok = ok and exp.growth_pct(-1, -2) == "N/M"
+    disp = exp.compute_dispersion(1, 0, -5)
+    ok = ok and disp == "N/M"
+    disp0 = exp.compute_dispersion(1, 0, 0)
+    ok = ok and disp0 == "N/M"
+    record("negative_eps_math_test", ok, f"disp_neg_cons={disp}")
+
+
+def test_partial_collection_status(parent: Path) -> None:
+    fixture = build_fixture(parent / "partial")
+    run_export(fixture, extra_env={"AI_EPS_FAILED_TICKERS": "BE"})
+    meta = json.loads((fixture / "web" / "data" / "meta.json").read_text(encoding="utf-8"))
+    html = (fixture / "web" / "index.html").read_text(encoding="utf-8")
+    app = (fixture / "web" / "app.js").read_text(encoding="utf-8")
+    ok = meta.get("collectionStatus") == "partial"
+    ok = ok and meta.get("successfulCount") == 5 and meta.get("totalCount") == 6
+    ok = ok and "BE" in (meta.get("failedTickers") or [])
+    ok = ok and "NVDA" in (meta.get("successfulTickers") or [])
+    ok = ok and "header-meta" in html and "meta-collection-status" in html
+    ok = ok and "PARTIAL" in app and "successfulCount" in app
+    record(
+        "partial_collection_status_test",
+        ok,
+        f"status={meta.get('collectionStatus')} {meta.get('successfulCount')}/{meta.get('totalCount')} failed={meta.get('failedTickers')}",
+    )
+
+
+def test_momentum_determinism(parent: Path) -> None:
+    fixture = build_fixture(parent / "mom")
+    snap_path = fixture / "data" / "snapshots" / "2026-09-15.json"
+    snap = json.loads(snap_path.read_text(encoding="utf-8"))
+    nv = snap["tickers"]["NVDA"]
+    nv["eps_momentum"] = "Strong Negative"
+    nv["eps"]["2027E"]["rev_1M_pct"] = "1.50%"
+    nv["eps"]["2028E"]["rev_1M_pct"] = "2.00%"
+    snap_path.write_text(json.dumps(snap, indent=2) + "\n", encoding="utf-8")
+    run_export(fixture)
+    companies = json.loads((fixture / "web" / "data" / "companies.json").read_text(encoding="utf-8"))
+    meta = json.loads((fixture / "web" / "data" / "meta.json").read_text(encoding="utf-8"))
+    mom = (companies.get("NVDA") or {}).get("momentum")
+    formula = meta.get("momentumFormula") or ""
+    ok = mom == "Strong Positive"
+    ok = ok and "Y+1" in formula and "Y+2" in formula
+    ok = ok and "driver" in formula.lower() and "model" in formula.lower()
+    record("momentum_determinism_test", ok, f"momentum={mom} formula_ok={bool(formula)}")
+
+
+def test_data_version_not_age() -> None:
+    sys.path.insert(0, str(ROOT / "tools"))
+    for mod in list(sys.modules):
+        if mod == "export_web_data":
+            del sys.modules[mod]
+    import export_web_data as exp
+
+    a1 = {"id": "x", "ticker": "NVDA", "eventAt": "2026-08-26T00:00:00Z", "ageDays": 1, "title": "t"}
+    a2 = dict(a1)
+    a2["ageDays"] = 20
+    h1 = exp.compute_data_version({"alerts": exp.alerts_for_data_version({"alerts": [a1], "activeAlerts": [a1], "alertEngineStatus": "ok"})})
+    h2 = exp.compute_data_version({"alerts": exp.alerts_for_data_version({"alerts": [a2], "activeAlerts": [a2], "alertEngineStatus": "ok"})})
+    r1 = exp.compute_refresh_version("2026-09-15T00:00:00Z", "2026-09-15T00:00:00Z", "complete")
+    r2 = exp.compute_refresh_version("2026-09-16T00:00:00Z", "2026-09-15T00:00:00Z", "complete")
+    ok = h1 == h2 and r1 != r2
+    record("data_version_not_age_test", ok, f"data={h1[:12]} refresh_diff={r1 != r2}")
+
+
+def test_review_same_build(parent: Path) -> None:
+    fixture = build_fixture(parent / "review")
+    run_export(fixture)
+    script = fixture / "tools" / "build_review_zip.sh"
+    os.chmod(script, 0o755)
+    env = os.environ.copy()
+    env["SCREENSHOT_META"] = str(fixture / "missing-meta.json")
+    env["LIVE_META_FILE"] = str(fixture / "missing-live.txt")
+    env["META_JSON"] = str(fixture / "web" / "data" / "meta.json")
+    env["REVIEW_OUT"] = str(fixture / "out-fail.zip")
+    proc = subprocess.run(["bash", str(script)], cwd=str(fixture), env=env, capture_output=True, text=True)
+    ok = proc.returncode != 0
+
+    meta = json.loads((fixture / "web" / "data" / "meta.json").read_text(encoding="utf-8"))
+    dv = meta.get("dataVersion")
+    shot = fixture / "meta-at-screenshot.json"
+    live = fixture / "LIVE_META_FROM_BROWSER.txt"
+    shot.write_text(json.dumps({"dataVersion": dv}, indent=2) + "\n", encoding="utf-8")
+    live.write_text(f"dataVersion={dv}\n", encoding="utf-8")
+    env["SCREENSHOT_META"] = str(shot)
+    env["LIVE_META_FILE"] = str(live)
+    env["REVIEW_OUT"] = str(fixture / "out-ok.zip")
+    proc2 = subprocess.run(["bash", str(script)], cwd=str(fixture), env=env, capture_output=True, text=True)
+    ok = ok and proc2.returncode == 0 and (fixture / "out-ok.zip").exists()
+    record(
+        "review_same_build_test",
+        ok,
+        f"fail_rc={proc.returncode} ok_rc={proc2.returncode} stderr={ (proc.stderr or '')[:80] }",
+    )
+
+
 def main() -> int:
     print("=== ai-eps-monitor long-term reliability acceptance (isolated) ===")
     print(f"ROOT={ROOT}")
@@ -835,6 +1221,20 @@ def main() -> int:
         test_results_vs_guidance(Path(td))
         test_weekend_freshness()
         test_collector_parser_fixture()
+
+        test_driver_changed_at(Path(td))
+        test_full_export_2027_rollover(Path(td))
+        test_parser_zero_revision()
+        test_parser_all_fiscal_months()
+        test_driver_corruption_preservation(Path(td))
+        test_cumulative_30d_from_daily_snapshots(Path(td))
+        test_insufficient_history_no_pollution(Path(td))
+        test_field_level_provenance(Path(td))
+        test_negative_eps_math()
+        test_partial_collection_status(Path(td))
+        test_momentum_determinism(Path(td))
+        test_data_version_not_age()
+        test_review_same_build(Path(td))
 
     test_production_unmutated(before)
 
