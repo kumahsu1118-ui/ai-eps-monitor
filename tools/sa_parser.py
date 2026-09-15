@@ -14,6 +14,14 @@ from pathlib import Path
 from typing import Any
 
 
+class ParserError(ValueError):
+    """Collector/parser hard failure."""
+
+
+class ParserZeroRowsError(ParserError):
+    """0 estimate rows extracted — fail the pull; do not persist an empty snapshot."""
+
+
 # Ticker-specific fiscal-period-ending month overrides (1=Jan … 12=Dec).
 # Used when packing snapshot EPS; heuristic still applies if unknown.
 TICKER_FISCAL_END_MONTH: dict[str, int] = {
@@ -112,10 +120,11 @@ def parse_estimates_html_table(html: str) -> list[dict]:
     return rows
 
 
-def parse_estimates(content: str) -> dict:
+def parse_estimates(content: str, *, require_rows: bool = False) -> dict:
     """Parse estimate page content → {ticker, rows[…]}.
 
     Numeric fields MUST preserve 0.0 — never use `x or y` for numerics.
+    When require_rows=True (collector persist path), 0 rows is a hard fail.
     """
     data = parse_estimates_json_blob(content)
     if data and isinstance(data.get("rows"), list):
@@ -137,13 +146,25 @@ def parse_estimates(content: str) -> dict:
                     "rev6M": to_num(_first_present(r.get("rev6M"), r.get("rev_6M_pct"))),
                 }
             )
-        return {"ticker": data.get("ticker"), "rows": rows}
+        result = {"ticker": data.get("ticker"), "rows": rows}
+        if require_rows and not rows:
+            raise ParserZeroRowsError("0-row parser fail: JSON blob contained an empty rows list")
+        return result
     # HTML table fallback
     ticker = None
     tm = re.search(r'data-ticker=["\']([A-Z.]+)["\']', content or "")
     if tm:
         ticker = tm.group(1)
-    return {"ticker": ticker, "rows": parse_estimates_html_table(content or "")}
+    rows = parse_estimates_html_table(content or "")
+    result = {"ticker": ticker, "rows": rows}
+    if require_rows and not rows:
+        raise ParserZeroRowsError("0-row parser fail: no estimate rows extracted")
+    return result
+
+
+def parse_estimates_strict(content: str) -> dict:
+    """Collector entry point: 0 rows → ParserZeroRowsError (do not persist)."""
+    return parse_estimates(content, require_rows=True)
 
 
 def parse_fiscal_period_ending(label: str | None) -> tuple[int, int] | None:

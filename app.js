@@ -14,6 +14,9 @@
     epsHistory: {},
     earnings: {},
     alerts: [],
+    alertHistory: [],
+    attentionQueue: null,
+    whatChanged: [],
     alertEngineStatus: null,
     alertEngineError: null,
     ready: false,
@@ -204,9 +207,12 @@
     const status = src.nextEarningsStatus || (c && c.nextEarningsStatus) || null;
     const display = src.nextEarnings || (c && c.nextEarnings) || null;
     if (isMissing(display)) return null;
-    // Already formatted by exporter as "Mon D, YYYY · Estimated|Confirmed"
-    if (String(display).indexOf(" · ") >= 0) return String(display);
     const label = status === "confirmed" ? "Confirmed" : "Estimated";
+    // Prefer structured status so a stale " · Confirmed" suffix cannot false-confirm.
+    if (String(display).indexOf(" · ") >= 0) {
+      const datePart = String(display).split(" · ")[0];
+      return datePart + " · " + label;
+    }
     return String(display) + " · " + label;
   }
 
@@ -347,6 +353,8 @@
     state.earnings = earnings || {};
     state.alerts = (alerts && (alerts.activeAlerts || alerts.alerts)) || [];
     state.alertHistory = (alerts && alerts.alertHistory) || state.alerts;
+    state.attentionQueue = (alerts && alerts.attentionQueue) || null;
+    state.whatChanged = (alerts && alerts.whatChangedSinceLastCollection) || [];
     state.alertEngineStatus = (alerts && alerts.alertEngineStatus) || (meta && meta.alertEngineStatus) || null;
     state.alertEngineError = (alerts && alerts.alertEngineError) || (meta && meta.alertEngineError) || null;
     state.ready = true;
@@ -616,10 +624,36 @@
   }
 
   function renderAlerts(parent) {
-    const box = el("div", { className: "alerts-box section" });
+    const box = el("div", { className: "alerts-box section attention-queue-box" });
     const titleRow = el("div", { className: "alerts-title-row" });
-    titleRow.appendChild(el("h2", { className: "section-title", text: "Important Alerts", style: "margin:0" }));
+    titleRow.appendChild(el("h2", { className: "section-title", text: "Attention Queue", style: "margin:0" }));
     box.appendChild(titleRow);
+    box.appendChild(
+      el("p", {
+        className: "section-note",
+        text: "Ranked downside first · max 2 per ticker · max 5. One-shot events still live in Alert History.",
+      })
+    );
+
+    const changed = state.whatChanged || [];
+    const changedBox = el("div", { className: "what-changed" });
+    changedBox.appendChild(
+      el("h3", { className: "what-changed-title", text: "WHAT CHANGED SINCE LAST COLLECTION" })
+    );
+    if (!changed.length) {
+      changedBox.appendChild(
+        el("div", { className: "alerts-empty", text: "No material changes vs last collection." })
+      );
+    } else {
+      const ul = el("ul", { className: "what-changed-list" });
+      changed.slice(0, 12).forEach((ch) => {
+        const summary = typeof ch === "string" ? ch : ch.summary || JSON.stringify(ch);
+        ul.appendChild(el("li", { text: summary }));
+      });
+      changedBox.appendChild(ul);
+    }
+    box.appendChild(changedBox);
+
     const status = state.alertEngineStatus || (state.meta && state.meta.alertEngineStatus);
     if (status !== "ok") {
       box.appendChild(
@@ -636,34 +670,46 @@
           })
         );
       }
-    } else if (!state.alerts || !state.alerts.length) {
-      box.appendChild(el("div", { className: "alerts-empty", text: "No material alerts" }));
     } else {
-      const TOP_N = 5;
-      const top = state.alerts.slice(0, TOP_N);
-      const rest = state.alerts.slice(TOP_N);
-      top.forEach((a) => {
-        const msg = typeof a === "string" ? a : a.message || a.title || JSON.stringify(a);
-        const item = el("div", { className: "alert-item" });
-        const age = typeof a === "object" ? alertAgeLabel(a) : "";
-        item.appendChild(el("span", { className: "alert-msg", text: msg }));
-        if (age) item.appendChild(el("span", { className: "alert-age", text: age }));
-        box.appendChild(item);
-      });
-      if (rest.length) {
-        const details = el("details", { className: "alerts-view-all" });
-        details.appendChild(
-          el("summary", { text: "View All (" + state.alerts.length + " active)" })
-        );
-        rest.forEach((a) => {
+      const queue =
+        (state.attentionQueue && state.attentionQueue.length ? state.attentionQueue : null) ||
+        (state.alerts || []).slice(0, 5);
+      if (!queue.length) {
+        box.appendChild(el("div", { className: "alerts-empty", text: "No material alerts" }));
+      } else {
+        queue.forEach((a) => {
           const msg = typeof a === "string" ? a : a.message || a.title || JSON.stringify(a);
-          const item = el("div", { className: "alert-item" });
+          const downside =
+            typeof a === "object" &&
+            (String(a.currentStatus || "").toLowerCase() === "deteriorating" ||
+              String(msg).toLowerCase().indexOf("downgrade") >= 0 ||
+              String(msg).toLowerCase().indexOf("deteriorating") >= 0 ||
+              (typeof a.revisionPct === "number" && a.revisionPct < 0) ||
+              (typeof a.cumulativePct === "number" && a.cumulativePct < 0));
+          const item = el("div", { className: "alert-item" + (downside ? " alert-downside" : "") });
+          const ticker = typeof a === "object" ? a.ticker : "";
+          if (ticker) item.appendChild(el("span", { className: "alert-ticker", text: ticker }));
           item.appendChild(el("span", { className: "alert-msg", text: msg }));
           const age = typeof a === "object" ? alertAgeLabel(a) : "";
           if (age) item.appendChild(el("span", { className: "alert-age", text: age }));
-          details.appendChild(item);
+          box.appendChild(item);
         });
-        box.appendChild(details);
+        const rest = (state.alerts || []).length;
+        if (rest > queue.length) {
+          const details = el("details", { className: "alerts-view-all" });
+          details.appendChild(
+            el("summary", { text: "View All (" + rest + " active) / Alert History" })
+          );
+          (state.alerts || []).forEach((a) => {
+            const msg = typeof a === "string" ? a : a.message || a.title || JSON.stringify(a);
+            const item = el("div", { className: "alert-item" });
+            item.appendChild(el("span", { className: "alert-msg", text: msg }));
+            const age = typeof a === "object" ? alertAgeLabel(a) : "";
+            if (age) item.appendChild(el("span", { className: "alert-age", text: age }));
+            details.appendChild(item);
+          });
+          box.appendChild(details);
+        }
       }
     }
     parent.appendChild(box);
@@ -1639,8 +1685,12 @@
 
     /* earnings stub */
     const earn = state.earnings[ticker] || {};
-    const earnPanel = el("div", { className: "panel section" });
-    earnPanel.appendChild(el("h3", { text: "Earnings Digest" }));
+    const earnPanel = el("div", {
+      className: "panel section",
+      "data-earnings-digest": ticker,
+      "data-screenshot": ticker + "-earnings",
+    });
+    earnPanel.appendChild(el("h3", { text: ticker + " Earnings Digest" }));
     earnPanel.appendChild(
       el("p", {
         className: "section-note",

@@ -1,0 +1,57 @@
+{
+  "ticker": "MSFT",
+  "updated": "2026-09-15T01:36:00Z",
+  "status": "Baseline — not yet scored vs prior earnings",
+  "drivers": [
+    {
+      "name": "Azure growth",
+      "status": "unchanged",
+      "note": "Awaiting first post-setup earnings refresh"
+    },
+    {
+      "name": "AI revenue",
+      "status": "unchanged",
+      "note": "Awaiting first post-setup earnings refresh"
+    },
+    {
+      "name": "Copilot",
+      "status": "unchanged",
+      "note": "Awaiting first post-setup earnings refresh"
+    },
+    {
+      "name": "M365",
+      "status": "unchanged",
+      "note": "Awaiting first post-setup earnings refresh"
+    },
+    {
+      "name": "OpenAI / external models",
+      "status": "unchanged",
+      "note": "Awaiting first post-setup earnings refresh"
+    },
+    {
+      "name": "AI capacity",
+      "status": "unchanged",
+      "note": "Awaiting first post-setup earnings refresh"
+    },
+    {
+      "name": "CapEx",
+      "status": "unchanged",
+      "note": "Awaiting first post-setup earnings refresh"
+    },
+    {
+      "name": "depreciation",
+      "status": "unchanged",
+      "note": "Awaiting first post-setup earnings refresh"
+    },
+    {
+      "name": "gross margin",
+      "status": "unchanged",
+      "note": "Awaiting first post-setup earnings refresh"
+    },
+    {
+      "name": "FCF",
+      "status": "unchanged",
+      "note": "Awaiting first post-setup earnings refresh"
+    }
+  ]
+}

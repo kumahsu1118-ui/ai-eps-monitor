@@ -1261,38 +1261,6 @@
     }
   ],
   "attentionQueueRule": "downside-first; max 2 per ticker; max 5",
-  "whatChangedSinceLastCollection": [
-    {
-      "ticker": "NVDA",
-      "kind": "alert",
-      "id": "source_reported_1m_revision:NVDA:Jan_2030:sa1m:sa_1m",
-      "summary": "NVDA Jan 2030: Seeking Alpha 1M upgrade +11.02% (≥5%)"
-    },
-    {
-      "ticker": "AVGO",
-      "kind": "alert",
-      "id": "source_reported_1m_revision:AVGO:Oct_2028:sa1m:sa_1m",
-      "summary": "AVGO Oct 2028: Seeking Alpha 1M upgrade +15.70% (≥5%)"
-    },
-    {
-      "ticker": "AVGO",
-      "kind": "alert",
-      "id": "source_reported_1m_revision:AVGO:Oct_2029:sa1m:sa_1m",
-      "summary": "AVGO Oct 2029: Seeking Alpha 1M upgrade +26.48% (≥5%)"
-    },
-    {
-      "ticker": "KEYS",
-      "kind": "alert",
-      "id": "source_reported_1m_revision:KEYS:Oct_2028:sa1m:sa_1m",
-      "summary": "KEYS Oct 2028: Seeking Alpha 1M upgrade +16.31% (≥5%)"
-    },
-    {
-      "ticker": "KEYS",
-      "kind": "alert",
-      "id": "source_reported_1m_revision:KEYS:Oct_2029:sa1m:sa_1m",
-      "summary": "KEYS Oct 2029: Seeking Alpha 1M upgrade +35.49% (≥5%)"
-    }
-  ],
   "alerts": [
     {
       "id": "gross_margin_pressure:AVGO:Q3_2026_(fiscal_2026):2026-09-02:gm_pressure_-210",
@@ -1770,5 +1738,15 @@
   "cumulativeHysteresis": {
     "openPct": 5.0,
     "resolvePct": 4.0
-  }
+  },
+  "rules": [
+    "single_revision_gt_2pct: |revisionPct| > 2% (revision events)",
+    "cumulative_revision_gt_5pct: stateful; ≥5% Open/Update, <4% Resolve; stable ID (no daily spam)",
+    "results_vs_consensus / guidance_vs_consensus: split; guidance only if above/below; results uses consensusComparison provenance",
+    "gross_margin_pressure / gross_margin_guidance_revision (prev+current guidance)",
+    "driver_status_change: unique per full Alert ID (ticker+driver+eventDate); all transitions kept in history",
+    "source_reported_1m_revision: SA |1M|≥5% labeled Seeking Alpha 1M (not Internal 30D)",
+    "lifecycle: one-shot active 21d; stateful cumulative/1M until resolve; diagnostics excluded from history",
+    "attentionQueue: downside first, max 2/ticker, max 5"
+  ]
 }

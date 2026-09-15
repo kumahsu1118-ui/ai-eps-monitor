@@ -767,6 +767,42 @@ tr.ticker-stale td {
   color: var(--accent);
   font-weight: 600;
 }
+.what-changed {
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0.55rem 0.7rem;
+  margin: 0.35rem 0 0.75rem;
+  background: var(--bg-elevated);
+}
+.what-changed-title {
+  margin: 0 0 0.35rem;
+  font-size: 0.72rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+.what-changed-list {
+  margin: 0;
+  padding-left: 1.1rem;
+  font-size: 0.82rem;
+}
+.what-changed-list li {
+  margin: 0.15rem 0;
+}
+.alert-ticker {
+  flex-shrink: 0;
+  font-weight: 700;
+  font-family: var(--mono);
+  font-size: 0.78rem;
+  color: var(--accent);
+}
+.alert-downside {
+  border-left: 3px solid var(--negative);
+  padding-left: 0.45rem;
+}
+.alert-downside .alert-msg {
+  color: var(--text);
+}
 
 /* Driver tap-to-expand */
 .drivers-list li.driver-item {

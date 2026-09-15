@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""Isolated acceptance tests for ai-eps-monitor (Round 2 + Round 3 Data Integrity).
+"""Isolated acceptance tests for ai-eps-monitor (Round 2 + Round 3 + Final Data Reliability).
 
 Self-contained: builds synthetic fixtures in tempfile OR copies shipped
 fixtures/ so a clean unzip never needs hand-added data/universe.json.
 
-Prior suite + Round 2 + Round 3 named tests run in one command.
+Prior suite + Round 2 + Round 3 + Final Reliability named tests run in one command.
 MUST NOT mutate production web/data under the real ROOT.
 """
 from __future__ import annotations
@@ -133,7 +133,14 @@ def build_fixture(dest: Path) -> Path:
     dest.mkdir(parents=True, exist_ok=True)
     tools = dest / "tools"
     tools.mkdir(parents=True, exist_ok=True)
-    for name in ("export_web_data.py", "build_alerts.py", "sa_parser.py"):
+    for name in (
+        "export_web_data.py",
+        "build_alerts.py",
+        "sa_parser.py",
+        "atomic_io.py",
+        "snapshot_quality.py",
+        "generate_readme_review.py",
+    ):
         src = ROOT / "tools" / name
         if src.exists():
             shutil.copy2(src, tools / name)
@@ -1192,12 +1199,473 @@ def test_review_same_build(fixture: Path) -> None:
     app = (ROOT / "web" / "app.js").read_text(encoding="utf-8")
     ok = ok and "Lowest Mapped " in app and "P/E" in app
     ok = ok and "48h" not in app
+    ok = ok and "Attention Queue" in app
+    ok = ok and "WHAT CHANGED SINCE LAST COLLECTION" in app
     record("review_same_build_test", ok, f"gate_ok={gate_ok} mismatch={gate_mismatch}")
+
+
+# ---------- Final Data Reliability named tests ----------
+
+def test_driver_multiple_transition_history(fixture: Path) -> None:
+    """Aug 26 improving + Oct 30 deteriorating both kept; dedupe by full Alert ID only."""
+    ba = import_mod(fixture, "build_alerts")
+    (fixture / "data" / "alerts" / "index.json").write_text(
+        json.dumps({"alerts": [], "activeAlerts": [], "alertHistory": []}, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    d1 = {
+        "ticker": "NVDA",
+        "updatedAt": "2026-09-15T01:00:00Z",
+        "drivers": [
+            {
+                "name": "GPU shipment",
+                "previousStatus": "unchanged",
+                "currentStatus": "improving",
+                "changedAt": "2026-08-26",
+                "reason": "Record Q2 (fixture)",
+            }
+        ],
+    }
+    (fixture / "data" / "drivers" / "NVDA.json").write_text(json.dumps(d1, indent=2) + "\n", encoding="utf-8")
+    p1 = ba.evaluate_alerts()
+    ba.write_alerts(p1)
+    d2 = {
+        "ticker": "NVDA",
+        "updatedAt": "2026-10-30T01:00:00Z",
+        "drivers": [
+            {
+                "name": "GPU shipment",
+                "previousStatus": "improving",
+                "currentStatus": "deteriorating",
+                "changedAt": "2026-10-30",
+                "reason": "Supply tightness (fixture)",
+            }
+        ],
+    }
+    (fixture / "data" / "drivers" / "NVDA.json").write_text(json.dumps(d2, indent=2) + "\n", encoding="utf-8")
+    p2 = ba.evaluate_alerts()
+    hist = [
+        a
+        for a in (p2.get("alertHistory") or [])
+        if a.get("rule") == "driver_status_change"
+        and a.get("ticker") == "NVDA"
+        and (a.get("driver") == "GPU shipment" or a.get("eventKey") == "GPU shipment")
+    ]
+    dates = {str(a.get("eventDate") or "")[:10] for a in hist}
+    statuses = {str(a.get("currentStatus") or "").lower() for a in hist}
+    ids = [a.get("id") for a in hist]
+    ok = "2026-08-26" in dates and "2026-10-30" in dates
+    ok = ok and "improving" in statuses and "deteriorating" in statuses
+    ok = ok and len(hist) >= 2 and len(set(ids)) >= 2
+    record(
+        "driver_multiple_transition_history_test",
+        ok,
+        f"n={len(hist)} dates={sorted(dates)} ids={ids}",
+    )
+
+
+def test_cumulative_alert_no_daily_spam(fixture: Path) -> None:
+    """Stateful cumulative 30D: same ID across days; ≥5% open; <4% resolve; 4.5% no new open."""
+    ba = import_mod(fixture, "build_alerts")
+    now0 = datetime(2026, 9, 15, 12, 0, 0, tzinfo=timezone.utc)
+    jsonl = fixture / "data" / "daily_eps_snapshots" / "daily.jsonl"
+    (fixture / "data" / "alerts" / "index.json").write_text(
+        json.dumps({"alerts": [], "activeAlerts": [], "alertHistory": []}, indent=2) + "\n",
+        encoding="utf-8",
+    )
+
+    def write_daily(now: datetime, end_eps: float, extra=None) -> None:
+        d30 = (now - timedelta(days=30)).strftime("%Y-%m-%d")
+        d0 = now.strftime("%Y-%m-%d")
+        rows = [
+            {"date": d30, "ticker": "KEYS", "reportedFiscalLabel": "Oct 2027", "consensus": 15.0},
+            {"date": d0, "ticker": "KEYS", "reportedFiscalLabel": "Oct 2027", "consensus": end_eps},
+        ]
+        if extra:
+            rows.extend(extra)
+        jsonl.write_text("\n".join(json.dumps(r) for r in rows) + "\n", encoding="utf-8")
+
+    write_daily(now0, 16.0)  # +6.67%
+    p1 = ba.evaluate_alerts(now=now0)
+    ba.write_alerts(p1)
+    h1 = [
+        a
+        for a in (p1.get("activeAlerts") or [])
+        if a.get("rule") == "cumulative_revision_gt_5pct"
+        and a.get("ticker") == "KEYS"
+        and "Oct 2027" in str(a.get("fiscalPeriod") or a.get("fiscal") or a.get("period") or "")
+    ]
+    ok = len(h1) >= 1
+    id1 = h1[0]["id"] if h1 else None
+
+    now1 = now0 + timedelta(days=1)
+    write_daily(now1, 16.10)  # still ≥5%
+    p2 = ba.evaluate_alerts(now=now1)
+    ba.write_alerts(p2)
+    h2 = [
+        a
+        for a in (p2.get("activeAlerts") or [])
+        if a.get("rule") == "cumulative_revision_gt_5pct" and a.get("ticker") == "KEYS"
+    ]
+    hist_ids = [
+        a.get("id")
+        for a in (p2.get("alertHistory") or [])
+        if a.get("rule") == "cumulative_revision_gt_5pct" and a.get("ticker") == "KEYS"
+    ]
+    ok = ok and len(h2) >= 1 and h2[0].get("id") == id1
+    ok = ok and len(set(hist_ids)) == 1  # no daily spam IDs
+
+    now2 = now0 + timedelta(days=2)
+    write_daily(now2, 15.30)  # +2.0% < 4% → resolve
+    p3 = ba.evaluate_alerts(now=now2)
+    ba.write_alerts(p3)
+    active3 = [a for a in (p3.get("activeAlerts") or []) if a.get("id") == id1]
+    hist3 = [a for a in (p3.get("alertHistory") or []) if a.get("id") == id1]
+    ok = ok and len(active3) == 0
+    ok = ok and hist3 and str(hist3[0].get("lifecycleState") or "").lower() == "resolved"
+
+    extra = [
+        {
+            "date": (now0 - timedelta(days=30)).strftime("%Y-%m-%d"),
+            "ticker": "BE",
+            "reportedFiscalLabel": "Dec 2027",
+            "consensus": 10.0,
+        },
+        {
+            "date": now0.strftime("%Y-%m-%d"),
+            "ticker": "BE",
+            "reportedFiscalLabel": "Dec 2027",
+            "consensus": 10.45,  # +4.5%
+        },
+    ]
+    write_daily(now0, 16.0, extra=extra)
+    (fixture / "data" / "alerts" / "index.json").write_text(
+        json.dumps({"alerts": [], "activeAlerts": [], "alertHistory": []}, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    p4 = ba.evaluate_alerts(now=now0)
+    be_open = [
+        a
+        for a in (p4.get("activeAlerts") or [])
+        if a.get("rule") == "cumulative_revision_gt_5pct" and a.get("ticker") == "BE"
+    ]
+    ok = ok and len(be_open) == 0
+    record(
+        "cumulative_alert_no_daily_spam_test",
+        ok,
+        f"id={id1} day2_same={h2[0].get('id') == id1 if h2 else None} resolved={len(active3)==0} be_open={len(be_open)}",
+    )
+
+
+def test_next_earnings_false_confirmation(fixture: Path) -> None:
+    exp = import_mod(fixture, "export_web_data")
+    digest_false = {
+        "ticker": "NVDA",
+        "hasDigest": True,
+        "commentary": "Company IR confirmed record data-center revenue on the call.",
+        "sources": [{"url": "https://investor.nvidia.com/example", "attribution": "Company IR"}],
+    }
+    st, src, url = exp.infer_next_earnings_status("11/25/2026", digest_false)
+    ok = st == "estimated"
+    display = exp.format_next_earnings_display("11/25/2026", st)
+    ok = ok and display and "Estimated" in display and "Confirmed" not in display
+    ok = ok and ("Nov 25" in str(display) or "11/25/2026" in str(display))
+
+    digest_flag_only = {
+        "nextEarningsStatus": "confirmed",
+        "nextEarningsSource": "Company IR",
+    }
+    st2, _, _ = exp.infer_next_earnings_status("11/25/2026", digest_flag_only)
+    ok = ok and st2 == "estimated"
+
+    digest_ok = {
+        "nextEarningsStatus": "confirmed",
+        "nextEarningsSource": "Company IR",
+        "nextEarningsSourceUrl": "https://investor.nvidia.com/events/default.aspx",
+    }
+    st3, src3, url3 = exp.infer_next_earnings_status("11/25/2026", digest_ok)
+    ok = ok and st3 == "confirmed" and url3 and "investor.nvidia.com" in url3
+    disp3 = exp.format_next_earnings_display("11/25/2026", st3)
+    ok = ok and disp3 and "Confirmed" in disp3
+    record("next_earnings_false_confirmation_test", ok, f"false={st} flag_only={st2} ir={st3}")
+
+
+def test_operational_timestamp_does_not_change_data_version(fixture: Path) -> None:
+    exp = import_mod(fixture, "export_web_data")
+    run_export(fixture)
+    companies = json.loads((fixture / "web" / "data" / "companies.json").read_text(encoding="utf-8"))
+    valuation = json.loads((fixture / "web" / "data" / "valuation.json").read_text(encoding="utf-8"))
+    revisions = json.loads((fixture / "web" / "data" / "revisions.json").read_text(encoding="utf-8"))
+    eps_history = json.loads((fixture / "web" / "data" / "eps_history.json").read_text(encoding="utf-8"))
+    earnings = json.loads((fixture / "web" / "data" / "earnings.json").read_text(encoding="utf-8"))
+    alerts = json.loads((fixture / "web" / "data" / "alerts.json").read_text(encoding="utf-8"))
+    watchlist = json.loads((fixture / "web" / "data" / "watchlist.json").read_text(encoding="utf-8"))
+    meta = json.loads((fixture / "web" / "data" / "meta.json").read_text(encoding="utf-8"))
+
+    def parts(c, v, a_extra=None):
+        active = list(alerts.get("activeAlerts") or [])
+        if a_extra and active:
+            active = [dict(x, **a_extra) for x in active]
+        elif a_extra:
+            active = [a_extra]
+        return exp.strip_operational_timestamps(
+            {
+                "companies": c,
+                "valuation": v,
+                "revisions": revisions,
+                "eps_history": eps_history,
+                "earnings": earnings,
+                "alerts": {
+                    "activeAlerts": exp.strip_operational_alert_fields(active),
+                    "alertEngineStatus": alerts.get("alertEngineStatus"),
+                },
+                "watchlist": watchlist,
+            }
+        )
+
+    h1 = exp.compute_data_version(parts(companies, valuation))
+    companies2 = json.loads(json.dumps(companies))
+    for _t, blob in companies2.items():
+        if isinstance(blob, dict):
+            blob["updateTime"] = "2099-01-01T00:00:00Z"
+            blob["lastSuccessfulCollection"] = "2099-01-01T00:00:00Z"
+            blob["collectionAsOf"] = "2099-01-01T00:00:00Z"
+    valuation2 = json.loads(json.dumps(valuation))
+    for row in valuation2.get("rows") or []:
+        row["lastUpdated"] = "2099-01-01T00:00:00Z"
+    h2 = exp.compute_data_version(parts(companies2, valuation2, {"ageDays": 99, "createdAt": "2099-01-01T00:00:00Z"}))
+    ok = h1 == h2
+    ok = ok and meta.get("dataVersion") and meta.get("refreshVersion")
+    rv1 = hashlib.sha256(exp.canonical_json_bytes({"lastSuccessfulCollection": "A"})).hexdigest()
+    rv2 = hashlib.sha256(exp.canonical_json_bytes({"lastSuccessfulCollection": "B"})).hexdigest()
+    ok = ok and rv1 != rv2
+    companies3 = json.loads(json.dumps(companies))
+    nv = companies3.get("NVDA") or {}
+    e = ((nv.get("eps") or {}).get("2027E") or {})
+    if e.get("consensus") is not None:
+        e = dict(e)
+        e["consensus"] = float(e["consensus"]) + 0.5
+        nv = dict(nv)
+        eps = dict(nv.get("eps") or {})
+        eps["2027E"] = e
+        nv["eps"] = eps
+        companies3["NVDA"] = nv
+    h3 = exp.compute_data_version(parts(companies3, valuation))
+    ok = ok and h3 != h1
+    record(
+        "operational_timestamp_does_not_change_data_version_test",
+        ok,
+        f"stable={h1==h2} eps_changes={h3!=h1}",
+    )
+
+
+def test_snapshot_quality_gate(fixture: Path) -> None:
+    sq = import_mod(fixture, "snapshot_quality")
+    dest = fixture / "data" / "snapshots" / "quality-empty.json"
+    ok = True
+    try:
+        sq.persist_snapshot(dest, {"tickers": {}})
+        ok = False
+    except sq.SnapshotQualityError:
+        ok = ok and not dest.exists()
+    gate_empty = sq.snapshot_quality_gate({"tickers": {}})
+    ok = ok and gate_empty.get("ok") is False
+
+    prior = {
+        "tickers": {
+            "NVDA": {"eps": {"2027E": {"consensus": 15.61, "reported_fiscal_label": "Jan 2028"}}}
+        }
+    }
+    good = {
+        "snapshot_utc": "2026-09-15T01:36:00Z",
+        "tickers": {
+            "NVDA": {"eps": {"2027E": {"consensus": 15.70, "reported_fiscal_label": "Jan 2028"}}}
+        },
+    }
+    dest2 = fixture / "data" / "snapshots" / "quality-ok.json"
+    gate = sq.persist_snapshot(dest2, good, prior)
+    ok = ok and gate.get("ok") is True and dest2.exists()
+    written = json.loads(dest2.read_text(encoding="utf-8"))
+    ok = ok and abs(float(written["tickers"]["NVDA"]["eps"]["2027E"]["consensus"]) - 15.70) < 1e-9
+    record("snapshot_quality_gate_test", ok, f"empty_ok={gate_empty.get('ok')} persisted={dest2.exists()}")
+
+
+def test_parser_zero_rows_fail(fixture: Path) -> None:
+    sa = import_mod(fixture, "sa_parser")
+    ok = True
+    try:
+        sa.parse_estimates_strict("<html><body>no table</body></html>")
+        ok = False
+    except sa.ParserZeroRowsError:
+        pass
+    try:
+        sa.parse_estimates_strict(json.dumps({"ticker": "NVDA", "rows": []}))
+        ok = False
+    except sa.ParserZeroRowsError:
+        pass
+    empty = sa.parse_estimates("<html></html>")
+    ok = ok and empty.get("rows") == []
+    record("parser_zero_rows_fail_test", ok, "strict raises on 0 rows")
+
+
+def test_extreme_eps_change_quarantine(fixture: Path) -> None:
+    sq = import_mod(fixture, "snapshot_quality")
+    prior = {
+        "tickers": {
+            "NVDA": {"eps": {"2027E": {"consensus": 10.0, "reported_fiscal_label": "Jan 2028"}}}
+        }
+    }
+    new = {
+        "tickers": {
+            "NVDA": {"eps": {"2027E": {"consensus": 14.0, "reported_fiscal_label": "Jan 2028"}}}
+        }
+    }
+    dest = fixture / "data" / "snapshots" / "quality-extreme.json"
+    gate = sq.persist_snapshot(dest, new, prior)
+    ok = gate.get("ok") is True
+    q = gate.get("quarantined") or []
+    ok = ok and any(x.get("status") == "needs_verification" for x in q)
+    written = json.loads(dest.read_text(encoding="utf-8"))
+    year = written["tickers"]["NVDA"]["eps"]["2027E"]
+    ok = ok and abs(float(year["consensus"]) - 10.0) < 1e-9
+    ok = ok and year.get("needs_verification") is True
+    ok = ok and abs(float(year.get("rejectedConsensus")) - 14.0) < 1e-9
+    record("extreme_eps_change_quarantine_test", ok, f"q={q}")
+
+
+def test_source_reported_1m_revision(fixture: Path) -> None:
+    ba = import_mod(fixture, "build_alerts")
+    snap_path = fixture / "data" / "snapshots" / "2026-09-15.json"
+    snap = json.loads(snap_path.read_text(encoding="utf-8"))
+    snap["tickers"]["AVGO"]["eps"]["2028E"]["rev_1M_pct"] = 15.7
+    snap_path.write_text(json.dumps(snap, indent=2) + "\n", encoding="utf-8")
+    (fixture / "data" / "alerts" / "index.json").write_text(
+        json.dumps({"alerts": [], "activeAlerts": [], "alertHistory": []}, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    out = ba.rule6_source_reported_1m(["AVGO"], snap=snap)
+    hits = [a for a in out if a.get("rule") == "source_reported_1m_revision" and a.get("ticker") == "AVGO"]
+    ok = len(hits) >= 1
+    if hits:
+        blob = json.dumps(hits[0]).lower()
+        ok = ok and "seeking alpha 1m" in blob
+        ok = ok and "internal 30d" not in blob
+        ok = ok and hits[0].get("sourceLabel") == "Seeking Alpha 1M"
+        ok = ok and abs(float(hits[0].get("revisionPct")) - 15.7) < 1e-9
+    record("source_reported_1m_revision_test", ok, f"n={len(hits)}")
+
+
+def test_attention_queue_diversification(fixture: Path) -> None:
+    ba = import_mod(fixture, "build_alerts")
+    from collections import Counter
+
+    alerts = []
+    for i, (sev, msg, pct) in enumerate(
+        [
+            ("high", "NVDA downgrade", -6.0),
+            ("high", "NVDA deteriorating HBM", -1.0),
+            ("medium", "NVDA below consensus", None),
+            ("high", "NVDA upgrade", 8.0),
+        ]
+    ):
+        alerts.append(
+            {
+                "id": f"nvda-{i}",
+                "ticker": "NVDA",
+                "severity": sev,
+                "message": msg,
+                "revisionPct": pct,
+                "eventAt": "2026-09-15T00:00:00Z",
+            }
+        )
+    alerts.append(
+        {
+            "id": "avgo-0",
+            "ticker": "AVGO",
+            "severity": "high",
+            "message": "AVGO downgrade",
+            "revisionPct": -7.0,
+            "eventAt": "2026-09-14T00:00:00Z",
+        }
+    )
+    alerts.append(
+        {
+            "id": "avgo-1",
+            "ticker": "AVGO",
+            "severity": "medium",
+            "message": "AVGO deteriorating GM",
+            "currentStatus": "deteriorating",
+            "eventAt": "2026-09-13T00:00:00Z",
+        }
+    )
+    for t in ("TSM", "MSFT", "BE"):
+        alerts.append(
+            {
+                "id": f"{t}-up",
+                "ticker": t,
+                "severity": "high",
+                "message": f"{t} upgrade",
+                "revisionPct": 6.0,
+                "eventAt": "2026-09-15T00:00:00Z",
+            }
+        )
+    q = ba.build_attention_queue(alerts, max_total=5, max_per_ticker=2)
+    tickers = [a.get("ticker") for a in q]
+    counts = Counter(tickers)
+    ok = len(q) <= 5
+    ok = ok and all(v <= 2 for v in counts.values())
+    ok = ok and counts.get("NVDA", 0) == 2
+    first_msgs = " ".join(str(a.get("message")) for a in q[:3]).lower()
+    ok = ok and ("downgrade" in first_msgs or "deteriorating" in first_msgs or "below" in first_msgs)
+    ok = ok and "upgrade" not in str(q[0].get("message") or "").lower()
+    record("attention_queue_diversification_test", ok, f"tickers={tickers} n={len(q)}")
+
+
+def test_atomic_write_smoke(fixture: Path) -> None:
+    aio = import_mod(fixture, "atomic_io")
+    p = fixture / "data" / "atomic-smoke.json"
+    aio.atomic_write_text(p, '{"ok": true}\n')
+    ok = p.exists() and json.loads(p.read_text(encoding="utf-8")).get("ok") is True
+    leftovers = [x for x in p.parent.iterdir() if x.suffix == ".tmp" or ".atomic-smoke.json." in x.name]
+    ok = ok and len(leftovers) == 0
+    src = (fixture / "tools" / "atomic_io.py").read_text(encoding="utf-8")
+    ok = ok and "fcntl.flock" in src and "os.replace" in src
+    log = fixture / "data" / "atomic.jsonl"
+    aio.locked_append_text(log, '{"a":1}\n')
+    aio.locked_append_text(log, '{"a":2}\n')
+    ok = ok and log.read_text(encoding="utf-8").count("\n") == 2
+    record("atomic_write_smoke_test", ok, f"leftovers={leftovers}")
+
+
+def test_nvda_avgo_earnings_screenshots_distinct(fixture: Path) -> None:
+    gen = import_mod(fixture, "generate_readme_review")
+    hashes = gen.ensure_distinct_earnings_screenshots(fixture)
+    h1 = hashes.get("06-nvda-earnings-latest.png")
+    h2 = hashes.get("07-avgo-earnings-latest.png")
+    ok = bool(h1) and bool(h2) and h1 != h2
+    p1 = fixture / "review-pack" / "screenshots" / "06-nvda-earnings-latest.png"
+    p2 = fixture / "review-pack" / "screenshots" / "07-avgo-earnings-latest.png"
+    ok = ok and p1.exists() and p2.exists() and p1.read_bytes() != p2.read_bytes()
+    record("nvda_avgo_earnings_screenshots_distinct_test", ok, f"nvda={str(h1)[:12]} avgo={str(h2)[:12]}")
+
+
+def test_readme_review_generated_from_meta(fixture: Path) -> None:
+    gen = import_mod(fixture, "generate_readme_review")
+    run_export(fixture)
+    results = [("demo_check", "PASS", "")]
+    dest = gen.write_readme_review(fixture, passed=41, failed=0, results=results, git_head="abc")
+    text = dest.read_text(encoding="utf-8")
+    meta = json.loads((fixture / "web" / "data" / "meta.json").read_text(encoding="utf-8"))
+    ok = dest.exists()
+    ok = ok and ("41 / 41" in text or "41/41" in text)
+    ok = ok and str(meta.get("dataVersion") or "") in text
+    ok = ok and "10/10" not in text and "17/17" not in text and "30/30" not in text
+    record("readme_review_generated_from_meta_test", ok, f"path={dest.name}")
 
 
 
 def main() -> int:
-    print("=== ai-eps-monitor Round 2 + Round 3 Data Integrity acceptance (isolated) ===")
+    print("=== ai-eps-monitor Final Data Reliability acceptance (isolated) ===")
     print(f"ROOT={ROOT}")
     before = snapshot_prod_fingerprints()
 
@@ -1242,7 +1710,42 @@ def main() -> int:
         test_data_version_vs_refresh(fixture)
         test_review_same_build(fixture)
 
+        # Final Data Reliability
+        test_driver_multiple_transition_history(fixture)
+        test_cumulative_alert_no_daily_spam(fixture)
+        test_next_earnings_false_confirmation(fixture)
+        test_operational_timestamp_does_not_change_data_version(fixture)
+        test_snapshot_quality_gate(fixture)
+        test_parser_zero_rows_fail(fixture)
+        test_extreme_eps_change_quarantine(fixture)
+        test_source_reported_1m_revision(fixture)
+        test_attention_queue_diversification(fixture)
+        test_atomic_write_smoke(fixture)
+        test_nvda_avgo_earnings_screenshots_distinct(fixture)
+        test_readme_review_generated_from_meta(fixture)
+
     test_production_unmutated(before)
+
+    # Auto-generate README_REVIEW from THIS run's meta + RESULTS.
+    try:
+        gen_path = str(ROOT / "tools")
+        if gen_path not in sys.path:
+            sys.path.insert(0, gen_path)
+        import generate_readme_review as _gen
+
+        head = None
+        try:
+            head = subprocess.check_output(
+                ["git", "rev-parse", "HEAD"], cwd=str(ROOT), text=True
+            ).strip()
+        except Exception:
+            head = None
+        _gen.write_readme_review(
+            ROOT, passed=PASS, failed=FAIL, results=RESULTS, git_head=head
+        )
+        print(f"Wrote {ROOT / 'README_REVIEW.md'} ({PASS}/{PASS + FAIL})")
+    except Exception as exc:
+        print(f"README_REVIEW generate skipped: {exc}")
 
     print()
     print(f"Passed: {PASS}  Failed: {FAIL}")

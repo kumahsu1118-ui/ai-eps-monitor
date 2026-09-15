@@ -16,6 +16,13 @@ import re
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+try:
+    from atomic_io import atomic_write_text, locked_append_text
+except ImportError:
+    import sys as _aio_sys
+    _aio_sys.path.insert(0, str(Path(__file__).resolve().parent))
+    from atomic_io import atomic_write_text, locked_append_text
+
 # Resolve project root whether invoked as tools/ or web/tools/ (symlink)
 _here = Path(__file__).resolve().parent
 ROOT = _here.parent if (_here / "export_web_data.py").exists() and (_here.parent / "data" / "snapshots").exists() else _here
@@ -257,26 +264,59 @@ def format_next_earnings_display(raw, status: str | None) -> str | None:
     return f"{date_s} · {label}"
 
 
-def infer_next_earnings_status(next_raw, digest: dict | None = None) -> tuple[str | None, str | None]:
-    """Return (status, source). Confirmed only with company IR evidence; SA dates → estimated."""
+def is_company_ir_url(url: str | None) -> bool:
+    """IR evidence: company investor-relations / SEC URL, never Seeking Alpha."""
+    if not url or unavailable(url):
+        return False
+    u = str(url).lower()
+    if "seekingalpha.com" in u:
+        return False
+    return any(
+        token in u
+        for token in (
+            "investor.",
+            "/investors",
+            "investors.",
+            "ir.",
+            "/ir/",
+            "sec.gov",
+            "shareholder",
+        )
+    )
+
+
+def infer_next_earnings_status(next_raw, digest: dict | None = None) -> tuple[str | None, str | None, str | None]:
+    """Return (status, source, sourceUrl).
+
+    Confirmed ONLY when ALL of:
+      - structured nextEarningsStatus == "confirmed"
+      - nextEarningsSourceUrl present
+      - URL is company IR / SEC evidence
+    Otherwise Estimated. The SA date/session is KEPT (not wiped).
+    Never scan the digest blob for the substrings "confirmed" / "company ir".
+    """
     if unavailable(next_raw):
-        return None, None
-    text = str(next_raw)
-    # Digest may note IR confirmation
+        return None, None, None
+    status_in = None
+    source_in = None
+    url_in = None
     if isinstance(digest, dict):
-        blob = json.dumps(digest).lower()
-        if (
-            ("company ir" in blob or "investor relations" in blob)
-            and ("confirmed" in blob or "announced" in blob)
-        ) or digest.get("nextEarningsStatus") == "confirmed":
-            src = digest.get("nextEarningsSource") or "Company IR"
-            return "confirmed", src
-        if digest.get("nextEarningsStatus") in ("confirmed", "estimated"):
-            return digest["nextEarningsStatus"], digest.get("nextEarningsSource") or "Seeking Alpha"
-    if "estimated" in text.lower():
-        return "estimated", "Seeking Alpha"
-    # No IR scrape yet → SA / third-party calendar dates are estimates
-    return "estimated", "Seeking Alpha"
+        status_in = digest.get("nextEarningsStatus")
+        source_in = digest.get("nextEarningsSource")
+        url_in = (
+            digest.get("nextEarningsSourceUrl")
+            or digest.get("nextEarningsIrUrl")
+            or digest.get("nextEarningsUrl")
+        )
+    st = str(status_in or "").strip().lower()
+    if st == "confirmed" and url_in and is_company_ir_url(url_in):
+        return "confirmed", source_in or "Company IR", str(url_in)
+    # Keep the calendar date from SA / session; label Estimated.
+    src = source_in or "Seeking Alpha"
+    if st == "confirmed" and not (url_in and is_company_ir_url(url_in)):
+        # Structured flag without IR URL is a false confirmation — downgrade.
+        src = source_in or "Seeking Alpha"
+    return "estimated", src, (str(url_in) if url_in else None)
 
 
 def ensure_driver_files(tickers: list[str]) -> list[dict]:
@@ -618,7 +658,7 @@ def build_companies(snap: dict, tickers: list[str], year_keys: list[str] | None 
                 digest_hint = json.loads(earn_path.read_text(encoding="utf-8"))
             except Exception:
                 digest_hint = None
-        nestatus, nesource = infer_next_earnings_status(next_raw, digest_hint)
+        nestatus, nesource, neurl = infer_next_earnings_status(next_raw, digest_hint)
         next_display = format_next_earnings_display(next_raw, nestatus) if next_raw else None
 
         data_gaps = d.get("data_gaps") or []
@@ -644,6 +684,7 @@ def build_companies(snap: dict, tickers: list[str], year_keys: list[str] | None 
             "nextEarningsRaw": next_raw,
             "nextEarningsStatus": nestatus,
             "nextEarningsSource": nesource,
+            "nextEarningsSourceUrl": neurl,
             "fyNote": to_display_str(d.get("fy_note")),
             "momentum": (
                 compute_momentum_from_revisions(
@@ -919,10 +960,11 @@ def seed_and_append_daily_snapshots(
             last_consensus[key] = new_eps
 
     if new_rows:
-        with jsonl_path.open("a", encoding="utf-8") as f:
-            for row in new_rows:
-                f.write(json.dumps(row, ensure_ascii=False) + "\n")
-                existing.append(row)
+        locked_append_text(
+            jsonl_path,
+            "".join(json.dumps(row, ensure_ascii=False) + "\n" for row in new_rows),
+        )
+        existing.extend(new_rows)
 
     # Dated JSON for the day reflecting latest values (overwrite that day file only)
     day_payload = {
@@ -1011,6 +1053,7 @@ def minimal_earnings_stub(companies: dict, ticker: str) -> dict:
         "nextEarningsRaw": c.get("nextEarningsRaw"),
         "nextEarningsStatus": c.get("nextEarningsStatus"),
         "nextEarningsSource": c.get("nextEarningsSource"),
+        "nextEarningsSourceUrl": c.get("nextEarningsSourceUrl"),
         "revenue": [],
         "eps": [],
         "margins": [],
@@ -1080,7 +1123,14 @@ def load_or_init_earnings(companies: dict, tickers: list[str]) -> dict:
                 data["hasDigest"] = True
                 data["exportError"] = err_msg + "; using last-known-good from web/data/earnings.json"
                 # Refresh next-earnings metadata from companies when missing
-                for k in ("nextEarnings", "nextEarningsRaw", "nextEarningsStatus", "nextEarningsSource", "lastEarnings"):
+                for k in (
+                    "nextEarnings",
+                    "nextEarningsRaw",
+                    "nextEarningsStatus",
+                    "nextEarningsSource",
+                    "nextEarningsSourceUrl",
+                    "lastEarnings",
+                ):
                     if not data.get(k) and stub.get(k):
                         data[k] = stub[k]
                 out[t] = data
@@ -1091,14 +1141,16 @@ def load_or_init_earnings(companies: dict, tickers: list[str]) -> dict:
                 out[t] = stub_err
             continue
 
-        # Attach / refresh next-earnings status fields from companies snapshot
-        for k in ("nextEarnings", "nextEarningsRaw", "nextEarningsStatus", "nextEarningsSource"):
-            if stub.get(k):
-                # Prefer companies-derived status unless digest explicitly confirmed IR
-                if k == "nextEarningsStatus" and data.get("nextEarningsStatus") == "confirmed":
-                    continue
-                if k in ("nextEarningsSource",) and data.get("nextEarningsStatus") == "confirmed":
-                    continue
+        # Companies-derived next-earnings (strict IR gate) is source of truth.
+        # Digest "confirmed" without nextEarningsSourceUrl+IR evidence is NOT kept.
+        for k in (
+            "nextEarnings",
+            "nextEarningsRaw",
+            "nextEarningsStatus",
+            "nextEarningsSource",
+            "nextEarningsSourceUrl",
+        ):
+            if stub.get(k) is not None:
                 data[k] = stub[k]
 
         if _has_digest_content(data):
@@ -1110,6 +1162,7 @@ def load_or_init_earnings(companies: dict, tickers: list[str]) -> dict:
             if not data.get("nextEarningsStatus") and stub.get("nextEarningsStatus"):
                 data["nextEarningsStatus"] = stub["nextEarningsStatus"]
                 data["nextEarningsSource"] = stub.get("nextEarningsSource")
+                data["nextEarningsSourceUrl"] = stub.get("nextEarningsSourceUrl")
             out[t] = data
             # Do NOT rewrite the file (preserve markers / user edits)
             continue
@@ -1117,7 +1170,14 @@ def load_or_init_earnings(companies: dict, tickers: list[str]) -> dict:
         # Empty stub: refresh last/next from companies but preserve any extra keys
         merged = dict(stub)
         for k, v in data.items():
-            if k in ("lastEarnings", "nextEarnings", "nextEarningsRaw", "nextEarningsStatus", "nextEarningsSource") and stub.get(k):
+            if k in (
+                "lastEarnings",
+                "nextEarnings",
+                "nextEarningsRaw",
+                "nextEarningsStatus",
+                "nextEarningsSource",
+                "nextEarningsSourceUrl",
+            ) and stub.get(k):
                 continue
             if k not in merged or merged[k] in (None, [], "", False):
                 if v not in (None, [], ""):
@@ -1127,6 +1187,7 @@ def load_or_init_earnings(companies: dict, tickers: list[str]) -> dict:
         merged["nextEarningsRaw"] = stub.get("nextEarningsRaw")
         merged["nextEarningsStatus"] = stub.get("nextEarningsStatus")
         merged["nextEarningsSource"] = stub.get("nextEarningsSource")
+        merged["nextEarningsSourceUrl"] = stub.get("nextEarningsSourceUrl")
         merged["hasDigest"] = False
         write_json(path, merged)
         out[t] = merged
@@ -1309,9 +1370,9 @@ def regenerate_markdown_backups(companies: dict, valuation: list, snap: dict, ti
         "",
         "- Digests persist in `data/earnings/{TICKER}.json`. Investor-style fills populate after each report.",
         "",
-        "## 5. Important Alerts",
+        "## 5. Attention Queue (downside first, max 2/ticker, max 5)",
         "",
-        "- **None** — alerts only after material revision events (baselines preserved separately).",
+        "- Built by `tools/build_alerts.py`. Homepage shows WHAT CHANGED SINCE LAST COLLECTION plus the queue.",
         "",
         "## 6. EPS Revision History & Daily Snapshots",
         "",
@@ -1333,7 +1394,7 @@ def regenerate_markdown_backups(companies: dict, valuation: list, snap: dict, ti
 
 def write_json(path: Path, obj):
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(obj, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    atomic_write_text(path, json.dumps(obj, indent=2, ensure_ascii=False) + "\n")
 
 
 def run_build_alerts() -> dict:
@@ -1387,16 +1448,134 @@ def load_prior_meta() -> dict:
 
 
 
+OPERATIONAL_TIMESTAMP_KEYS = {
+    "ageDays",
+    "createdAt",
+    "expiresAt",
+    "activeUntil",
+    "resolvedAt",
+    "alertEngineLastEvaluated",
+    "lastUpdated",
+    "lastUpdatedDisplay",
+    "updateTime",
+    "Update Time",
+    "updatedAt",
+    "updated",
+    "sitePublished",
+    "sitePublishedDisplay",
+    "lastSuccessfulCollection",
+    "lastSuccessfulCollectionDisplay",
+    "collectionAsOf",
+    "dataAsOf",
+    "consensusDataAsOf",
+    "consensusDataAsOfDisplay",
+    "refreshVersion",
+    "nextExpected",
+    "staleAfter",
+    "snapshotUtc",
+    "snapshot_utc",
+    "snapshotFile",
+}
+
+
+def strip_operational_timestamps(obj):
+    """Recursively drop operational timestamps so dataVersion is content-stable."""
+    if isinstance(obj, dict):
+        return {
+            k: strip_operational_timestamps(v)
+            for k, v in obj.items()
+            if k not in OPERATIONAL_TIMESTAMP_KEYS
+        }
+    if isinstance(obj, list):
+        return [strip_operational_timestamps(x) for x in obj]
+    return obj
+
+
 def strip_operational_alert_fields(alerts_list: list) -> list:
-    """Drop ageDays / other operational fields so dataVersion stays stable across calendar ticks."""
-    out = []
-    for a in alerts_list or []:
-        if not isinstance(a, dict):
-            out.append(a)
+    """Drop ageDays / lifecycle clocks so dataVersion stays stable across calendar ticks."""
+    return strip_operational_timestamps(alerts_list or [])
+
+
+def compute_what_changed(prior_companies: dict | None, companies: dict, prior_alert_ids: set | None, new_alerts: list) -> list[dict]:
+    """WHAT CHANGED SINCE LAST COLLECTION — EPS / 1M / next-earnings / new alerts."""
+    changes: list[dict] = []
+    prior_companies = prior_companies or {}
+    prior_alert_ids = prior_alert_ids or set()
+    for t, c in (companies or {}).items():
+        if not isinstance(c, dict):
             continue
-        b = {k: v for k, v in a.items() if k not in {"ageDays"}}
-        out.append(b)
-    return out
+        pc = prior_companies.get(t) or {}
+        for yk, e in (c.get("eps") or {}).items():
+            if not isinstance(e, dict):
+                continue
+            pe = ((pc.get("eps") or {}).get(yk) or {}) if isinstance(pc, dict) else {}
+            old_c, new_c = pe.get("consensus"), e.get("consensus")
+            if old_c is not None and new_c is not None:
+                try:
+                    if abs(float(old_c) - float(new_c)) > 1e-9:
+                        changes.append(
+                            {
+                                "ticker": t,
+                                "kind": "eps",
+                                "period": yk,
+                                "previous": old_c,
+                                "current": new_c,
+                                "summary": f"{t} {yk} consensus {old_c} → {new_c}",
+                            }
+                        )
+                except (TypeError, ValueError):
+                    pass
+            old_r, new_r = pe.get("rev1M"), e.get("rev1M")
+            if old_r is not None and new_r is not None:
+                try:
+                    if abs(float(old_r) - float(new_r)) > 1e-9:
+                        changes.append(
+                            {
+                                "ticker": t,
+                                "kind": "rev1M",
+                                "period": yk,
+                                "previous": old_r,
+                                "current": new_r,
+                                "summary": f"{t} {yk} SA 1M {old_r} → {new_r}",
+                            }
+                        )
+                except (TypeError, ValueError):
+                    pass
+        old_n = pc.get("nextEarningsRaw") or pc.get("nextEarnings")
+        new_n = c.get("nextEarningsRaw") or c.get("nextEarnings")
+        if old_n and new_n and str(old_n) != str(new_n):
+            changes.append(
+                {
+                    "ticker": t,
+                    "kind": "nextEarnings",
+                    "previous": old_n,
+                    "current": new_n,
+                    "summary": f"{t} next earnings {old_n} → {new_n}",
+                }
+            )
+        if (pc.get("nextEarningsStatus") or "estimated") != (c.get("nextEarningsStatus") or "estimated"):
+            changes.append(
+                {
+                    "ticker": t,
+                    "kind": "nextEarningsStatus",
+                    "previous": pc.get("nextEarningsStatus"),
+                    "current": c.get("nextEarningsStatus"),
+                    "summary": f"{t} next-earnings status {pc.get('nextEarningsStatus')} → {c.get('nextEarningsStatus')}",
+                }
+            )
+    for a in new_alerts or []:
+        if not isinstance(a, dict):
+            continue
+        if a.get("id") and a.get("id") not in prior_alert_ids:
+            changes.append(
+                {
+                    "ticker": a.get("ticker"),
+                    "kind": "alert",
+                    "id": a.get("id"),
+                    "summary": a.get("message") or a.get("title"),
+                }
+            )
+    return changes
 
 
 def collection_completeness(companies: dict, tickers: list[str]) -> dict:
@@ -1442,6 +1621,23 @@ def main():
     chart_years = chart_years_from(year_keys)
 
     prior_meta = load_prior_meta()
+    prior_companies = {}
+    prior_alert_ids: set = set()
+    try:
+        pc_path = WEB_DATA / "companies.json"
+        if pc_path.exists():
+            prior_companies = json.loads(pc_path.read_text(encoding="utf-8"))
+        pa_path = WEB_DATA / "alerts.json"
+        if pa_path.exists():
+            prev_alerts = json.loads(pa_path.read_text(encoding="utf-8"))
+            prior_alert_ids = {
+                a.get("id")
+                for a in (prev_alerts.get("activeAlerts") or prev_alerts.get("alerts") or [])
+                if isinstance(a, dict) and a.get("id")
+            }
+    except Exception:
+        prior_companies = {}
+        prior_alert_ids = set()
 
     companies = build_companies(snap, tickers, year_keys=year_keys)
     valuation = build_valuation(companies, tickers, snap_utc, year_keys=year_keys)
@@ -1459,15 +1655,29 @@ def main():
     alerts_payload = run_build_alerts()
     active = alerts_payload.get("activeAlerts") or alerts_payload.get("alerts") or []
     history_alerts = alerts_payload.get("alertHistory") or active
+    what_changed = compute_what_changed(prior_companies, companies, prior_alert_ids, active)
+    attention_queue = alerts_payload.get("attentionQueue")
+    if attention_queue is None:
+        try:
+            import build_alerts as _ba
+
+            attention_queue = _ba.build_attention_queue(active)
+        except Exception:
+            attention_queue = active[:5]
     alerts = {
         "activeAlerts": active,
         "alertHistory": history_alerts,
         "alertDiagnostics": alerts_payload.get("alertDiagnostics") or [],
+        "attentionQueue": attention_queue,
+        "attentionQueueRule": alerts_payload.get("attentionQueueRule")
+        or "downside-first; max 2 per ticker; max 5",
+        "whatChangedSinceLastCollection": what_changed,
         "alerts": active,  # legacy alias
         "alertEngineLastEvaluated": alerts_payload.get("alertEngineLastEvaluated"),
         "alertEngineStatus": alerts_payload.get("alertEngineStatus") or "error",
         "alertEngineError": alerts_payload.get("alertEngineError"),
         "oneShotActiveDays": alerts_payload.get("oneShotActiveDays"),
+        "cumulativeHysteresis": alerts_payload.get("cumulativeHysteresis"),
     }
 
     # Schedule-aware freshness (weekday 08:00 Taipei + grace) — replaces naive 48h
@@ -1498,18 +1708,20 @@ def main():
         )
     ).hexdigest()
 
-    payload_parts = {
-        "companies": companies,
-        "valuation": {"rows": valuation},
-        "revisions": {"revisions": revisions},
-        "eps_history": eps_history,
-        "earnings": earnings,
-        "alerts": {
-            "activeAlerts": strip_operational_alert_fields(active),
-            "alertEngineStatus": alerts.get("alertEngineStatus"),
-        },
-        "watchlist": {"tickers": tickers},
-    }
+    payload_parts = strip_operational_timestamps(
+        {
+            "companies": companies,
+            "valuation": {"rows": valuation},
+            "revisions": {"revisions": revisions},
+            "eps_history": eps_history,
+            "earnings": earnings,
+            "alerts": {
+                "activeAlerts": strip_operational_alert_fields(active),
+                "alertEngineStatus": alerts.get("alertEngineStatus"),
+            },
+            "watchlist": {"tickers": tickers},
+        }
+    )
     data_version = compute_data_version(payload_parts)
     build_id = data_version
 

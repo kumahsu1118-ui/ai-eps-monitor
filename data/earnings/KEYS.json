@@ -1,0 +1,22 @@
+{
+  "ticker": "KEYS",
+  "hasDigest": false,
+  "lastEarnings": "8/18/2026",
+  "nextEarnings": null,
+  "nextEarningsRaw": null,
+  "nextEarningsStatus": null,
+  "nextEarningsSource": null,
+  "nextEarningsSourceUrl": null,
+  "revenue": [],
+  "eps": [],
+  "margins": [],
+  "guidance": null,
+  "comparison": null,
+  "positives": [],
+  "negatives": [],
+  "uncertainties": [],
+  "commentary": null,
+  "qa": [],
+  "results": [],
+  "sources": []
+}
