@@ -34,7 +34,8 @@
       "status": "Open",
       "lifecycleStatus": "Open",
       "lifecycleEvent": "Hold",
-      "updatedAt": "2026-09-15T01:36:00Z"
+      "updatedAt": "2026-09-15T01:36:00Z",
+      "lastObservedAt": "2026-09-15T01:36:00Z"
     },
     {
       "id": "source_reported_1m_revision:KEYS:Oct_2028:2026-09-15:sa1m_2028E",
@@ -70,7 +71,8 @@
       "status": "Open",
       "lifecycleStatus": "Open",
       "lifecycleEvent": "Hold",
-      "updatedAt": "2026-09-15T01:36:00Z"
+      "updatedAt": "2026-09-15T01:36:00Z",
+      "lastObservedAt": "2026-09-15T01:36:00Z"
     },
     {
       "id": "gross_margin_pressure:AVGO:Q3_2026_(fiscal_2026):2026-09-02:gm_pressure_-210",
@@ -194,7 +196,8 @@
       "status": "Open",
       "lifecycleStatus": "Open",
       "lifecycleEvent": "Hold",
-      "updatedAt": "2026-09-15T01:36:00Z"
+      "updatedAt": "2026-09-15T01:36:00Z",
+      "lastObservedAt": "2026-09-15T01:36:00Z"
     },
     {
       "id": "source_reported_1m_revision:AVGO:Oct_2029:2026-09-15:sa1m_2029E",
@@ -230,7 +233,8 @@
       "status": "Open",
       "lifecycleStatus": "Open",
       "lifecycleEvent": "Hold",
-      "updatedAt": "2026-09-15T01:36:00Z"
+      "updatedAt": "2026-09-15T01:36:00Z",
+      "lastObservedAt": "2026-09-15T01:36:00Z"
     },
     {
       "id": "source_reported_1m_revision:KEYS:Oct_2029:2026-09-15:sa1m_2029E",
@@ -266,7 +270,8 @@
       "status": "Open",
       "lifecycleStatus": "Open",
       "lifecycleEvent": "Hold",
-      "updatedAt": "2026-09-15T01:36:00Z"
+      "updatedAt": "2026-09-15T01:36:00Z",
+      "lastObservedAt": "2026-09-15T01:36:00Z"
     },
     {
       "id": "results_vs_consensus:AVGO:Q3_2026_(fiscal_2026):2026-09-02:results_above",
@@ -934,7 +939,8 @@
       "status": "Open",
       "lifecycleStatus": "Open",
       "lifecycleEvent": "Hold",
-      "updatedAt": "2026-09-15T01:36:00Z"
+      "updatedAt": "2026-09-15T01:36:00Z",
+      "lastObservedAt": "2026-09-15T01:36:00Z"
     },
     {
       "id": "source_reported_1m_revision:AVGO:Oct_2028:2026-09-15:sa1m_2028E",
@@ -970,7 +976,8 @@
       "status": "Open",
       "lifecycleStatus": "Open",
       "lifecycleEvent": "Hold",
-      "updatedAt": "2026-09-15T01:36:00Z"
+      "updatedAt": "2026-09-15T01:36:00Z",
+      "lastObservedAt": "2026-09-15T01:36:00Z"
     },
     {
       "id": "source_reported_1m_revision:AVGO:Oct_2029:2026-09-15:sa1m_2029E",
@@ -1006,7 +1013,8 @@
       "status": "Open",
       "lifecycleStatus": "Open",
       "lifecycleEvent": "Hold",
-      "updatedAt": "2026-09-15T01:36:00Z"
+      "updatedAt": "2026-09-15T01:36:00Z",
+      "lastObservedAt": "2026-09-15T01:36:00Z"
     },
     {
       "id": "source_reported_1m_revision:KEYS:Oct_2028:2026-09-15:sa1m_2028E",
@@ -1042,7 +1050,8 @@
       "status": "Open",
       "lifecycleStatus": "Open",
       "lifecycleEvent": "Hold",
-      "updatedAt": "2026-09-15T01:36:00Z"
+      "updatedAt": "2026-09-15T01:36:00Z",
+      "lastObservedAt": "2026-09-15T01:36:00Z"
     },
     {
       "id": "source_reported_1m_revision:KEYS:Oct_2029:2026-09-15:sa1m_2029E",
@@ -1078,7 +1087,8 @@
       "status": "Open",
       "lifecycleStatus": "Open",
       "lifecycleEvent": "Hold",
-      "updatedAt": "2026-09-15T01:36:00Z"
+      "updatedAt": "2026-09-15T01:36:00Z",
+      "lastObservedAt": "2026-09-15T01:36:00Z"
     }
   ],
   "alertDiagnostics": [
@@ -1091,7 +1101,7 @@
       "lookbackDays": 30,
       "windowPointCount": 1,
       "status": "insufficient history",
-      "eventAt": "2026-09-15T07:41:31Z",
+      "eventAt": "2026-09-15T08:06:34Z",
       "diagnostic": true
     },
     {
@@ -1103,7 +1113,7 @@
       "lookbackDays": 30,
       "windowPointCount": 1,
       "status": "insufficient history",
-      "eventAt": "2026-09-15T07:41:31Z",
+      "eventAt": "2026-09-15T08:06:34Z",
       "diagnostic": true
     },
     {
@@ -1115,7 +1125,7 @@
       "lookbackDays": 30,
       "windowPointCount": 1,
       "status": "insufficient history",
-      "eventAt": "2026-09-15T07:41:31Z",
+      "eventAt": "2026-09-15T08:06:34Z",
       "diagnostic": true
     },
     {
@@ -1127,7 +1137,7 @@
       "lookbackDays": 30,
       "windowPointCount": 1,
       "status": "insufficient history",
-      "eventAt": "2026-09-15T07:41:31Z",
+      "eventAt": "2026-09-15T08:06:34Z",
       "diagnostic": true
     },
     {
@@ -1139,7 +1149,7 @@
       "lookbackDays": 30,
       "windowPointCount": 1,
       "status": "insufficient history",
-      "eventAt": "2026-09-15T07:41:31Z",
+      "eventAt": "2026-09-15T08:06:34Z",
       "diagnostic": true
     },
     {
@@ -1151,7 +1161,7 @@
       "lookbackDays": 30,
       "windowPointCount": 1,
       "status": "insufficient history",
-      "eventAt": "2026-09-15T07:41:31Z",
+      "eventAt": "2026-09-15T08:06:34Z",
       "diagnostic": true
     },
     {
@@ -1163,7 +1173,7 @@
       "lookbackDays": 30,
       "windowPointCount": 1,
       "status": "insufficient history",
-      "eventAt": "2026-09-15T07:41:31Z",
+      "eventAt": "2026-09-15T08:06:34Z",
       "diagnostic": true
     },
     {
@@ -1175,7 +1185,7 @@
       "lookbackDays": 30,
       "windowPointCount": 1,
       "status": "insufficient history",
-      "eventAt": "2026-09-15T07:41:31Z",
+      "eventAt": "2026-09-15T08:06:34Z",
       "diagnostic": true
     },
     {
@@ -1187,7 +1197,7 @@
       "lookbackDays": 30,
       "windowPointCount": 1,
       "status": "insufficient history",
-      "eventAt": "2026-09-15T07:41:31Z",
+      "eventAt": "2026-09-15T08:06:34Z",
       "diagnostic": true
     },
     {
@@ -1199,7 +1209,7 @@
       "lookbackDays": 30,
       "windowPointCount": 1,
       "status": "insufficient history",
-      "eventAt": "2026-09-15T07:41:31Z",
+      "eventAt": "2026-09-15T08:06:34Z",
       "diagnostic": true
     },
     {
@@ -1211,7 +1221,7 @@
       "lookbackDays": 30,
       "windowPointCount": 1,
       "status": "insufficient history",
-      "eventAt": "2026-09-15T07:41:31Z",
+      "eventAt": "2026-09-15T08:06:34Z",
       "diagnostic": true
     },
     {
@@ -1223,7 +1233,7 @@
       "lookbackDays": 30,
       "windowPointCount": 1,
       "status": "insufficient history",
-      "eventAt": "2026-09-15T07:41:31Z",
+      "eventAt": "2026-09-15T08:06:34Z",
       "diagnostic": true
     },
     {
@@ -1235,7 +1245,7 @@
       "lookbackDays": 30,
       "windowPointCount": 1,
       "status": "insufficient history",
-      "eventAt": "2026-09-15T07:41:31Z",
+      "eventAt": "2026-09-15T08:06:34Z",
       "diagnostic": true
     },
     {
@@ -1247,7 +1257,7 @@
       "lookbackDays": 30,
       "windowPointCount": 1,
       "status": "insufficient history",
-      "eventAt": "2026-09-15T07:41:31Z",
+      "eventAt": "2026-09-15T08:06:34Z",
       "diagnostic": true
     },
     {
@@ -1259,7 +1269,7 @@
       "lookbackDays": 30,
       "windowPointCount": 1,
       "status": "insufficient history",
-      "eventAt": "2026-09-15T07:41:31Z",
+      "eventAt": "2026-09-15T08:06:34Z",
       "diagnostic": true
     },
     {
@@ -1271,7 +1281,7 @@
       "lookbackDays": 30,
       "windowPointCount": 1,
       "status": "insufficient history",
-      "eventAt": "2026-09-15T07:41:31Z",
+      "eventAt": "2026-09-15T08:06:34Z",
       "diagnostic": true
     },
     {
@@ -1283,7 +1293,67 @@
       "lookbackDays": 30,
       "windowPointCount": 1,
       "status": "insufficient history",
-      "eventAt": "2026-09-15T07:41:31Z",
+      "eventAt": "2026-09-15T08:06:34Z",
+      "diagnostic": true
+    },
+    {
+      "rule": "cumulative_revision_insufficient_history",
+      "severity": "info",
+      "ticker": "NVDA",
+      "period": "Jan 2030",
+      "message": "NVDA Jan 2030: insufficient history for 30D cumulative (no valid observation at/before window start)",
+      "lookbackDays": 30,
+      "windowPointCount": 1,
+      "status": "insufficient history",
+      "eventAt": "2026-09-15T08:06:34Z",
+      "diagnostic": true
+    },
+    {
+      "rule": "cumulative_revision_insufficient_history",
+      "severity": "info",
+      "ticker": "AVGO",
+      "period": "Oct 2029",
+      "message": "AVGO Oct 2029: insufficient history for 30D cumulative (no valid observation at/before window start)",
+      "lookbackDays": 30,
+      "windowPointCount": 1,
+      "status": "insufficient history",
+      "eventAt": "2026-09-15T08:06:34Z",
+      "diagnostic": true
+    },
+    {
+      "rule": "cumulative_revision_insufficient_history",
+      "severity": "info",
+      "ticker": "MSFT",
+      "period": "Jun 2029",
+      "message": "MSFT Jun 2029: insufficient history for 30D cumulative (no valid observation at/before window start)",
+      "lookbackDays": 30,
+      "windowPointCount": 1,
+      "status": "insufficient history",
+      "eventAt": "2026-09-15T08:06:34Z",
+      "diagnostic": true
+    },
+    {
+      "rule": "cumulative_revision_insufficient_history",
+      "severity": "info",
+      "ticker": "BE",
+      "period": "Dec 2029",
+      "message": "BE Dec 2029: insufficient history for 30D cumulative (no valid observation at/before window start)",
+      "lookbackDays": 30,
+      "windowPointCount": 1,
+      "status": "insufficient history",
+      "eventAt": "2026-09-15T08:06:34Z",
+      "diagnostic": true
+    },
+    {
+      "rule": "cumulative_revision_insufficient_history",
+      "severity": "info",
+      "ticker": "KEYS",
+      "period": "Oct 2029",
+      "message": "KEYS Oct 2029: insufficient history for 30D cumulative (no valid observation at/before window start)",
+      "lookbackDays": 30,
+      "windowPointCount": 1,
+      "status": "insufficient history",
+      "eventAt": "2026-09-15T08:06:34Z",
       "diagnostic": true
     }
   ],
@@ -1410,7 +1480,8 @@
       "status": "Open",
       "lifecycleStatus": "Open",
       "lifecycleEvent": "Hold",
-      "updatedAt": "2026-09-15T01:36:00Z"
+      "updatedAt": "2026-09-15T01:36:00Z",
+      "lastObservedAt": "2026-09-15T01:36:00Z"
     }
   ],
   "changedSinceLastCollection": [],
@@ -1449,7 +1520,8 @@
       "status": "Open",
       "lifecycleStatus": "Open",
       "lifecycleEvent": "Hold",
-      "updatedAt": "2026-09-15T01:36:00Z"
+      "updatedAt": "2026-09-15T01:36:00Z",
+      "lastObservedAt": "2026-09-15T01:36:00Z"
     },
     {
       "id": "source_reported_1m_revision:KEYS:Oct_2028:2026-09-15:sa1m_2028E",
@@ -1485,7 +1557,8 @@
       "status": "Open",
       "lifecycleStatus": "Open",
       "lifecycleEvent": "Hold",
-      "updatedAt": "2026-09-15T01:36:00Z"
+      "updatedAt": "2026-09-15T01:36:00Z",
+      "lastObservedAt": "2026-09-15T01:36:00Z"
     },
     {
       "id": "gross_margin_pressure:AVGO:Q3_2026_(fiscal_2026):2026-09-02:gm_pressure_-210",
@@ -1609,7 +1682,8 @@
       "status": "Open",
       "lifecycleStatus": "Open",
       "lifecycleEvent": "Hold",
-      "updatedAt": "2026-09-15T01:36:00Z"
+      "updatedAt": "2026-09-15T01:36:00Z",
+      "lastObservedAt": "2026-09-15T01:36:00Z"
     },
     {
       "id": "source_reported_1m_revision:AVGO:Oct_2029:2026-09-15:sa1m_2029E",
@@ -1645,7 +1719,8 @@
       "status": "Open",
       "lifecycleStatus": "Open",
       "lifecycleEvent": "Hold",
-      "updatedAt": "2026-09-15T01:36:00Z"
+      "updatedAt": "2026-09-15T01:36:00Z",
+      "lastObservedAt": "2026-09-15T01:36:00Z"
     },
     {
       "id": "source_reported_1m_revision:KEYS:Oct_2029:2026-09-15:sa1m_2029E",
@@ -1681,7 +1756,8 @@
       "status": "Open",
       "lifecycleStatus": "Open",
       "lifecycleEvent": "Hold",
-      "updatedAt": "2026-09-15T01:36:00Z"
+      "updatedAt": "2026-09-15T01:36:00Z",
+      "lastObservedAt": "2026-09-15T01:36:00Z"
     },
     {
       "id": "results_vs_consensus:AVGO:Q3_2026_(fiscal_2026):2026-09-02:results_above",
@@ -1939,10 +2015,11 @@
       "ageDays": 20
     }
   ],
-  "alertEngineLastEvaluated": "2026-09-15T07:41:31Z",
-  "alertEngineLastAttempt": "2026-09-15T07:41:31Z",
-  "alertEngineLastSuccessfulEvaluation": "2026-09-15T07:41:31Z",
+  "alertEngineLastEvaluated": "2026-09-15T08:06:34Z",
+  "alertEngineLastAttempt": "2026-09-15T08:06:34Z",
+  "alertEngineLastSuccessfulEvaluation": "2026-09-15T08:06:34Z",
   "alertEngineStatus": "ok",
   "alertEngineError": null,
-  "oneShotActiveDays": 21
+  "oneShotActiveDays": 21,
+  "buildId": "1ddab5ec22557b92078977c0c41c868b878e326910d6bd805805e68bdade1abf"
 }

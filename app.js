@@ -332,26 +332,87 @@
     return res.json();
   }
 
-  async function loadAll() {
-    const [
-      watchlist,
-      meta,
-      companies,
-      valuation,
-      revisions,
-      epsHistory,
-      earnings,
-      alerts,
-    ] = await Promise.all([
-      loadJSON("watchlist.json"),
-      loadJSON("meta.json"),
-      loadJSON("companies.json"),
-      loadJSON("valuation.json"),
-      loadJSON("revisions.json"),
-      loadJSON("eps_history.json"),
-      loadJSON("earnings.json"),
-      loadJSON("alerts.json"),
-    ]);
+  function extractBuildId(obj) {
+    if (!obj || typeof obj !== "object") return null;
+    return obj.buildId || obj._buildId || null;
+  }
+
+  async function loadAll(retryCount) {
+    retryCount = retryCount || 0;
+    /* Prefer single atomic dashboard.json; fall back to multi-file with buildId consistency */
+    let dash = null;
+    try {
+      dash = await loadJSON("dashboard.json");
+    } catch (_) {
+      dash = null;
+    }
+
+    let watchlist, meta, companies, valuation, revisions, epsHistory, earnings, alerts;
+    if (dash && dash.meta && dash.companies) {
+      meta = dash.meta || {};
+      companies = dash.companies || {};
+      valuation = dash.valuation || {};
+      revisions = dash.revisions || {};
+      epsHistory = dash.epsHistory || {};
+      earnings = dash.earnings || {};
+      alerts = dash.alerts || {};
+      watchlist = dash.watchlist || { tickers: Object.keys(companies) };
+      const bid = dash.buildId || (meta && meta.buildId);
+      if (bid && meta && !meta.buildId) meta.buildId = bid;
+    } else {
+      [
+        watchlist,
+        meta,
+        companies,
+        valuation,
+        revisions,
+        epsHistory,
+        earnings,
+        alerts,
+      ] = await Promise.all([
+        loadJSON("watchlist.json"),
+        loadJSON("meta.json"),
+        loadJSON("companies.json"),
+        loadJSON("valuation.json"),
+        loadJSON("revisions.json"),
+        loadJSON("eps_history.json"),
+        loadJSON("earnings.json"),
+        loadJSON("alerts.json"),
+      ]);
+      /* Reject silent mixed-generation display */
+      const ids = [
+        extractBuildId(meta),
+        extractBuildId(watchlist),
+        extractBuildId(valuation),
+        extractBuildId(revisions),
+        extractBuildId(alerts),
+        extractBuildId(companies),
+        extractBuildId(earnings),
+        extractBuildId(epsHistory),
+      ].filter(Boolean);
+      const uniq = Array.from(new Set(ids));
+      if (uniq.length > 1) {
+        if (retryCount < 3) {
+          await new Promise((r) => setTimeout(r, 250 + retryCount * 200));
+          return loadAll(retryCount + 1);
+        }
+        throw new Error("mixed build generation rejected: " + uniq.join(" vs "));
+      }
+    }
+
+    /* Strip _buildId from ticker maps */
+    if (companies && companies._buildId) {
+      companies = Object.assign({}, companies);
+      delete companies._buildId;
+    }
+    if (earnings && earnings._buildId) {
+      earnings = Object.assign({}, earnings);
+      delete earnings._buildId;
+    }
+    if (epsHistory && epsHistory._buildId) {
+      epsHistory = Object.assign({}, epsHistory);
+      delete epsHistory._buildId;
+    }
 
     state.watchlist = (watchlist && watchlist.tickers) || Object.keys(companies || {});
     state.meta = meta || {};
@@ -623,9 +684,12 @@
   /* ---------- alerts ---------- */
   function alertAgeLabel(a) {
     let days = a && a.ageDays;
-    if (days == null && a && (a.eventAt || a.eventDate || a.createdAt)) {
-      const t = Date.parse(a.eventAt || a.eventDate || a.createdAt);
-      if (!Number.isNaN(t)) days = Math.max(0, Math.floor((Date.now() - t) / 86400000));
+    if (days == null && a) {
+      const src = a.lastMaterialChangeAt || a.openedAt || a.eventAt || a.eventDate || a.createdAt;
+      if (src) {
+        const t = Date.parse(src);
+        if (!Number.isNaN(t)) days = Math.max(0, Math.floor((Date.now() - t) / 86400000));
+      }
     }
     if (days == null || Number.isNaN(Number(days))) return "";
     const n = Number(days);

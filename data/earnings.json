@@ -650,7 +650,6 @@
     "nextEarningsSource": "Seeking Alpha",
     "resultsVsConsensus": "Above",
     "guidanceVsConsensus": "unknown",
-    "nextEarningsRaw": "12/10/2026 (Post-Market)",
     "actuals": {
       "metrics": {
         "eps": "$3.32",
@@ -672,7 +671,8 @@
       "sourceUrl": "https://seekingalpha.com/article/4942557-broadcom-inc-avgo-q3-2026-earnings-call-transcript",
       "sourceTier": 4,
       "note": "Beat/miss vs consensus attributed to Seeking Alpha / secondary summary (not Company IR actuals Tier 1)"
-    }
+    },
+    "nextEarningsRaw": "12/10/2026 (Post-Market)"
   },
   "TSM": {
     "ticker": "TSM",
@@ -757,5 +757,6 @@
     "qa": [],
     "results": [],
     "sources": []
-  }
+  },
+  "_buildId": "1ddab5ec22557b92078977c0c41c868b878e326910d6bd805805e68bdade1abf"
 }
