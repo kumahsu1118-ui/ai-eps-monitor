@@ -8,12 +8,13 @@
   "mappingRule": "Slot mapping only (not true calendar-year EPS): Fiscal Period Ending Jan–Mar → prior calendar year slot; otherwise ending year slot. Reported Fiscal Period Ending labels are always preserved. True calendar-year EPS requires summing Q1+Q2+Q3+Q4 consensus with all four present (never interpolated).",
   "trueCyStatus": "unavailable — need quarterly consensus",
   "momentumFormula": "Deterministic EPS momentum from mapped Y+1 and Y+2 SA 1M revision % only (no management guidance / drivers): both >= +3 → Strong Positive; both >= +1 → Positive; both <= -3 → Strong Negative; both <= -1 → Negative; else Neutral. Missing either leg → Neutral.",
+  "revisionRegimeDoc": "Revision regime from mapped Y+1 (nearTerm) and Y+2 (longTerm) SA 1M %: Y+1<0 and Y+2>=+5 → Back-end Loaded / Divergent; Y+1>=+5 and Y+2<0 → Front-loaded / Divergent; both >= +3 → Broad Upward Revision; both <= -3 → Broad Downward Revision; both near 0 (|x|<1) → Stable; else Mixed / Neutral-adjacent. Complements Momentum (which can be Neutral when legs diverge).",
   "consensusDataAsOf": "2026-09-15T01:36:00Z",
   "consensusDataAsOfDisplay": "Sep 15, 2026 09:36 Taipei Time",
   "lastSuccessfulCollection": "2026-09-15T01:36:00Z",
   "lastSuccessfulCollectionDisplay": "Sep 15, 2026 09:36 Taipei Time",
-  "sitePublished": "2026-09-15T07:13:37Z",
-  "sitePublishedDisplay": "Sep 15, 2026 15:13 Taipei Time",
+  "sitePublished": "2026-09-15T07:41:31Z",
+  "sitePublishedDisplay": "Sep 15, 2026 15:41 Taipei Time",
   "dataStale": false,
   "nextExpected": "2026-09-16T00:00:00Z",
   "staleAfter": "2026-09-15T06:00:00Z",
@@ -30,10 +31,12 @@
     "2027E",
     "2028E"
   ],
-  "dataVersion": "7cda5bb6c70cdefe41a0b60b62c41c65c6f9817d685754174fce45cbb9cfe29c",
-  "refreshVersion": "31eff54c1d69717d6d4859b3bd3068f3da07b43612271deb1ab4049a4316f7f4",
-  "buildId": "7cda5bb6c70cdefe41a0b60b62c41c65c6f9817d685754174fce45cbb9cfe29c",
-  "alertEngineLastEvaluated": "2026-09-15T07:13:36Z",
+  "dataVersion": "67659270c8758f81ff9e1a5c425e4a351521fe549a6f4f23633ce8a0c66acfcb",
+  "refreshVersion": "00661de96c0afeb8ac9d22529cb21f0055dc48e849bcb287449eba7f8d31e2eb",
+  "buildId": "67659270c8758f81ff9e1a5c425e4a351521fe549a6f4f23633ce8a0c66acfcb",
+  "alertEngineLastEvaluated": "2026-09-15T07:41:31Z",
+  "alertEngineLastAttempt": "2026-09-15T07:41:31Z",
+  "alertEngineLastSuccessfulEvaluation": "2026-09-15T07:41:31Z",
   "alertEngineStatus": "ok",
   "alertEngineError": null,
   "oneShotActiveDays": 21,
@@ -52,9 +55,28 @@
   "collectionStatusLabel": "COMPLETE",
   "driverExportErrors": null,
   "qualityGate": {
-    "status": "reject",
-    "reason": "validation_failed",
-    "publishable": false,
-    "extremeChanges": []
+    "status": "ok",
+    "reason": null,
+    "publishable": true,
+    "extremeChanges": [],
+    "expectedTickers": [
+      "NVDA",
+      "AVGO",
+      "TSM",
+      "MSFT",
+      "BE",
+      "KEYS"
+    ],
+    "receivedTickers": [
+      "NVDA",
+      "AVGO",
+      "TSM",
+      "MSFT",
+      "BE",
+      "KEYS"
+    ],
+    "missingTickers": [],
+    "unexpectedTickers": [],
+    "message": "ok"
   }
 }

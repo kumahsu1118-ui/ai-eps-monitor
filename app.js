@@ -261,9 +261,20 @@
     return "mom-neutral";
   }
 
-  function momentumCell(m) {
-    if (isMissing(m)) return naCell();
-    return el("span", { className: momentumClass(m), text: String(m) });
+  function momentumCell(m, regime) {
+    if (isMissing(m) && isMissing(regime)) return naCell();
+    const wrap = el("span", { className: "mom-wrap" });
+    if (!isMissing(m)) {
+      wrap.appendChild(el("span", { className: momentumClass(m), text: String(m) }));
+    }
+    if (!isMissing(regime) && String(regime) !== String(m)) {
+      wrap.appendChild(el("span", {
+        className: "revision-regime",
+        text: String(regime),
+        title: "Revision regime (near-term Y+1 vs long-term Y+2 SA 1M)",
+      }));
+    }
+    return wrap;
   }
 
   function companyPrice(c) {
@@ -402,6 +413,7 @@
     if (!parts.length) return { name: "overview" };
     if (parts[0] === "valuation") return { name: "valuation" };
     if (parts[0] === "revisions") return { name: "revisions" };
+    if (parts[0] === "earnings" && parts[1]) return { name: "earningsDetail", ticker: parts[1].toUpperCase() };
     if (parts[0] === "earnings") return { name: "earnings" };
     if (parts[0] === "companies") return { name: "companies" };
     if (parts[0] === "company" && parts[1]) return { name: "company", ticker: parts[1].toUpperCase() };
@@ -415,7 +427,7 @@
       if (route.name === "overview" && r === "overview") active = true;
       if (route.name === "valuation" && r === "valuation") active = true;
       if (route.name === "revisions" && r === "revisions") active = true;
-      if (route.name === "earnings" && r === "earnings") active = true;
+      if ((route.name === "earnings" || route.name === "earningsDetail") && r === "earnings") active = true;
       if ((route.name === "companies" || route.name === "company") && r === "companies") active = true;
       a.classList.toggle("active", active);
     });
@@ -657,6 +669,13 @@
         const item = el("div", { className: "alert-item" });
         const age = typeof a === "object" ? alertAgeLabel(a) : "";
         item.appendChild(el("span", { className: "alert-msg", text: msg }));
+        if (typeof a === "object" && a.confidence) {
+          item.appendChild(el("span", {
+            className: "alert-confidence",
+            text: "Confidence: " + a.confidence + (a.analystCount != null ? " (" + a.analystCount + " analysts)" : ""),
+            title: "Analyst coverage confidence",
+          }));
+        }
         if (age) item.appendChild(el("span", { className: "alert-age", text: age }));
         box.appendChild(item);
       });
@@ -741,8 +760,10 @@
 
       const tdT = el("td", { className: "ticker left" });
       tdT.appendChild(el("a", { href: "#/company/" + t, text: t }));
-      if (stale) {
-        tdT.appendChild(el("span", { className: "stale-ticker-badge", text: "STALE", title: "Per-ticker past weekday 08:00 Taipei collection+grace without success, or collection failed" }));
+      if (c.collectionFailed === true || c.dataFreshnessBadge === "FAILED") {
+        tdT.appendChild(el("span", { className: "stale-ticker-badge failed-ticker-badge", text: "FAILED", title: "Collection failed or missing from snapshot — last-known-good shown when available" }));
+      } else if (stale || c.dataFreshnessBadge === "STALE") {
+        tdT.appendChild(el("span", { className: "stale-ticker-badge", text: "STALE", title: "Per-ticker past weekday 08:00 Taipei collection+grace without success, or using last-known-good" }));
       }
       tr.appendChild(tdT);
 
@@ -775,7 +796,7 @@
       tr.appendChild(tdRev);
 
       const tdMom = el("td");
-      tdMom.appendChild(momentumCell(c.momentum));
+      tdMom.appendChild(momentumCell(c.momentum, c.revisionRegime));
       tr.appendChild(tdMom);
 
       const tdLast = el("td", { className: "left" });
@@ -955,7 +976,7 @@
         } else if (c.field === "growthFromPrior" || c.key === "cagrY0Y2") {
           td.appendChild(c.key === "cagrY0Y2" ? cagrCell(v) : growthCell(v));
         } else if (c.key === "momentum") {
-          td.appendChild(momentumCell(v));
+          td.appendChild(momentumCell(v, r.revisionRegime));
         } else if (c.key === "lastClose" || c.key === "price") {
           const px = r.lastClose != null ? r.lastClose : r.price;
           td.appendChild(numCell(px, 2));
@@ -1360,7 +1381,7 @@
       const c = state.companies[t] || {};
       const tr = el("tr");
       const tdT = el("td", { className: "left" });
-      tdT.appendChild(el("a", { href: "#/company/" + t, text: t }));
+      tdT.appendChild(el("a", { href: "#/earnings/" + t, text: t, title: "Earnings Detail" }));
       tr.appendChild(tdT);
 
       const tdLast = el("td", { className: "left" });
@@ -1397,6 +1418,126 @@
     table.appendChild(tbody);
     tableWrap.appendChild(table);
     root.appendChild(tableWrap);
+    return root;
+  }
+
+  /* ---------- earnings detail (distinct from company page) ---------- */
+  function renderEarningsDetail(ticker) {
+    const c = state.companies[ticker] || {};
+    const earn = state.earnings[ticker] || {};
+    const root = el("div", { className: "section earnings-detail" });
+    root.appendChild(el("h2", { className: "section-title", text: "Earnings Detail — " + ticker }));
+    root.appendChild(
+      el("p", {
+        className: "section-note",
+        text: "Dedicated earnings digest view (route #/earnings/" + ticker + "). Not the company snapshot page.",
+      })
+    );
+    root.appendChild(
+      el("p", null, [
+        el("a", { href: "#/earnings", text: "← Earnings" }),
+        document.createTextNode(" · "),
+        el("a", { href: "#/company/" + ticker, text: "Company page" }),
+      ])
+    );
+
+    const panel = el("div", { className: "panel section" });
+    panel.appendChild(el("h3", { text: "Report" }));
+    const dl = el("dl", { className: "kv" });
+    function kv(label, val) {
+      dl.appendChild(el("dt", { text: label }));
+      const dd = el("dd");
+      if (val == null || val === "") dd.appendChild(naCell());
+      else dd.textContent = String(val);
+      dl.appendChild(dd);
+    }
+    kv("Period", earn.periodLabel || "—");
+    kv("Report date", earn.reportDate || "—");
+    kv("Last earnings", earn.lastEarnings || c.lastEarnings || "—");
+    kv("Next earnings", nextEarningsLabel(c, earn) || "—");
+    panel.appendChild(dl);
+
+    /* Provenance */
+    const prov = el("div", { className: "panel section" });
+    prov.appendChild(el("h3", { text: "Earnings Provenance" }));
+    const act = earn.actuals || {};
+    const cc = earn.consensusComparison || {};
+    prov.appendChild(el("div", { className: "stub-note", text: "Actuals (Company IR)" }));
+    if (act.sourceUrl) {
+      prov.appendChild(
+        el("div", null, [
+          el("a", {
+            className: "source-link",
+            href: act.sourceUrl,
+            target: "_blank",
+            rel: "noopener",
+            text: "Tier " + (act.sourceTier != null ? act.sourceTier : "?") + " · " + act.sourceUrl,
+          }),
+        ])
+      );
+    } else {
+      prov.appendChild(el("p", { className: "section-note", text: "No actuals.sourceUrl" }));
+    }
+    if (act.metrics || act.eps || act.revenue) {
+      const m = act.metrics || act;
+      prov.appendChild(
+        el("p", {
+          className: "section-note",
+          text:
+            "EPS " + (m.eps || act.eps || "—") +
+            " · Revenue " + (m.revenue || act.revenue || "—") +
+            " · GM " + (m.grossMargin || act.grossMargin || "—"),
+        })
+      );
+    }
+    prov.appendChild(el("div", { className: "stub-note", text: "Consensus comparison (beat/miss)" }));
+    const vs = cc.vsConsensus || cc.beatMiss || earn.comparison || (earn.results && earn.results.vsConsensus);
+    prov.appendChild(el("p", { className: "section-note", text: "Vs consensus: " + (vs || "—") }));
+    if (cc.sourceUrl) {
+      prov.appendChild(
+        el("div", null, [
+          el("a", {
+            className: "source-link",
+            href: cc.sourceUrl,
+            target: "_blank",
+            rel: "noopener",
+            text: "Tier " + (cc.sourceTier != null ? cc.sourceTier : "?") + " · " + cc.sourceUrl,
+          }),
+        ])
+      );
+    }
+    if (cc.note) {
+      prov.appendChild(el("p", { className: "section-note", text: String(cc.note) }));
+    }
+    root.appendChild(panel);
+    root.appendChild(prov);
+
+    ["positives", "negatives", "uncertainties"].forEach((key) => {
+      const title = key.charAt(0).toUpperCase() + key.slice(1);
+      root.appendChild(el("div", { className: "stub-note", text: title }));
+      const list = el("ul", { className: "earn-section-list" + (!(earn[key] || []).length ? " empty" : "") });
+      appendEarnItems(list, earn[key] || []);
+      root.appendChild(list);
+    });
+    if (earn.guidance) {
+      root.appendChild(el("div", { className: "stub-note", text: "Guidance" }));
+      root.appendChild(el("p", { className: "section-note", text: String(earn.guidance) }));
+    }
+    if (earn.qa && earn.qa.length) {
+      root.appendChild(el("div", { className: "stub-note", text: "Important Q&A" }));
+      const qlist = el("ul", { className: "earn-section-list" });
+      earn.qa.forEach((q) => {
+        const li = el("li");
+        li.textContent =
+          (q.question || "") +
+          " → " +
+          (q.answer || "") +
+          (q.whyMattersForEps ? " (" + q.whyMattersForEps + ")" : "");
+        qlist.appendChild(li);
+      });
+      root.appendChild(qlist);
+    }
+    document.title = "Earnings Detail — " + ticker + " · AI EPS Monitor";
     return root;
   }
 
@@ -1507,7 +1648,7 @@
     }
     header.appendChild(priceEl);
     const bits = el("div", { className: "meta-bits" });
-    bits.appendChild(momentumCell(c.momentum));
+    bits.appendChild(momentumCell(c.momentum, c.revisionRegime));
     bits.appendChild(document.createTextNode("  ·  "));
     bits.appendChild(document.createTextNode(c.priceAsOf || ""));
     header.appendChild(bits);
@@ -1786,6 +1927,9 @@
     const r = getRoute();
     setActiveTab(r);
     updateHeaderMeta();
+    if (r.name !== "earningsDetail") {
+      document.title = "AI Investment EPS & Earnings Monitor";
+    }
     const app = $("#app");
     if (!app) return;
     app.innerHTML = "";
@@ -1798,6 +1942,7 @@
         view = renderValuation();
       } else if (r.name === "revisions") view = renderRevisions();
       else if (r.name === "earnings") view = renderEarnings();
+      else if (r.name === "earningsDetail") view = renderEarningsDetail(r.ticker);
       else if (r.name === "companies") view = renderCompanies();
       else if (r.name === "company") view = renderCompany(r.ticker);
       else view = renderOverview();
