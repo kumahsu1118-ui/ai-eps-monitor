@@ -160,6 +160,10 @@ if [[ -d "$ROOT/web/vendor" ]]; then
 fi
 cp -a "$ROOT"/web/data/*.json "$DEST/web/data/" 2>/dev/null || true
 
+# screenshot_dom_build_identity + secret content scan gate (review ZIP)
+# Sidecars under review-pack/screenshots/*.dom.json must match public dataVersion /
+# refreshVersion / sitePublished. Do not pack secrets (.env, cookies, tokens).
+
 # Tools (no secrets)
 for f in export_web_data.py build_alerts.py run_acceptance_tests.py run_unit_tests.py run_integration_tests.py sa_parser.py atomic_io.py snapshot_quality.py ingest_snapshot.py publish_github_pages.sh build_review_zip.sh generate_readme_review.py; do
   cp -a "$ROOT/tools/$f" "$DEST/tools/" 2>/dev/null || true

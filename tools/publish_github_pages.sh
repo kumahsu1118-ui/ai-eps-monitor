@@ -175,6 +175,8 @@ if dash_path.exists():
     if meta.get("buildId"):
         dash["buildId"] = meta["buildId"]
     atomic_write_json(dash_path, dash)
+marker = ROOT / "data" / ".last-publish-web"
+marker.write_text(str((ROOT / "web").resolve()) + "\n", encoding="utf-8")
 print("stamped sitePublished", display, "(meta.json + dashboard.json.meta synced)")
 PYSTAMP
 

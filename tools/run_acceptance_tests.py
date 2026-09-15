@@ -269,12 +269,24 @@ def restore_base_snapshot(fixture: Path) -> None:
             return
 
 
-def run_export(fixture: Path, *, legacy_mutate: bool = True) -> None:
+def spa_js_text(fixture: Path) -> str:
+    """Published SPA may live at repo-root app.js; source copy under web/app.js."""
+    parts = []
+    for p in (fixture / "web" / "app.js", ROOT / "web" / "app.js", ROOT / "app.js"):
+        if p.exists():
+            try:
+                parts.append(p.read_text(encoding="utf-8"))
+            except Exception:
+                continue
+    return "\n".join(parts)
+
+
+def run_export(fixture: Path, *, legacy_mutate: bool = True, timeout: int = 60) -> None:
     """Run exporter. Prior suite uses --legacy-mutate; single-writer tests call without it."""
     cmd = [sys.executable, str(fixture / "tools" / "export_web_data.py")]
     if legacy_mutate:
         cmd.append("--legacy-mutate")
-    subprocess.check_call(cmd, cwd=str(fixture))
+    subprocess.check_call(cmd, cwd=str(fixture), timeout=timeout)
 
 
 def run_build_alerts(fixture: Path) -> None:
@@ -2060,7 +2072,7 @@ def test_revision_regime(fixture: Path) -> None:
 
 def test_company_vs_earnings_route_screenshot(fixture: Path) -> None:
     """Require 04!=06, 05!=07, 06!=07; Earnings Detail route exists (not renamed company)."""
-    app = (fixture / "web" / "app.js").read_text(encoding="utf-8")
+    app = spa_js_text(fixture)
     ok = "earningsDetail" in app or 'name: "earningsDetail"' in app or "renderEarningsDetail" in app
     ok = ok and ("#/earnings/" in app or '"#/earnings/"' in app)
     ok = ok and "Earnings Detail" in app
@@ -2240,7 +2252,7 @@ def test_source_1m_hold_preserves_event_age(fixture: Path) -> None:
     age = ba.age_days(hits2[0], now)
     ok = ok and age >= 5  # Sep 10 → Sep 15
     # Frontend prefers lastMaterialChangeAt
-    app = (fixture / "web" / "app.js").read_text(encoding="utf-8")
+    app = spa_js_text(fixture)
     ok = ok and "lastMaterialChangeAt" in app
     record("source_1m_hold_preserves_event_age_test", ok, f"age={age} eventAt={hits2[0].get('eventAt') if hits2 else None}")
 
@@ -2382,7 +2394,7 @@ def test_mixed_build_generation_rejected(fixture: Path) -> None:
     val = json.loads((web / "valuation.json").read_text(encoding="utf-8"))
     bid = meta.get("buildId")
     ok = ok and bid and alerts.get("buildId") == bid and val.get("buildId") == bid
-    app = (fixture / "web" / "app.js").read_text(encoding="utf-8")
+    app = spa_js_text(fixture)
     ok = ok and "mixed build generation rejected" in app
     ok = ok and "dashboard.json" in app
     # Simulate mixed → frontend logic (unit): ids differ
@@ -3370,7 +3382,7 @@ def test_unknown_analyst_not_high_severity(fixture: Path) -> None:
         ok = ok and hits[0].get("confidence") == "Unknown"
         ok = ok and ("Coverage:" in (hits[0].get("message") or "") or "Coverage" in (hits[0].get("message") or "") or hits[0].get("confidence") == "Unknown")
     # UI rename present
-    app = (fixture / "web" / "app.js").read_text(encoding="utf-8")
+    app = spa_js_text(fixture)
     ok = ok and "Coverage:" in app
     ok = ok and "Dispersion:" in app
     record("unknown_analyst_not_high_severity_test", ok, f"sev={hits[0].get('severity') if hits else None} conf={hits[0].get('confidence') if hits else None}")
