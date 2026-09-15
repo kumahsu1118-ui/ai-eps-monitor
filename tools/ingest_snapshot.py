@@ -27,7 +27,10 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 _here = Path(__file__).resolve().parent
-ROOT = _here.parent
+if os.environ.get("AIEPS_ROOT"):
+    ROOT = Path(os.environ["AIEPS_ROOT"]).resolve()
+else:
+    ROOT = _here.parent
 if str(_here) not in sys.path:
     sys.path.insert(0, str(_here))
 
@@ -149,7 +152,9 @@ def revision_event_id(event: dict) -> str:
 
 def content_hash_snapshot(snap: dict) -> str:
     payload = {k: v for k, v in (snap or {}).items() if k not in {"qualityGate", "runId", "runStatus"}}
-    blob = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+    blob = json.dumps(
+        payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False
+    ).encode("utf-8")
     return hashlib.sha256(blob).hexdigest()
 
 
@@ -510,12 +515,58 @@ def ingest_and_build(
     expected_tickers: list[str] | None = None,
     run_export: bool = True,
     run_publish: bool = False,
+    validate_only: bool = False,
+    backfill: bool = False,
+    check_timestamp: bool = False,
 ) -> dict:
-    """Process one incoming raw JSON through transactional staged→commit pipeline."""
+    """Process one incoming raw JSON through transactional staged→commit pipeline.
+
+    Full staging of snapshot/revisions/daily/alerts/web in a work root.
+    No persistent mutation of canonical trees before COMMIT.
+    """
     expected = expected_tickers or load_watchlist()
     raw = json.loads(incoming_path.read_text(encoding="utf-8"))
     if not isinstance(raw, dict):
         raise SystemExit(f"Incoming snapshot not an object: {incoming_path}")
+
+    try:
+        from atomic_io import assert_finite_numbers
+        assert_finite_numbers(raw)
+    except Exception as nf:
+        from atomic_io import NonFiniteNumberError
+        if isinstance(nf, NonFiniteNumberError):
+            raise SystemExit(f"INGEST REJECT non-finite number: {nf}") from nf
+        raise
+
+    if check_timestamp or os.environ.get("AIEPS_TIMESTAMP_GATE") == "1":
+        from timestamp_gate import validate_snapshot_timestamp
+        ts = validate_snapshot_timestamp(
+            raw,
+            backfill=backfill or os.environ.get("AIEPS_BACKFILL") == "1",
+        )
+        if not ts.get("ok"):
+            result = {
+                "incoming": str(incoming_path),
+                "runStatus": "aborted",
+                "ok": False,
+                "gate": {"status": "reject", "publishable": False, "reason": ts.get("reason")},
+            }
+            print(f"INGEST REJECT timestamp gate reason={ts.get('reason')} {ts.get('message')}")
+            return result
+
+    if isinstance(raw.get("schemaVersion"), (str, int)) or os.environ.get("AIEPS_SCHEMA_GATE") == "1":
+        try:
+            from schema_versions import assert_supported_schema
+            if raw.get("schemaVersion") is not None:
+                assert_supported_schema(raw.get("schemaVersion"), allow_missing=False)
+        except Exception as se:
+            print(f"INGEST REJECT schemaVersion: {se}")
+            return {
+                "incoming": str(incoming_path),
+                "runStatus": "aborted",
+                "ok": False,
+                "gate": {"status": "reject", "publishable": False, "reason": "unsupported_schema_version"},
+            }
 
     snap_utc = raw.get("snapshot_utc") or datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     run_id = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ") + "_" + content_hash_snapshot(raw)[:8]
@@ -532,6 +583,7 @@ def ingest_and_build(
         "quarantinePath": None,
         "stageDir": str(stage_dir),
         "ok": False,
+        "committed": False,
     }
 
     _write_run_status(
@@ -540,7 +592,6 @@ def ingest_and_build(
         {"runId": run_id, "incoming": str(incoming_path), "snapshot_utc": snap_utc},
     )
 
-    # Gate against validated LKG only (exclude any same-named candidate)
     tentative_name = utc_timestamp_filename(snap_utc)
     lkg = sq.load_last_known_good_by_ticker(
         SNAP_DIR, exclude_path=SNAP_DIR / tentative_name, expected_tickers=expected, root=ROOT
@@ -592,7 +643,10 @@ def ingest_and_build(
         )
         return result
 
-    # STAGE only — do NOT write validated / revisions / mark incoming yet
+    # STAGE only — copy canonical trees into work root; do NOT mutate live trees
+    import transaction as txn
+
+    work = txn.prepare_work_root(ROOT, stage_dir)
     stage_snap = stage_dir / "snapshot.json"
     atomic_write_json(stage_snap, snap_norm)
     events = generate_revision_events(
@@ -603,22 +657,31 @@ def ingest_and_build(
             ev["eventId"] = revision_event_id(ev)
     atomic_write_json(stage_dir / "proposed_revisions.json", {"events": events})
     (stage_dir / "proposed_revisions.jsonl").write_text(
-        "".join(json.dumps(e, ensure_ascii=False) + "\n" for e in events),
+        "".join(json.dumps(e, ensure_ascii=False, allow_nan=False) + "\n" for e in events),
         encoding="utf-8",
     )
+
+    # Write gated snapshot + proposed revisions into the WORK root only
+    work_snap_dir = work / "data" / "snapshots"
+    work_snap_dir.mkdir(parents=True, exist_ok=True)
+    work_validated = work_snap_dir / tentative_name
+    if not work_validated.exists():
+        atomic_write_json(work_validated, snap_norm)
+    atomic_write_json(work_snap_dir / "latest.json", snap_norm)
+    work_rev = work / "data" / "revisions" / "history.jsonl"
+    append_revision_events(events, work_rev)
 
     if run_export:
         env = os.environ.copy()
         env["PIPELINE_LOCK_HELD"] = env.get("PIPELINE_LOCK_HELD", "1")
-        env["INGEST_GATED_SNAPSHOT"] = str(stage_snap)
+        env["AIEPS_ROOT"] = str(work)
+        env["INGEST_GATED_SNAPSHOT"] = str(work_validated)
         env["INGEST_SNAPSHOT_UTC"] = snap_utc
         env["INGEST_REVISIONS_DONE"] = "1"
         env["INGEST_COLLECTION_RUN_ID"] = run_id
-        # Revisions owned by commit (INGEST_REVISIONS_DONE=1). Daily/alerts/web built here;
-        # FAULT_INJECT at export start still aborts before history mutations.
         rc = subprocess.call(
             [sys.executable, str(_here / "export_web_data.py")],
-            cwd=str(ROOT),
+            cwd=str(work),
             env=env,
         )
         result["exportRc"] = rc
@@ -633,16 +696,48 @@ def ingest_and_build(
             )
             return result
 
-    # COMMIT after successful export (or when export skipped after gate)
-    validated_path = commit_staged_run(stage_dir, snap_norm, events, snap_utc)
+    if validate_only:
+        _write_run_status(stage_dir, "validated", {"validateOnly": True, "committed": False})
+        result["runStatus"] = "validated"
+        result["ok"] = True
+        result["committed"] = False
+        result["validateOnly"] = True
+        print(f"INGEST VALIDATE-ONLY runId={run_id} — no COMMIT")
+        return result
+
+    # COMMIT: generation + CURRENT pointer + promote canonical trees
+    try:
+        gen_id = txn.commit_work(ROOT, work, gen_id=run_id)
+    except Exception as exc:
+        abort_staged_run(stage_dir, f"commit_failed:{exc}")
+        result["runStatus"] = "aborted"
+        result["ok"] = False
+        print(f"ERROR: COMMIT failed — rolled back ({exc})", file=sys.stderr)
+        return result
+
+    validated_path = SNAP_DIR / tentative_name
+    if not validated_path.exists():
+        # overlay should have copied it; write as belt-and-suspenders
+        validated_path = commit_staged_run(stage_dir, snap_norm, events, snap_utc)
+    else:
+        _write_run_status(
+            stage_dir,
+            "committed",
+            {
+                "validatedPath": str(validated_path),
+                "revisionEventsAppended": len(events),
+                "generationId": gen_id,
+                "committedAt": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+            },
+        )
     result["validatedPath"] = str(validated_path)
+    result["generationId"] = gen_id
     try:
         run_meta = json.loads((stage_dir / "run.json").read_text(encoding="utf-8"))
-        result["revisionEventsAppended"] = int(run_meta.get("revisionEventsAppended") or 0)
+        result["revisionEventsAppended"] = int(run_meta.get("revisionEventsAppended") or len(events))
     except Exception:
-        result["revisionEventsAppended"] = 0
+        result["revisionEventsAppended"] = len(events)
 
-    # Mark processed incoming ONLY after successful commit
     try:
         processed = incoming_path.with_suffix(incoming_path.suffix + ".processed")
         if incoming_path.exists():
@@ -652,14 +747,14 @@ def ingest_and_build(
         print(f"WARNING: could not mark incoming processed: {rename_exc}", file=sys.stderr)
 
     result["runStatus"] = "committed"
+    result["committed"] = True
     result["ok"] = True
     print(
         f"INGEST OK status={gate.get('status')} validated={validated_path} "
-        f"revisions=+{result['revisionEventsAppended']} runId={run_id}"
+        f"revisions=+{result['revisionEventsAppended']} runId={run_id} gen={gen_id}"
     )
 
     if run_publish:
-        # Publish prebuilt site — must NOT re-export / recompute revisions
         rc = publish_prebuilt_site()
         result["publishRc"] = rc
         if rc not in (0,):
@@ -671,7 +766,6 @@ def ingest_and_build(
 
 # Back-compat alias
 ingest_incoming_file = ingest_and_build
-
 
 def ingest_latest_incoming(**kwargs) -> dict:
     files = list_incoming()
@@ -694,6 +788,8 @@ def main(argv: list[str] | None = None) -> int:
         help="After single export+commit, publish_prebuilt_site (no second export)",
     )
     ap.add_argument("--write-incoming", help="Write given snapshot JSON path into data/incoming/ only")
+    ap.add_argument("--validate-only", action="store_true", help="Stage+export but do not COMMIT")
+    ap.add_argument("--backfill", action="store_true", help="Allow historical snapshot_utc")
     args = ap.parse_args(argv)
 
     if args.write_incoming:
@@ -720,11 +816,17 @@ def main(argv: list[str] | None = None) -> int:
                 Path(args.incoming),
                 run_export=not args.no_export,
                 run_publish=args.publish,
+                validate_only=args.validate_only,
+                backfill=args.backfill,
+                check_timestamp=True,
             )
         else:
             result = ingest_latest_incoming(
                 run_export=not args.no_export,
                 run_publish=args.publish,
+                validate_only=args.validate_only,
+                backfill=args.backfill,
+                check_timestamp=True,
             )
         return 0 if result.get("ok") else 1
     finally:

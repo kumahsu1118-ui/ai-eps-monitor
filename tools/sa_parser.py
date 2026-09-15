@@ -44,15 +44,25 @@ _MONTH_NUM = {
 def to_num(x) -> float | None:
     if x is None:
         return None
+    if isinstance(x, bool):
+        return float(int(x))
     if isinstance(x, (int, float)):
-        return float(x)
+        v = float(x)
+        if v != v or v == float("inf") or v == float("-inf"):
+            raise ValueError(f"NaN/Inf is not allowed: {x!r}")
+        return v
     s = str(x).strip().replace(",", "").replace("%", "").replace("$", "")
     if s.lower() in {"", "n/a", "na", "data unavailable", "null", "none", "—", "-"}:
         return None
+    if s.lower() in {"nan", "inf", "+inf", "-inf", "infinity", "+infinity", "-infinity"}:
+        raise ValueError(f"NaN/Inf is not allowed: {x!r}")
     try:
-        return float(s)
+        v = float(s)
     except Exception:
         return None
+    if v != v or v == float("inf") or v == float("-inf"):
+        raise ValueError(f"NaN/Inf is not allowed: {x!r}")
+    return v
 
 
 def _first_present(*vals):

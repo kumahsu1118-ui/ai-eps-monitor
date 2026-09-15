@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -142,6 +143,12 @@ def build_fixture(dest: Path) -> Path:
         "ingest_snapshot.py",
         "publish_github_pages.sh",
         "build_review_zip.sh",
+        "transaction.py",
+        "source_tiers.py",
+        "schema_versions.py",
+        "timestamp_gate.py",
+        "screenshot_dom.py",
+        "project_root.py",
     ):
         src = ROOT / "tools" / name
         if src.exists():
@@ -228,6 +235,7 @@ def build_fixture(dest: Path) -> Path:
     site = dest / "site-repo"
     site.mkdir(parents=True, exist_ok=True)
     (site / "data").mkdir(parents=True, exist_ok=True)
+    _copy_tree_file(ROOT / "VERSION", dest / "VERSION")
     return dest
 
 
@@ -3502,6 +3510,385 @@ def test_null_eps_not_daily_observation(fixture: Path) -> None:
     record("null_eps_not_daily_observation_test", ok, f"new={len(new_lines)} nulls={len(null_obs)}")
 
 
+# --- True Transaction Boundary + Release Integrity ---
+
+def _bind_ingest(fixture: Path):
+    ing = import_mod(fixture, "ingest_snapshot")
+    ing.ROOT = fixture
+    ing.INCOMING_DIR = fixture / "data" / "incoming"
+    ing.SNAP_DIR = fixture / "data" / "snapshots"
+    ing.QUARANTINE_DIR = fixture / "data" / "snapshots" / "quarantine"
+    ing.STAGING_DIR = fixture / "data" / "staging"
+    ing.REV_PATH = fixture / "data" / "revisions" / "history.jsonl"
+    ing.UNIVERSE_PATH = fixture / "data" / "universe.json"
+    ing._here = fixture / "tools"
+    return ing
+
+
+def _complete_watchlist_snap(fixture: Path, snap: dict) -> dict:
+    u = json.loads((fixture / "data" / "universe.json").read_text(encoding="utf-8"))
+    snap = json.loads(json.dumps(snap))
+    for t in u.get("tickers") or []:
+        if t not in (snap.get("tickers") or {}):
+            snap.setdefault("tickers", {})[t] = _good_ticker(100, 5.0, 6.0, "Dec 2026", "Dec 2027")
+    return snap
+
+
+def test_parent_lock_ingest_publish(fixture: Path) -> None:
+    """Parent holds flock; child publish_github_pages.sh skips re-flock (real subprocess, no mock)."""
+    import fcntl
+    lock_path = fixture / "data" / ".pipeline.lock"
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    run_export(fixture)
+    # Ensure qualityGate.publishable so publish's second gate passes
+    meta_path = fixture / "web" / "data" / "meta.json"
+    meta = json.loads(meta_path.read_text(encoding="utf-8"))
+    qg = meta.get("qualityGate") or {}
+    if qg.get("publishable") is not True:
+        meta["qualityGate"] = {"status": "ok", "publishable": True, "reason": None}
+        meta_path.write_text(json.dumps(meta, indent=2) + "\n", encoding="utf-8")
+
+    pub = fixture / "tools" / "publish_github_pages.sh"
+    body = pub.read_text(encoding="utf-8")
+    ok = "PIPELINE_LOCK_HELD" in body and "skip re-flock" in body
+
+    fd = os.open(str(lock_path), os.O_CREAT | os.O_RDWR, 0o644)
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        env = os.environ.copy()
+        env["PIPELINE_LOCK_HELD"] = "1"
+        env["SKIP_EXPORT"] = "1"
+        env["PUBLISH_PREBUILT"] = "1"
+        env["SKIP_GIT_PUSH"] = "1"
+        env["AIEPS_ROOT"] = str(fixture)
+        proc = subprocess.run(
+            ["bash", str(pub)],
+            cwd=str(fixture),
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        out = (proc.stdout or "") + (proc.stderr or "")
+        ok = ok and proc.returncode == 0
+        ok = ok and "skip re-flock" in out
+
+        env2 = os.environ.copy()
+        env2.pop("PIPELINE_LOCK_HELD", None)
+        env2["SKIP_EXPORT"] = "1"
+        env2["SKIP_GIT_PUSH"] = "1"
+        env2["AIEPS_ROOT"] = str(fixture)
+        proc2 = subprocess.run(
+            ["bash", str(pub)],
+            cwd=str(fixture),
+            env=env2,
+            capture_output=True,
+            text=True,
+            timeout=8,
+        )
+        out2 = (proc2.stdout or "") + (proc2.stderr or "")
+        ok = ok and proc2.returncode != 0
+        ok = ok and ("RUN ALREADY IN PROGRESS" in out2 or "LOCKED" in out2)
+    finally:
+        try:
+            fcntl.flock(fd, fcntl.LOCK_UN)
+        except OSError:
+            pass
+        os.close(fd)
+    record("parent_lock_ingest_publish_test", ok, f"held_rc={proc.returncode} blocked_rc={proc2.returncode}")
+
+
+def test_staging_no_persist_before_commit(fixture: Path) -> None:
+    """validate-only: snapshot/revisions/daily/alerts/web unchanged until COMMIT."""
+    txn = import_mod(fixture, "transaction")
+    before = txn.canonical_fingerprint(fixture)
+    ing = _bind_ingest(fixture)
+    snap = _complete_watchlist_snap(fixture, _load_base_snap(fixture))
+    snap["snapshot_utc"] = "2026-09-15T14:00:00Z"
+    incoming = _write_incoming_from_snap(fixture, snap, name="valonly.json")
+    os.environ["PIPELINE_LOCK_HELD"] = "1"
+    os.environ.pop("FAULT_INJECT_EXPORT_EXIT", None)
+    os.environ.pop("FAULT_INJECT_COMMIT", None)
+    result = ing.ingest_and_build(incoming, run_export=True, run_publish=False, validate_only=True)
+    after = txn.canonical_fingerprint(fixture)
+    ok = result.get("validateOnly") is True
+    ok = ok and result.get("committed") is False
+    ok = ok and result.get("runStatus") == "validated"
+    ok = ok and before == after
+    ok = ok and incoming.exists()
+    record(
+        "staging_no_persist_before_commit_test",
+        ok,
+        f"status={result.get('runStatus')} same={before==after}",
+    )
+
+
+def test_pure_build_export_mode(fixture: Path) -> None:
+    """--pure-build writes web-out only; no daily/alerts/snapshot persist."""
+    jsonl = fixture / "data" / "daily_eps_snapshots" / "daily.jsonl"
+    alerts = fixture / "data" / "alerts" / "index.json"
+    before_d = jsonl.read_bytes() if jsonl.exists() else b""
+    before_a = alerts.read_bytes() if alerts.exists() else b""
+    web_out = fixture / "pure-web"
+    web_out.mkdir(parents=True, exist_ok=True)
+    env = {**os.environ, "PIPELINE_LOCK_HELD": "1", "PURE_BUILD": "1", "AIEPS_WEB_OUT": str(web_out)}
+    env.pop("AIEPS_ROOT", None)
+    rc = subprocess.call(
+        [
+            sys.executable,
+            str(fixture / "tools" / "export_web_data.py"),
+            "--pure-build",
+            "--web-out",
+            str(web_out),
+        ],
+        cwd=str(fixture),
+        env=env,
+    )
+    after_d = jsonl.read_bytes() if jsonl.exists() else b""
+    after_a = alerts.read_bytes() if alerts.exists() else b""
+    ok = rc == 0
+    ok = ok and after_d == before_d
+    ok = ok and after_a == before_a
+    ok = ok and (web_out / "meta.json").exists()
+    record("pure_build_export_mode_test", ok, f"rc={rc} web={ (web_out / 'meta.json').exists() }")
+
+
+def test_transaction_rollback(fixture: Path) -> None:
+    """FAULT_INJECT_COMMIT=before_pointer → canonical trees unchanged."""
+    txn = import_mod(fixture, "transaction")
+    before = txn.canonical_fingerprint(fixture)
+    prev = txn.read_current(fixture)
+    ing = _bind_ingest(fixture)
+    snap = _complete_watchlist_snap(fixture, _load_base_snap(fixture))
+    snap["snapshot_utc"] = "2026-09-15T15:00:00Z"
+    incoming = _write_incoming_from_snap(fixture, snap, name="rollback1.json")
+    os.environ["PIPELINE_LOCK_HELD"] = "1"
+    os.environ["FAULT_INJECT_COMMIT"] = "before_pointer"
+    os.environ.pop("FAULT_INJECT_EXPORT_EXIT", None)
+    try:
+        result = ing.ingest_and_build(incoming, run_export=True, run_publish=False)
+    finally:
+        os.environ.pop("FAULT_INJECT_COMMIT", None)
+    after = txn.canonical_fingerprint(fixture)
+    ok = result.get("ok") is False
+    ok = ok and result.get("runStatus") == "aborted"
+    ok = ok and before == after
+    ok = ok and txn.read_current(fixture) == prev
+    record("transaction_rollback_test", ok, f"status={result.get('runStatus')} same={before==after}")
+
+
+def test_generation_pointer_rollback(fixture: Path) -> None:
+    """After a successful generation, a failed promote restores CURRENT + canonical."""
+    txn = import_mod(fixture, "transaction")
+    ing = _bind_ingest(fixture)
+    os.environ["PIPELINE_LOCK_HELD"] = "1"
+    os.environ.pop("FAULT_INJECT_COMMIT", None)
+    os.environ.pop("FAULT_INJECT_EXPORT_EXIT", None)
+    snap1 = _complete_watchlist_snap(fixture, _load_base_snap(fixture))
+    snap1["snapshot_utc"] = "2026-09-15T16:00:00Z"
+    incoming1 = _write_incoming_from_snap(fixture, snap1, name="genA.json")
+    r1 = ing.ingest_and_build(incoming1, run_export=True, run_publish=False)
+    gen_a = txn.read_current(fixture)
+    fp_a = txn.canonical_fingerprint(fixture)
+    ok = r1.get("ok") is True and bool(gen_a)
+
+    snap2 = _complete_watchlist_snap(fixture, snap1)
+    snap2["snapshot_utc"] = "2026-09-15T16:30:00Z"
+    incoming2 = _write_incoming_from_snap(fixture, snap2, name="genB.json")
+    os.environ["FAULT_INJECT_COMMIT"] = "promote"
+    try:
+        r2 = ing.ingest_and_build(incoming2, run_export=True, run_publish=False)
+    finally:
+        os.environ.pop("FAULT_INJECT_COMMIT", None)
+    ok = ok and r2.get("ok") is False
+    ok = ok and txn.read_current(fixture) == gen_a
+    ok = ok and txn.canonical_fingerprint(fixture) == fp_a
+    record(
+        "generation_pointer_rollback_test",
+        ok,
+        f"current={txn.read_current(fixture)} a={gen_a} r2={r2.get('runStatus')}",
+    )
+
+
+def test_nan_rejected(fixture: Path) -> None:
+    aio = import_mod(fixture, "atomic_io")
+    p = fixture / "data" / "alerts" / "nan.json"
+    raised = False
+    try:
+        aio.atomic_write_json(p, {"eps": float("nan")})
+    except (aio.NonFiniteNumberError, ValueError):
+        raised = True
+    exp = import_mod(fixture, "export_web_data")
+    to_num_raised = False
+    try:
+        exp.to_num(float("nan"))
+    except Exception:
+        to_num_raised = True
+    ok = raised and to_num_raised and (not p.exists() or "null" not in p.read_text(encoding="utf-8"))
+    record("nan_rejected_test", ok, f"write={raised} to_num={to_num_raised}")
+
+
+def test_infinity_rejected(fixture: Path) -> None:
+    aio = import_mod(fixture, "atomic_io")
+    p = fixture / "data" / "alerts" / "inf.json"
+    raised = False
+    try:
+        aio.atomic_write_json(p, {"eps": float("inf")})
+    except (aio.NonFiniteNumberError, ValueError):
+        raised = True
+    exp = import_mod(fixture, "export_web_data")
+    inf_s = False
+    try:
+        exp.to_num("Infinity")
+    except Exception:
+        inf_s = True
+    ok = raised and inf_s
+    record("infinity_rejected_test", ok, f"write={raised} str={inf_s}")
+
+
+def test_atomic_json(fixture: Path) -> None:
+    aio = import_mod(fixture, "atomic_io")
+    src = (fixture / "tools" / "atomic_io.py").read_text(encoding="utf-8")
+    ok = "allow_nan=False" in src or "allow_nan = False" in src
+    ok = ok and "def dumps_json" in src
+    p = fixture / "data" / "alerts" / "atomic-finite.json"
+    aio.atomic_write_json(p, {"ok": True, "n": 1.5})
+    ok = ok and json.loads(p.read_text(encoding="utf-8"))["ok"] is True
+    record("atomic_json_test", ok, "allow_nan=False")
+
+
+def test_future_timestamp_rejected(fixture: Path) -> None:
+    tg = import_mod(fixture, "timestamp_gate")
+    now = datetime(2026, 9, 15, 12, 0, tzinfo=timezone.utc)
+    r = tg.validate_snapshot_timestamp(
+        {"snapshot_utc": "2099-01-01T00:00:00Z"}, now=now, backfill=False
+    )
+    ok = r.get("ok") is False and r.get("reason") == "future_timestamp"
+    # backfill must not allow future either
+    r2 = tg.validate_snapshot_timestamp(
+        {"snapshot_utc": "2099-01-01T00:00:00Z"}, now=now, backfill=True
+    )
+    ok = ok and r2.get("ok") is False
+    record("future_timestamp_rejected_test", ok, f"reason={r.get('reason')}")
+
+
+def test_invalid_timestamp_rejected(fixture: Path) -> None:
+    tg = import_mod(fixture, "timestamp_gate")
+    r = tg.validate_snapshot_timestamp({"snapshot_utc": "not-a-date"}, backfill=True)
+    ok = r.get("ok") is False and r.get("reason") == "invalid_timestamp"
+    r2 = tg.validate_snapshot_timestamp({"snapshot_utc": ""}, backfill=False)
+    ok = ok and r2.get("ok") is False
+    record("invalid_timestamp_rejected_test", ok, f"reason={r.get('reason')}")
+
+
+def test_backfill_timestamp_allowed(fixture: Path) -> None:
+    tg = import_mod(fixture, "timestamp_gate")
+    now = datetime(2026, 9, 15, 12, 0, tzinfo=timezone.utc)
+    old = {"snapshot_utc": "2026-01-01T00:00:00Z"}
+    blocked = tg.validate_snapshot_timestamp(old, now=now, backfill=False)
+    allowed = tg.validate_snapshot_timestamp(old, now=now, backfill=True)
+    ok = blocked.get("ok") is False and blocked.get("reason") == "historical_without_backfill"
+    ok = ok and allowed.get("ok") is True
+    record("backfill_timestamp_allowed_test", ok, f"blocked={blocked.get('reason')} allowed={allowed.get('ok')}")
+
+
+def test_schema_version_fail_closed(fixture: Path) -> None:
+    sv = import_mod(fixture, "schema_versions")
+    ok = sv.schema_supported("1") and sv.schema_supported("1.0.0")
+    raised = False
+    try:
+        sv.assert_supported_schema("99")
+    except sv.SchemaVersionError:
+        raised = True
+    ok = ok and raised
+    app = (fixture / "web" / "app.js").read_text(encoding="utf-8")
+    ok = ok and "SUPPORTED_SCHEMA_VERSION" in app
+    ok = ok and "Unsupported schemaVersion" in app
+    record("schema_version_fail_closed_test", ok, f"raised={raised}")
+
+
+def test_screenshot_sidecar_versions(fixture: Path) -> None:
+    sd = import_mod(fixture, "screenshot_dom")
+    meta = {
+        "dataVersion": "abc",
+        "buildId": "abc",
+        "refreshVersion": "def",
+        "schemaVersion": "1",
+        "appVersion": "1.0.0",
+        "releaseVersion": "1.0.0",
+    }
+    side = sd.build_dom_sidecar(meta, screenshot="01-overview-latest.png", route="overview")
+    ok = side.get("schemaVersion") == "1"
+    ok = ok and side.get("appVersion") == "1.0.0"
+    ok = ok and side.get("releaseVersion") == "1.0.0"
+    ok = ok and side.get("dataVersion") == "abc"
+    shots = fixture / "review-pack" / "screenshots"
+    shots.mkdir(parents=True, exist_ok=True)
+    png = shots / "01-overview-latest.png"
+    png.write_bytes(b"\x89PNG")
+    written = sd.write_screenshot_sidecars(shots, meta)
+    ok = ok and len(written) >= 1
+    loaded = json.loads(written[0].read_text(encoding="utf-8"))
+    ok = ok and loaded.get("schemaVersion") == "1"
+    record("screenshot_sidecar_versions_test", ok, f"keys={sorted(side.keys())}")
+
+
+def test_spoofed_sec_hostname(fixture: Path) -> None:
+    st = import_mod(fixture, "source_tiers")
+    exp = import_mod(fixture, "export_web_data")
+    real = exp.classify_source_tier("https://www.sec.gov/Archives/edgar/data/1045810/x.htm")
+    spoof_path = exp.classify_source_tier("https://evil.example/sec.gov/Archives/edgar/data/x.htm")
+    spoof_host = exp.classify_source_tier("https://www.sec.gov.evil.com/Archives/x")
+    ok = real == 1
+    ok = ok and spoof_path != 1 and spoof_path != "official"
+    ok = ok and spoof_host != 1
+    ok = ok and not st.host_is_official("https://evil.example/sec.gov/foo", "NVDA")
+    record("spoofed_sec_hostname_test", ok, f"real={real} path={spoof_path} host={spoof_host}")
+
+
+def test_query_investor_spoof(fixture: Path) -> None:
+    exp = import_mod(fixture, "export_web_data")
+    real = exp.classify_source_tier("https://investor.nvidia.com/news/press-release", "NVDA")
+    q = exp.classify_source_tier(
+        "https://evil.example/?next=https://investor.nvidia.com/news/press-release", "NVDA"
+    )
+    q2 = exp.classify_source_tier("https://evil.example/?investor.nvidia.com", "NVDA")
+    ok = real == 1
+    ok = ok and q != 1 and q != "official"
+    ok = ok and q2 != 1
+    record("query_investor_spoof_test", ok, f"real={real} q={q} q2={q2}")
+
+
+def test_validate_only_no_commit(fixture: Path) -> None:
+    ing = _bind_ingest(fixture)
+    txn = import_mod(fixture, "transaction")
+    before = txn.read_current(fixture)
+    snap = _complete_watchlist_snap(fixture, _load_base_snap(fixture))
+    snap["snapshot_utc"] = "2026-09-15T17:00:00Z"
+    incoming = _write_incoming_from_snap(fixture, snap, name="von.json")
+    os.environ["PIPELINE_LOCK_HELD"] = "1"
+    os.environ.pop("FAULT_INJECT_COMMIT", None)
+    result = ing.ingest_and_build(incoming, run_export=True, run_publish=False, validate_only=True)
+    ok = result.get("validateOnly") is True
+    ok = ok and result.get("committed") is False
+    ok = ok and result.get("validatedPath") is None
+    ok = ok and incoming.exists()
+    ok = ok and txn.read_current(fixture) == before
+    src = (fixture / "tools" / "ingest_snapshot.py").read_text(encoding="utf-8")
+    ok = ok and "--validate-only" in src
+    record("validate_only_no_commit_test", ok, f"status={result.get('runStatus')}")
+
+
+def test_chart_js_pinned(fixture: Path) -> None:
+    html = (fixture / "web" / "index.html").read_text(encoding="utf-8")
+    root_html = (ROOT / "index.html").read_text(encoding="utf-8")
+    ok = "chart.js@4.4.1" in html
+    ok = ok and "cdn.jsdelivr.net/npm/chart.js\"" not in html.replace("chart.js@4.4.1", "")
+    ok = ok and "chart.js@4.4.1" in root_html
+    ok = ok and "chart.umd.min.js" in html
+    record("chart_js_pinned_test", ok, "chart.js@4.4.1")
+
+
 
 
 def main() -> int:
@@ -3618,6 +4005,25 @@ def main() -> int:
         test_source_domain_classification(fixture)
         test_revision_generation_failure_blocks_export(fixture)
         test_null_eps_not_daily_observation(fixture)
+
+        # True Transaction Boundary + Release Integrity
+        test_parent_lock_ingest_publish(fixture)
+        test_staging_no_persist_before_commit(fixture)
+        test_pure_build_export_mode(fixture)
+        test_transaction_rollback(fixture)
+        test_generation_pointer_rollback(fixture)
+        test_nan_rejected(fixture)
+        test_infinity_rejected(fixture)
+        test_atomic_json(fixture)
+        test_future_timestamp_rejected(fixture)
+        test_invalid_timestamp_rejected(fixture)
+        test_backfill_timestamp_allowed(fixture)
+        test_schema_version_fail_closed(fixture)
+        test_screenshot_sidecar_versions(fixture)
+        test_spoofed_sec_hostname(fixture)
+        test_query_investor_spoof(fixture)
+        test_validate_only_no_commit(fixture)
+        test_chart_js_pinned(fixture)
 
     test_production_unmutated(before)
 

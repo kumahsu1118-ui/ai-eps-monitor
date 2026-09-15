@@ -16,18 +16,23 @@ import re
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-# Resolve project root whether invoked as tools/ or web/tools/ (symlink)
+# Resolve project root. AIEPS_ROOT always wins (staging work roots).
 _here = Path(__file__).resolve().parent
-ROOT = _here.parent if (_here / "export_web_data.py").exists() and (_here.parent / "data" / "snapshots").exists() else _here
-if not (ROOT / "data" / "snapshots").exists():
-    cand = Path(__file__).resolve().parent
-    for _ in range(5):
-        if (cand / "data" / "snapshots").exists():
-            ROOT = cand
-            break
-        cand = cand.parent
-if not (ROOT / "data" / "snapshots").exists():
-    raise SystemExit("Cannot locate project root with data/snapshots")
+_WEB_OUT = os.environ.get("AIEPS_WEB_OUT")
+if os.environ.get("AIEPS_ROOT"):
+    ROOT = Path(os.environ["AIEPS_ROOT"]).resolve()
+    (ROOT / "data" / "snapshots").mkdir(parents=True, exist_ok=True)
+else:
+    ROOT = _here.parent if (_here / "export_web_data.py").exists() and (_here.parent / "data" / "snapshots").exists() else _here
+    if not (ROOT / "data" / "snapshots").exists():
+        cand = Path(__file__).resolve().parent
+        for _ in range(5):
+            if (cand / "data" / "snapshots").exists():
+                ROOT = cand
+                break
+            cand = cand.parent
+    if not (ROOT / "data" / "snapshots").exists():
+        raise SystemExit("Cannot locate project root with data/snapshots")
 
 import sys as _sys
 if str(_here) not in _sys.path:
@@ -40,7 +45,7 @@ ALERTS_PATH = ROOT / "data" / "alerts" / "index.json"
 UNIVERSE_PATH = ROOT / "data" / "universe.json"
 EARNINGS_DIR = ROOT / "data" / "earnings"
 DAILY_SNAP_DIR = ROOT / "data" / "daily_eps_snapshots"
-WEB_DATA = ROOT / "web" / "data"
+WEB_DATA = Path(_WEB_OUT).resolve() if _WEB_OUT else (ROOT / "web" / "data")
 DASH = ROOT / "dashboard"
 
 TAIPEI = timezone(timedelta(hours=8))
@@ -96,8 +101,16 @@ TRUE_CY_STATUS = "unavailable — need quarterly consensus"
 def unavailable(x) -> bool:
     if x is None:
         return True
-    if isinstance(x, float) and math.isnan(x):
-        return True
+    if isinstance(x, bool):
+        return False
+    if isinstance(x, (int, float)) and (math.isnan(float(x)) or math.isinf(float(x))):
+        from atomic_io import NonFiniteNumberError
+        raise NonFiniteNumberError(f"NaN/Inf is not allowed: {x!r}")
+    if isinstance(x, str) and x.strip().lower() in {
+        "nan", "inf", "+inf", "-inf", "infinity", "+infinity", "-infinity",
+    }:
+        from atomic_io import NonFiniteNumberError
+        raise NonFiniteNumberError(f"NaN/Inf is not allowed: {x!r}")
     if isinstance(x, str):
         s = x.strip()
         if s == "" or s.lower() in {
@@ -113,21 +126,32 @@ def unavailable(x) -> bool:
 
 
 def to_num(x):
-    """Parse numbers; treat 'Data unavailable' / n/a as None. Keep 0.0."""
+    """Parse numbers; treat 'Data unavailable' / n/a as None. Keep 0.0. Reject NaN/Inf."""
     if unavailable(x):
         return None
     if isinstance(x, (int, float)):
-        return float(x)
+        v = float(x)
+        if math.isnan(v) or math.isinf(v):
+            from atomic_io import NonFiniteNumberError
+            raise NonFiniteNumberError(f"NaN/Inf is not allowed: {x!r}")
+        return v
     s = str(x).strip().replace(",", "").replace("$", "")
     pct = s.endswith("%")
     if pct:
         s = s[:-1].strip()
     if s.lower() in {"n/a", "na"}:
         return None
+    if s.lower() in {"nan", "inf", "+inf", "-inf", "infinity", "+infinity", "-infinity"}:
+        from atomic_io import NonFiniteNumberError
+        raise NonFiniteNumberError(f"NaN/Inf is not allowed: {x!r}")
     try:
-        return float(s)
+        v = float(s)
     except Exception:
         return None
+    if math.isnan(v) or math.isinf(v):
+        from atomic_io import NonFiniteNumberError
+        raise NonFiniteNumberError(f"NaN/Inf is not allowed: {x!r}")
+    return v
 
 
 def to_display_str(x):
@@ -186,7 +210,9 @@ def persist_full_snapshot(snap: dict, snap_utc: str | None = None) -> Path:
     def _content_hash(obj: dict) -> str:
         payload = {k: v for k, v in (obj or {}).items() if k not in {"qualityGate", "runId", "runStatus"}}
         return hashlib.sha256(
-            json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+            json.dumps(
+                payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False
+            ).encode("utf-8")
         ).hexdigest()[:12]
 
     if path.exists():
@@ -1609,6 +1635,7 @@ def run_build_alerts(
     current_snapshot: dict | None = None,
     snapshot_utc: str | None = None,
     display_years: list[str] | None = None,
+    persist: bool = True,
 ) -> dict:
     """Call deterministic alert engine before writing web/data/alerts.json.
 
@@ -1634,15 +1661,17 @@ def run_build_alerts(
             snapshot_utc=snapshot_utc,
             display_years=display_years,
         )
-        ba.write_alerts(payload)
+        if persist:
+            ba.write_alerts(payload)
         # Stamp last successful evaluation
         payload = dict(payload)
         payload["alertEngineLastSuccessfulEvaluation"] = payload.get("alertEngineLastEvaluated")
         payload["alertEngineLastAttempt"] = payload.get("alertEngineLastEvaluated")
-        try:
-            ba.write_alerts(payload)
-        except Exception:
-            pass
+        if persist:
+            try:
+                ba.write_alerts(payload)
+            except Exception:
+                pass
         return payload
     except Exception as exc:
         now = now_utc_iso()
@@ -1674,7 +1703,8 @@ def run_build_alerts(
 
 
 def canonical_json_bytes(obj) -> bytes:
-    return json.dumps(obj, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+    from atomic_io import dumps_json
+    return dumps_json(obj, indent=None, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
 
 
 def compute_data_version(payload_parts: dict) -> str:
@@ -1810,26 +1840,20 @@ def apply_last_known_good_for_missing(
     return companies
 
 
-def classify_source_tier(url: str | None) -> str | int | None:
-    """Deterministic source classifier.
+def classify_source_tier(url: str | None, ticker: str | None = None) -> str | int | None:
+    """Hostname-based source classifier (never query-string / path substring).
 
     Company IR / SEC → Tier1; official transcript → official;
     Reuters/Bloomberg/WSJ/CNBC → Tier3; Seeking Alpha → Tier4;
     Unknown → Unknown. Never Tier1 merely because a URL exists.
     """
-    if not url:
-        return None
-    u = str(url).lower()
-    if "sec.gov" in u or "investor." in u or "investors." in u or "/ir/" in u or "investor-relations" in u:
-        return 1
-    if "transcript" in u and ("company" in u or "ir." in u or "investor" in u or "sec.gov" in u):
-        return "official"
-    if any(d in u for d in ("reuters.com", "bloomberg.com", "wsj.com", "cnbc.com", "dowjones.com")):
-        return 3
-    if "seekingalpha.com" in u or "seekingalpha" in u:
-        return 4
-    # Known press domains without IR → Unknown (not Tier1)
-    return "Unknown"
+    try:
+        from source_tiers import classify_source_tier as _classify
+        return _classify(url, ticker)
+    except Exception:
+        if not url:
+            return None
+        return "Unknown"
 
 
 def ensure_earnings_provenance(data: dict) -> dict:
@@ -2123,6 +2147,25 @@ def _main_locked() -> int:
             code = 9
         print(f"FAULT_INJECT_EXPORT_EXIT={code}", flush=True)
         return code
+    global WEB_DATA, ROOT, SNAP_DIR, REV_PATH, DRIVERS_DIR, ALERTS_PATH, UNIVERSE_PATH
+    global EARNINGS_DIR, DAILY_SNAP_DIR, DASH, COMPARISON_CHECKPOINT_PATH
+    web_out = os.environ.get("AIEPS_WEB_OUT")
+    if web_out:
+        WEB_DATA = Path(web_out).resolve()
+        WEB_DATA.mkdir(parents=True, exist_ok=True)
+    if os.environ.get("AIEPS_ROOT"):
+        ROOT = Path(os.environ["AIEPS_ROOT"]).resolve()
+        SNAP_DIR = ROOT / "data" / "snapshots"
+        REV_PATH = ROOT / "data" / "revisions" / "history.jsonl"
+        DRIVERS_DIR = ROOT / "data" / "drivers"
+        ALERTS_PATH = ROOT / "data" / "alerts" / "index.json"
+        UNIVERSE_PATH = ROOT / "data" / "universe.json"
+        EARNINGS_DIR = ROOT / "data" / "earnings"
+        DAILY_SNAP_DIR = ROOT / "data" / "daily_eps_snapshots"
+        if not web_out:
+            WEB_DATA = ROOT / "web" / "data"
+        DASH = ROOT / "dashboard"
+        COMPARISON_CHECKPOINT_PATH = ROOT / "data" / "comparison_checkpoint.json"
     snap_path, snap = load_latest_snapshot()
     tickers = load_watchlist()
     prior_snap = None
@@ -2234,8 +2277,13 @@ def _main_locked() -> int:
     revisions = [map_history_row(r) for r in history_raw]
 
     # Only append daily snapshots when publishable (already gated).
-    # When ingest owns commit (INGEST_DEFER_HISTORY=1), skip mutating daily here.
-    if os.environ.get("INGEST_DEFER_HISTORY") == "1":
+    # --pure-build / --validate-only: never persist daily/alerts/revisions/checkpoint
+    # (web JSON may still be written to AIEPS_WEB_OUT). Ingest's work-root export
+    # does not set PURE_BUILD, so persist stays inside AIEPS_ROOT until COMMIT.
+    persist_pipeline = not (
+        os.environ.get("PURE_BUILD") == "1" or os.environ.get("VALIDATE_ONLY") == "1"
+    )
+    if (not persist_pipeline) or os.environ.get("INGEST_DEFER_HISTORY") == "1":
         daily_rows = []
         jsonl_path = DAILY_SNAP_DIR / "daily.jsonl"
         if jsonl_path.exists():
@@ -2246,7 +2294,10 @@ def _main_locked() -> int:
                         daily_rows.append(json.loads(line))
                     except Exception:
                         pass
-        print("INGEST_DEFER_HISTORY=1 — skip daily append (ingest will commit)")
+        if os.environ.get("INGEST_DEFER_HISTORY") == "1":
+            print("INGEST_DEFER_HISTORY=1 — skip daily append (ingest will commit)")
+        else:
+            print("PURE_BUILD — skip daily/alerts/snapshot persist")
     else:
         daily_rows = seed_and_append_daily_snapshots(
             companies, tickers, snap, snap_path, year_keys=year_keys
@@ -2257,7 +2308,7 @@ def _main_locked() -> int:
 
     # Auto-generate revision events BEFORE Alert Engine when not already done by ingest.
     # Identity: ticker + reportedFiscalPeriodEnding. Must complete so single_revision_gt_2pct works.
-    if os.environ.get("INGEST_REVISIONS_DONE") != "1":
+    if persist_pipeline and os.environ.get("INGEST_REVISIONS_DONE") != "1":
         try:
             import ingest_snapshot as ing
             hist_for_rev = ing.load_revision_history(REV_PATH)
@@ -2276,6 +2327,7 @@ def _main_locked() -> int:
         current_snapshot=snap,
         snapshot_utc=snap_utc,
         display_years=year_keys,
+        persist=persist_pipeline,
     )
     active = alerts_payload.get("activeAlerts") or alerts_payload.get("alerts") or []
     history_alerts = alerts_payload.get("alertHistory") or active
@@ -2390,6 +2442,19 @@ def _main_locked() -> int:
         "driverExportErrors": driver_errors or None,
         "qualityGate": snap.get("qualityGate"),
     }
+    try:
+        from schema_versions import version_fields
+        meta.update(version_fields())
+    except Exception:
+        meta["schemaVersion"] = "1"
+        meta["appVersion"] = "1.0.0"
+        meta["releaseVersion"] = "1.0.0"
+        meta["supportedSchemaVersion"] = "1"
+    try:
+        from source_tiers import OFFICIAL_DOMAINS_BY_TICKER
+        meta["officialDomainsByTicker"] = OFFICIAL_DOMAINS_BY_TICKER
+    except Exception:
+        meta["officialDomainsByTicker"] = {}
 
     WEB_DATA.mkdir(parents=True, exist_ok=True)
     # Stamp buildId on every public JSON so frontend can reject mixed generations
@@ -2426,18 +2491,20 @@ def _main_locked() -> int:
     write_json(WEB_DATA / "dashboard.json", dashboard)
 
     # Advance What-Changed checkpoint AFTER successful collection/export (atomic)
-    try:
-        cp = advance_comparison_checkpoint(snap_utc)
-        print(f"  comparisonCheckpoint → {cp.get('snapUtc')}")
-    except Exception as cp_exc:
-        print(f"ERROR: failed to advance comparisonCheckpoint: {cp_exc}")
-        raise
+    if persist_pipeline:
+        try:
+            cp = advance_comparison_checkpoint(snap_utc)
+            print(f"  comparisonCheckpoint → {cp.get('snapUtc')}")
+        except Exception as cp_exc:
+            print(f"ERROR: failed to advance comparisonCheckpoint: {cp_exc}")
+            raise
 
-    try:
-        regenerate_markdown_backups(companies, valuation, snap, tickers, year_keys=year_keys)
-    except Exception as md_exc:
-        # Markdown backup may exception without aborting core JSON export
-        print(f"markdown backup skipped: {md_exc}")
+        try:
+            regenerate_markdown_backups(companies, valuation, snap, tickers, year_keys=year_keys)
+        except Exception as md_exc:
+            print(f"markdown backup skipped: {md_exc}")
+    else:
+        print("PURE_BUILD — skip checkpoint / markdown persist")
 
     print(f"Exported web data → {WEB_DATA}")
     print(f"  snapshot: {snap_path.name}")
@@ -2455,4 +2522,16 @@ def _main_locked() -> int:
 
 
 if __name__ == "__main__":
+    import argparse
+    ap = argparse.ArgumentParser(description="Export web data")
+    ap.add_argument("--pure-build", action="store_true", help="Do not persist snapshots/revisions/daily/alerts")
+    ap.add_argument("--web-out", help="Write web JSON to this directory (pure-build)")
+    ap.add_argument("--validate-only", action="store_true", help="Same as --pure-build (no pipeline persist)")
+    args = ap.parse_args()
+    if args.web_out:
+        os.environ["AIEPS_WEB_OUT"] = args.web_out
+    if args.pure_build or args.validate_only:
+        os.environ["PURE_BUILD"] = "1"
+    if args.validate_only:
+        os.environ["VALIDATE_ONLY"] = "1"
     raise SystemExit(main())

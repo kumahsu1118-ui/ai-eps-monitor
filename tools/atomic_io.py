@@ -1,8 +1,12 @@
 #!/usr/bin/env python3
-"""Process lock (flock) + atomic JSON / JSONL writes for ai-eps-monitor."""
+"""Process lock (flock) + atomic JSON / JSONL writes for ai-eps-monitor.
+
+All JSON serialization uses allow_nan=False. NaN / Inf are rejected everywhere.
+"""
 from __future__ import annotations
 
 import json
+import math
 import os
 import tempfile
 from pathlib import Path
@@ -11,6 +15,59 @@ try:
     import fcntl
 except ImportError:  # pragma: no cover
     fcntl = None
+
+NONFINITE_STRINGS = {
+    "nan", "inf", "+inf", "-inf", "infinity", "+infinity", "-infinity",
+    "nan()", "inf()",
+}
+
+
+class NonFiniteNumberError(ValueError):
+    """NaN or Infinity is not allowed in persisted JSON or numeric fields."""
+
+
+def is_nonfinite_number(x) -> bool:
+    if isinstance(x, bool) or x is None:
+        return False
+    if isinstance(x, (int, float)):
+        try:
+            return math.isnan(float(x)) or math.isinf(float(x))
+        except Exception:
+            return False
+    if isinstance(x, str):
+        return x.strip().lower() in NONFINITE_STRINGS
+    return False
+
+
+def reject_nonfinite(x, field: str = "value") -> None:
+    if is_nonfinite_number(x):
+        raise NonFiniteNumberError(f"{field} is not finite: {x!r}")
+
+
+def assert_finite_numbers(obj, path: str = "$") -> None:
+    if isinstance(obj, dict):
+        for k, v in obj.items():
+            assert_finite_numbers(v, f"{path}.{k}")
+    elif isinstance(obj, (list, tuple)):
+        for i, v in enumerate(obj):
+            assert_finite_numbers(v, f"{path}[{i}]")
+    else:
+        reject_nonfinite(obj, field=path)
+
+
+def dumps_json(obj, *, indent=2, sort_keys=False, separators=None, ensure_ascii=False) -> str:
+    """json.dumps with allow_nan=False after walking for NaN/Inf."""
+    assert_finite_numbers(obj)
+    kwargs = {
+        "ensure_ascii": ensure_ascii,
+        "allow_nan": False,
+        "sort_keys": sort_keys,
+    }
+    if indent is not None:
+        kwargs["indent"] = indent
+    if separators is not None:
+        kwargs["separators"] = separators
+    return json.dumps(obj, **kwargs)
 
 
 class ProcessLock:
@@ -80,8 +137,8 @@ def _default_lock_path(path: Path) -> Path:
 
 
 def atomic_write_json(path: Path, obj, *, lock_path: Path | None = None) -> None:
-    """JSON write via temp + atomic rename; optional process lock."""
-    payload = json.dumps(obj, indent=2, ensure_ascii=False) + "\n"
+    """JSON write via temp + atomic rename; optional process lock. allow_nan=False."""
+    payload = dumps_json(obj, indent=2, ensure_ascii=False) + "\n"
     lock = Path(lock_path) if lock_path else _default_lock_path(Path(path))
     with ProcessLock(lock):
         atomic_write_text(path, payload)
@@ -101,7 +158,7 @@ def append_jsonl_atomic(path: Path, rows: list[dict], *, lock_path: Path | None 
         if buf and not buf.endswith("\n"):
             buf += "\n"
         for row in rows:
-            buf += json.dumps(row, ensure_ascii=False) + "\n"
+            buf += dumps_json(row, indent=None, ensure_ascii=False) + "\n"
         atomic_write_text(path, buf)
 
 

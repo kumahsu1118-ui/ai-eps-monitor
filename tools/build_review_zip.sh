@@ -39,6 +39,39 @@ if dv != sdv or dv != ldv:
 print(f"Same-build gate OK dataVersion={dv[:16]}…")
 PYGATE
 
+# screenshot_dom_build_identity + secret content scan
+python3 - <<'PYDOM'
+import json, re, sys
+from pathlib import Path
+ROOT = Path("/workspace/ai-eps-monitor")
+shots = ROOT / "review-pack" / "screenshots"
+meta_web = ROOT / "web" / "data" / "meta.json"
+if not meta_web.exists():
+    print("ERROR: meta.json missing for screenshot_dom_build_identity", file=sys.stderr)
+    sys.exit(1)
+meta = json.loads(meta_web.read_text(encoding="utf-8"))
+secret_re = re.compile(r"ghp_[A-Za-z0-9]{20,}|-----BEGIN (?:RSA )?PRIVATE KEY-----")
+ok = True
+for png in sorted(shots.glob("*-latest.png")) if shots.exists() else []:
+    side = png.with_suffix(".dom.json")
+    if not side.exists():
+        print(f"ERROR: screenshot_dom_build_identity missing {side.name}", file=sys.stderr)
+        ok = False
+        continue
+    data = json.loads(side.read_text(encoding="utf-8"))
+    for field in ("dataVersion", "refreshVersion", "sitePublished"):
+        if meta.get(field) and data.get(field) not in (None, meta.get(field)):
+            print(f"ERROR: sidecar {side.name} {field} mismatch", file=sys.stderr)
+            ok = False
+    blob = json.dumps(data)
+    if secret_re.search(blob):
+        print(f"ERROR: secret content scan hit in {side.name}", file=sys.stderr)
+        ok = False
+if not ok:
+    sys.exit(1)
+print("screenshot_dom_build_identity OK; secret content scan clean")
+PYDOM
+
 
 # --- different_detail_screenshot gate (Final Reliability) ---
 # 06-nvda-earnings-latest.png and 07-avgo-earnings-latest.png must be REAL distinct
@@ -87,7 +120,7 @@ cp -a "$ROOT"/web/index.html "$ROOT"/web/app.js "$ROOT"/web/styles.css "$DEST/we
 cp -a "$ROOT"/web/data/*.json "$DEST/web/data/" 2>/dev/null || true
 
 # Tools (no secrets)
-for f in export_web_data.py build_alerts.py run_acceptance_tests.py sa_parser.py atomic_io.py snapshot_quality.py publish_github_pages.sh build_review_zip.sh generate_readme_review.py; do
+for f in export_web_data.py build_alerts.py run_acceptance_tests.py sa_parser.py atomic_io.py snapshot_quality.py ingest_snapshot.py transaction.py source_tiers.py schema_versions.py timestamp_gate.py screenshot_dom.py project_root.py publish_github_pages.sh build_review_zip.sh generate_readme_review.py; do
   cp -a "$ROOT/tools/$f" "$DEST/tools/" 2>/dev/null || true
 done
 

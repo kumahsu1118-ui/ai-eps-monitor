@@ -2,20 +2,35 @@
 # Sync exported web/ public files → site-repo → git push
 # Second line of defense: abort if qualityGate.publishable != true
 # NO_CHANGES (exit 0) when public payload hash (dataVersion+refreshVersion) unchanged
+#
+# PIPELINE_LOCK_HELD=1: parent already holds data/.pipeline.lock — skip re-flock.
 set -euo pipefail
-ROOT=/workspace/ai-eps-monitor
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+export AIEPS_ROOT="$ROOT"
 LOCK="$ROOT/data/.pipeline.lock"
 mkdir -p "$ROOT/data"
-# Hold exclusive flock for Quality Gate → export → publish (fd 9)
-exec 9>"$LOCK"
-if ! flock -n 9; then
-  echo "RUN ALREADY IN PROGRESS" >&2
-  exit 2
+
+VALIDATE_ONLY=0
+for arg in "$@"; do
+  if [[ "$arg" == "--validate-only" ]]; then
+    VALIDATE_ONLY=1
+  fi
+done
+
+if [[ "${PIPELINE_LOCK_HELD:-0}" == "1" ]]; then
+  echo "skip re-flock (PIPELINE_LOCK_HELD=1)"
+else
+  # Hold exclusive flock for Quality Gate → export → publish (fd 9)
+  exec 9>"$LOCK"
+  if ! flock -n 9; then
+    echo "RUN ALREADY IN PROGRESS" >&2
+    exit 2
+  fi
+  export PIPELINE_LOCK_HELD=1
 fi
-export PIPELINE_LOCK_HELD=1
 WEB="$ROOT/web"
 REPO="$ROOT/site-repo"
-export PATH="/home/box/.local/bin:$PATH"
+export PATH="/home/box/.local/bin:${PATH:-}"
 
 # Alert evaluation is post-gate only via export_web_data.run_build_alerts()
 # SKIP_EXPORT=1 / PUBLISH_PREBUILT=1: publish already-exported web/ (ingest --publish)
@@ -33,10 +48,10 @@ else
 fi
 
 # Second line of defense: qualityGate.publishable must be true
-python3 - <<'PYGATE'
-import json, sys
+python3 - <<PYGATE
+import json, os, sys
 from pathlib import Path
-meta_path = Path("/workspace/ai-eps-monitor/web/data/meta.json")
+meta_path = Path(os.environ["AIEPS_ROOT"]) / "web" / "data" / "meta.json"
 if not meta_path.exists():
     print("ERROR: meta.json missing after export — abort publish", file=sys.stderr)
     sys.exit(1)
@@ -52,11 +67,18 @@ if qg.get("publishable") is not True:
 print(f"qualityGate OK status={qg.get('status')} publishable=true")
 PYGATE
 
-# Compute content hash: dataVersion + refreshVersion (metadata-only commit OK)
+if [[ "${VALIDATE_ONLY:-0}" == "1" ]]; then
+  echo "VALIDATE_ONLY — no git commit / push"
+  exit 0
+fi
+if [[ "${SKIP_GIT_PUSH:-}" == "1" ]]; then
+  echo "SKIP_GIT_PUSH=1 — publish checks passed, not committing"
+  exit 0
+fi
 HASH=$(python3 - <<'PY'
-import hashlib, json
+import hashlib, json, os
 from pathlib import Path
-ROOT = Path("/workspace/ai-eps-monitor")
+ROOT = Path(os.environ["AIEPS_ROOT"])
 WEB = ROOT / "web"
 h = hashlib.sha256()
 
@@ -122,11 +144,12 @@ import os
 import sys
 from pathlib import Path
 from datetime import datetime, timezone, timedelta
-sys.path.insert(0, "/workspace/ai-eps-monitor/tools")
+sys.path.insert(0, str(Path(os.environ["AIEPS_ROOT"]) / "tools"))
 from atomic_io import atomic_write_json
 
-meta_path = Path("/workspace/ai-eps-monitor/web/data/meta.json")
-dash_path = Path("/workspace/ai-eps-monitor/web/data/dashboard.json")
+root = Path(os.environ["AIEPS_ROOT"])
+meta_path = root / "web" / "data" / "meta.json"
+dash_path = root / "web" / "data" / "dashboard.json"
 meta = json.loads(meta_path.read_text(encoding="utf-8"))
 now = datetime.now(timezone(timedelta(hours=8)))
 utc = now.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")

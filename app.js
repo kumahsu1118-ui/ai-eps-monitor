@@ -4,6 +4,7 @@
 
   const DATA_BASE = "./data";
   const NA_TITLE = "Data unavailable from source";
+  const SUPPORTED_SCHEMA_VERSION = "1";
 
   const state = {
     watchlist: [],
@@ -416,6 +417,16 @@
 
     state.watchlist = (watchlist && watchlist.tickers) || Object.keys(companies || {});
     state.meta = meta || {};
+    var schemaVer = state.meta.schemaVersion;
+    if (schemaVer != null && String(schemaVer).trim() !== "") {
+      var sv = String(schemaVer).trim();
+      var supported = sv === SUPPORTED_SCHEMA_VERSION || sv.indexOf(SUPPORTED_SCHEMA_VERSION + ".") === 0;
+      if (!supported) {
+        throw new Error(
+          "Unsupported schemaVersion " + sv + " (SUPPORTED_SCHEMA_VERSION=" + SUPPORTED_SCHEMA_VERSION + ")"
+        );
+      }
+    }
     state.companies = companies || {};
     state.valuation = (valuation && valuation.rows) || (Array.isArray(valuation) ? valuation : []);
     state.revisions = (revisions && revisions.revisions) || (Array.isArray(revisions) ? revisions : []);

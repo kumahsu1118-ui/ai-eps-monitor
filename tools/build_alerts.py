@@ -37,20 +37,24 @@ Writes data/alerts/index.json with activeAlerts + alertHistory (+ legacy alerts 
 from __future__ import annotations
 
 import json
+import os
 import re
 import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 _here = Path(__file__).resolve().parent
-ROOT = _here.parent
-if not (ROOT / "data" / "snapshots").exists():
-    cand = Path(__file__).resolve().parent
-    for _ in range(5):
-        if (cand / "data" / "snapshots").exists():
-            ROOT = cand
-            break
-        cand = cand.parent
+if os.environ.get("AIEPS_ROOT"):
+    ROOT = Path(os.environ["AIEPS_ROOT"]).resolve()
+else:
+    ROOT = _here.parent
+    if not (ROOT / "data" / "snapshots").exists():
+        cand = Path(__file__).resolve().parent
+        for _ in range(5):
+            if (cand / "data" / "snapshots").exists():
+                ROOT = cand
+                break
+            cand = cand.parent
 
 REV_PATH = ROOT / "data" / "revisions" / "history.jsonl"
 EARNINGS_DIR = ROOT / "data" / "earnings"
@@ -115,15 +119,25 @@ def now_utc_iso() -> str:
 def to_num(x):
     if x is None:
         return None
+    if isinstance(x, bool):
+        return float(int(x))
     if isinstance(x, (int, float)):
-        return float(x)
+        v = float(x)
+        if v != v or v == float("inf") or v == float("-inf"):
+            raise ValueError(f"NaN/Inf is not allowed: {x!r}")
+        return v
     s = str(x).strip().replace(",", "").replace("%", "").replace("$", "")
     if s.lower() in {"", "n/a", "na", "n/a (baseline)", "data unavailable", "null", "none"}:
         return None
+    if s.lower() in {"nan", "inf", "+inf", "-inf", "infinity", "+infinity", "-infinity"}:
+        raise ValueError(f"NaN/Inf is not allowed: {x!r}")
     try:
-        return float(s)
+        v = float(s)
     except Exception:
         return None
+    if v != v or v == float("inf") or v == float("-inf"):
+        raise ValueError(f"NaN/Inf is not allowed: {x!r}")
+    return v
 
 
 def load_tickers() -> list[str]:
