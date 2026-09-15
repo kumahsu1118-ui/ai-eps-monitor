@@ -674,3 +674,62 @@ table.data .ticker a:hover {
   display: inline-flex;
   gap: 0;
 }
+
+/* Mobile / horizontal scroll: sticky first column */
+.table-wrap table.data th:first-child,
+.table-wrap table.data td:first-child {
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  background: var(--bg-panel);
+  box-shadow: 1px 0 0 var(--border-subtle);
+}
+.table-wrap table.data th:first-child {
+  z-index: 3;
+  background: var(--table-header);
+}
+
+/* Per-ticker stale marker */
+tr.ticker-stale td {
+  opacity: 0.92;
+}
+.stale-ticker-badge {
+  display: inline-block;
+  margin-left: 0.35rem;
+  padding: 0.05rem 0.3rem;
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  color: #fff;
+  background: #b45309;
+  border-radius: 3px;
+  vertical-align: middle;
+}
+
+.alerts-engine-error {
+  color: #b91c1c;
+  font-weight: 700;
+}
+
+/* Consensus range bar on company page */
+.range-bar {
+  min-width: 8rem;
+}
+.range-bar-track {
+  height: 0.45rem;
+  background: var(--border-subtle);
+  border-radius: 999px;
+  overflow: hidden;
+  position: relative;
+}
+.range-bar-fill {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 999px;
+  max-width: 100%;
+}
+.range-bar-labels {
+  font-size: 0.7rem;
+  color: var(--text-secondary);
+  margin-top: 0.15rem;
+}

@@ -11,20 +11,29 @@
         "label": "Revenue",
         "value": "$96.22B",
         "yoy": "+105.85% Y/Y",
-        "qoq": null
+        "qoq": null,
+        "sourceUrl": "https://investor.nvidia.com/news/press-release-details/2026/NVIDIA-Announces-Financial-Results-for-Second-Quarter-Fiscal-2027/default.aspx",
+        "sourceTier": 1,
+        "source": "Company IR"
       }
     ],
     "eps": [
       {
         "label": "EPS",
         "value": "$2.22",
-        "type": "non-GAAP (call discusses non-GAAP measures)"
+        "type": "non-GAAP (call discusses non-GAAP measures)",
+        "sourceUrl": "https://investor.nvidia.com/news/press-release-details/2026/NVIDIA-Announces-Financial-Results-for-Second-Quarter-Fiscal-2027/default.aspx",
+        "sourceTier": 1,
+        "source": "Company IR"
       }
     ],
     "margins": [
       {
         "label": "Gross Margin",
-        "value": "75% GAAP and non-GAAP"
+        "value": "75% GAAP and non-GAAP",
+        "sourceUrl": "https://investor.nvidia.com/news/press-release-details/2026/NVIDIA-Announces-Financial-Results-for-Second-Quarter-Fiscal-2027/default.aspx",
+        "sourceTier": 1,
+        "source": "Company IR"
       }
     ],
     "results": {
@@ -34,14 +43,19 @@
       "epsType": "non-GAAP (call discusses non-GAAP measures)",
       "grossMargin": "75% GAAP and non-GAAP",
       "vsConsensus": "Above",
-      "notes": "SA earnings summary says EPS beat consensus by $0.13 and revenue beat by $4.06B. Data-center revenue was $89B, +18% QoQ; hyperscale was $49B, +13% sequentially; ACIE was $40B, +25% sequentially and +138% Y/Y."
+      "notes": "SA earnings summary says EPS beat consensus by $0.13 and revenue beat by $4.06B. Data-center revenue was $89B, +18% QoQ; hyperscale was $49B, +13% sequentially; ACIE was $40B, +25% sequentially and +138% Y/Y.",
+      "sourceUrl": "https://investor.nvidia.com/news/press-release-details/2026/NVIDIA-Announces-Financial-Results-for-Second-Quarter-Fiscal-2027/default.aspx",
+      "secUrl": "https://www.sec.gov/Archives/edgar/data/1045810/000104581026000073/nvda-20260826.htm",
+      "sourceTier": 1
     },
     "guidance": "Next-qtr revenue: $108B +/- 2%; GM guide: Q3 FY27 GAAP and non-GAAP 74% +/- 50 bps; expected Q4 trough 71%-72%; FY28 expected 72%-73%; Annual / LT: Preliminary FY28 revenue growth approximately 70% Y/Y; supply expected to remain a bottleneck through at least FY28; Guide vs consensus: unknown",
     "guidanceDetail": {
       "nextQuarterRevenue": "$108B +/- 2%",
       "grossMargin": "Q3 FY27 GAAP and non-GAAP 74% +/- 50 bps; expected Q4 trough 71%-72%; FY28 expected 72%-73%",
       "annual": "Preliminary FY28 revenue growth approximately 70% Y/Y; supply expected to remain a bottleneck through at least FY28",
-      "vsConsensus": "unknown"
+      "vsConsensus": "unknown",
+      "sourceUrl": "https://investor.nvidia.com/news/press-release-details/2026/NVIDIA-Announces-Financial-Results-for-Second-Quarter-Fiscal-2027/default.aspx",
+      "sourceTier": 1
     },
     "comparison": "Above",
     "positives": [
@@ -218,28 +232,28 @@
     ],
     "sources": [
       {
-        "title": "Company IR earnings release",
-        "url": null,
-        "date": null,
+        "title": "NVIDIA Announces Financial Results for Second Quarter Fiscal 2027",
+        "url": "https://investor.nvidia.com/news/press-release-details/2026/NVIDIA-Announces-Financial-Results-for-Second-Quarter-Fiscal-2027/default.aspx",
+        "date": "2026-08-26",
         "sourceTier": 1,
         "attribution": "Company IR",
-        "note": "Primary link not yet attached"
+        "note": "Official investor.nvidia.com press release"
       },
       {
-        "title": "SEC 10-Q / 10-K / 8-K",
-        "url": null,
-        "date": null,
+        "title": "NVIDIA Form 8-K (Item 2.02) — Q2 FY2027",
+        "url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581026000073/nvda-20260826.htm",
+        "date": "2026-08-26",
         "sourceTier": 2,
         "attribution": "SEC",
-        "note": "Primary filing link not yet attached"
+        "note": "Current Report on Form 8-K; press release as Exhibit 99.1"
       },
       {
-        "title": "Official earnings transcript",
-        "url": null,
-        "date": null,
-        "sourceTier": 3,
-        "attribution": "Company / official transcript",
-        "note": "Official transcript link not yet attached; SA transcript used as supplemental"
+        "title": "Exhibit 99.1 — Q2 FY2027 Press Release (SEC)",
+        "url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581026000073/q2fy27pr.htm",
+        "date": "2026-08-26",
+        "sourceTier": 2,
+        "attribution": "SEC",
+        "note": "Press release furnished with 8-K"
       },
       {
         "title": "NVIDIA Corporation (NVDA) Q2 2027 Earnings Call Transcript",
@@ -247,7 +261,7 @@
         "date": "2026-08-26",
         "sourceTier": 4,
         "attribution": "Seeking Alpha supplemental",
-        "note": "SA-hosted transcript — supplemental until official IR/SEC primary link attached"
+        "note": "SA-hosted transcript — Q&A supplemental (tier 4)"
       },
       {
         "title": "NVIDIA Q2 2027 Earnings Call Insights",
@@ -263,11 +277,10 @@
       "operatingMargin not stated",
       "fcf not stated",
       "nextQuarterEps not stated",
-      "guidance operatingMargin not stated",
-      "Company IR earnings release / SEC 10-Q/10-K/8-K primary links not yet attached; SA URLs kept as supplemental (tier 4)"
+      "guidance operatingMargin not stated"
     ],
     "digestVersion": "investor-v1",
-    "updatedAt": "2026-09-15T02:50:00Z",
+    "updatedAt": "2026-09-15T05:30:00Z",
     "sourceHierarchy": "Source hierarchy: (1) Company IR earnings release (2) SEC 10-Q/10-K/8-K (3) Official earnings transcript (4) Seeking Alpha supplemental",
     "nextEarningsStatus": "estimated",
     "nextEarningsSource": "Seeking Alpha",
@@ -285,28 +298,43 @@
         "label": "Revenue",
         "value": "$29.6B",
         "yoy": "+86% Y/Y",
-        "qoq": null
+        "qoq": null,
+        "sourceUrl": "https://investors.broadcom.com/news-releases/news-release-details/broadcom-inc-announces-third-quarter-fiscal-year-2026-financial",
+        "sourceTier": 1,
+        "source": "Company IR"
       }
     ],
     "eps": [
       {
         "label": "EPS",
         "value": "$3.32",
-        "type": "non-GAAP"
+        "type": "non-GAAP",
+        "sourceUrl": "https://investors.broadcom.com/news-releases/news-release-details/broadcom-inc-announces-third-quarter-fiscal-year-2026-financial",
+        "sourceTier": 1,
+        "source": "Company IR"
       }
     ],
     "margins": [
       {
         "label": "Gross Margin",
-        "value": "75% consolidated; semiconductor solutions approximately 67% (corrected on Q&A)"
+        "value": "75% consolidated; semiconductor solutions approximately 67% (corrected on Q&A)",
+        "sourceUrl": "https://investors.broadcom.com/news-releases/news-release-details/broadcom-inc-announces-third-quarter-fiscal-year-2026-financial",
+        "sourceTier": 1,
+        "source": "Company IR"
       },
       {
         "label": "Operating Margin",
-        "value": "67.9%"
+        "value": "67.9%",
+        "sourceUrl": "https://investors.broadcom.com/news-releases/news-release-details/broadcom-inc-announces-third-quarter-fiscal-year-2026-financial",
+        "sourceTier": 1,
+        "source": "Company IR"
       },
       {
         "label": "FCF",
-        "value": "$13.7B (46% of revenue)"
+        "value": "$13.7B (46% of revenue)",
+        "sourceUrl": "https://investors.broadcom.com/news-releases/news-release-details/broadcom-inc-announces-third-quarter-fiscal-year-2026-financial",
+        "sourceTier": 1,
+        "source": "Company IR"
       }
     ],
     "results": {
@@ -318,7 +346,10 @@
       "operatingMargin": "67.9%",
       "fcf": "$13.7B (46% of revenue)",
       "vsConsensus": "Above",
-      "notes": "SA summary says EPS beat by $0.08 and revenue beat by $156.49M. AI semiconductor revenue was $16.7B, +221% Y/Y and +54% sequentially; infrastructure software revenue was $8.8B, +29% Y/Y."
+      "notes": "SA summary says EPS beat by $0.08 and revenue beat by $156.49M. AI semiconductor revenue was $16.7B, +221% Y/Y and +54% sequentially; infrastructure software revenue was $8.8B, +29% Y/Y.",
+      "sourceUrl": "https://investors.broadcom.com/news-releases/news-release-details/broadcom-inc-announces-third-quarter-fiscal-year-2026-financial",
+      "secUrl": "https://www.sec.gov/Archives/edgar/data/1730168/000173016826000076/avgo-20260902.htm",
+      "sourceTier": 1
     },
     "guidance": "Next-qtr revenue: $34.8B, +93% Y/Y; semiconductor revenue approximately $26.1B; infrastructure software approximately $8.7B; GM guide: Q4 consolidated approximately 73%; OpM guide: Q4 approximately 66%; Annual / LT: FY26 AI revenue approximately $58B (+186% Y/Y); FY27 AI revenue approximately $115B; FY28 AI semiconductor revenue approximately $230B; management is on target to exceed $30 EPS in FY28; Guide vs consensus: unknown",
     "guidanceDetail": {
@@ -326,7 +357,9 @@
       "grossMargin": "Q4 consolidated approximately 73%",
       "operatingMargin": "Q4 approximately 66%",
       "annual": "FY26 AI revenue approximately $58B (+186% Y/Y); FY27 AI revenue approximately $115B; FY28 AI semiconductor revenue approximately $230B; management is on target to exceed $30 EPS in FY28",
-      "vsConsensus": "unknown"
+      "vsConsensus": "unknown",
+      "sourceUrl": "https://investors.broadcom.com/news-releases/news-release-details/broadcom-inc-announces-third-quarter-fiscal-year-2026-financial",
+      "sourceTier": 1
     },
     "comparison": "Above",
     "positives": [
@@ -503,28 +536,28 @@
     ],
     "sources": [
       {
-        "title": "Company IR earnings release",
-        "url": null,
-        "date": null,
+        "title": "Broadcom Inc. Announces Third Quarter Fiscal Year 2026 Financial Results and Quarterly Dividend",
+        "url": "https://investors.broadcom.com/news-releases/news-release-details/broadcom-inc-announces-third-quarter-fiscal-year-2026-financial",
+        "date": "2026-09-02",
         "sourceTier": 1,
         "attribution": "Company IR",
-        "note": "Primary link not yet attached"
+        "note": "Official investors.broadcom.com press release"
       },
       {
-        "title": "SEC 10-Q / 10-K / 8-K",
-        "url": null,
-        "date": null,
+        "title": "Broadcom Form 8-K (Item 2.02) — Q3 FY2026",
+        "url": "https://www.sec.gov/Archives/edgar/data/1730168/000173016826000076/avgo-20260902.htm",
+        "date": "2026-09-02",
         "sourceTier": 2,
         "attribution": "SEC",
-        "note": "Primary filing link not yet attached"
+        "note": "Current Report on Form 8-K; press release as Exhibit 99.1"
       },
       {
-        "title": "Official earnings transcript",
-        "url": null,
-        "date": null,
-        "sourceTier": 3,
-        "attribution": "Company / official transcript",
-        "note": "Official transcript link not yet attached; SA transcript used as supplemental"
+        "title": "Exhibit 99.1 — Q3 FY2026 Press Release (SEC)",
+        "url": "https://www.sec.gov/Archives/edgar/data/1730168/000173016826000076/avgo-08022026x8kxex99.htm",
+        "date": "2026-09-02",
+        "sourceTier": 2,
+        "attribution": "SEC",
+        "note": "Press release furnished with 8-K"
       },
       {
         "title": "Broadcom Inc. (AVGO) Q3 2026 Earnings Call Transcript",
@@ -532,7 +565,7 @@
         "date": "2026-09-02",
         "sourceTier": 4,
         "attribution": "Seeking Alpha supplemental",
-        "note": "SA-hosted transcript — supplemental until official IR/SEC primary link attached"
+        "note": "SA-hosted transcript — Q&A supplemental (tier 4)"
       },
       {
         "title": "Broadcom Q3 2026 Earnings Call Insights",
@@ -545,11 +578,10 @@
     ],
     "dataGaps": [
       "revenueQoQ for consolidated revenue not stated on the transcript page",
-      "nextQuarterEps not stated",
-      "Company IR earnings release / SEC 10-Q/10-K/8-K primary links not yet attached; SA URLs kept as supplemental (tier 4)"
+      "nextQuarterEps not stated"
     ],
     "digestVersion": "investor-v1",
-    "updatedAt": "2026-09-15T02:50:00Z",
+    "updatedAt": "2026-09-15T05:30:00Z",
     "sourceHierarchy": "Source hierarchy: (1) Company IR earnings release (2) SEC 10-Q/10-K/8-K (3) Official earnings transcript (4) Seeking Alpha supplemental",
     "nextEarningsStatus": "estimated",
     "nextEarningsSource": "Seeking Alpha",

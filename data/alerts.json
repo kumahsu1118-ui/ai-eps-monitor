@@ -1,3 +1,60 @@
 {
-  "alerts": []
+  "alerts": [
+    {
+      "id": "guidance_vs_consensus:NVDA:na",
+      "rule": "guidance_vs_consensus",
+      "severity": "medium",
+      "ticker": "NVDA",
+      "message": "NVDA: results/guidance vs consensus marked Above",
+      "title": "NVDA: results/guidance vs consensus marked Above",
+      "comparison": "Above",
+      "period": "Q2 2027 (fiscal 2027)"
+    },
+    {
+      "id": "guidance_vs_consensus:AVGO:na",
+      "rule": "guidance_vs_consensus",
+      "severity": "medium",
+      "ticker": "AVGO",
+      "message": "AVGO: results/guidance vs consensus marked Above",
+      "title": "AVGO: results/guidance vs consensus marked Above",
+      "comparison": "Above",
+      "period": "Q3 2026 (fiscal 2026)"
+    },
+    {
+      "id": "gm_guidance_change_gt_200bps:AVGO:na",
+      "rule": "gm_guidance_change_gt_200bps",
+      "severity": "high",
+      "ticker": "AVGO",
+      "message": "AVGO: GM guidance/result change -210 bps (>200 bps)",
+      "title": "AVGO: GM guidance/result change -210 bps (>200 bps)",
+      "bpsChange": -210.0
+    },
+    {
+      "id": "driver_status_change:NVDA:na",
+      "rule": "driver_status_change",
+      "severity": "medium",
+      "ticker": "NVDA",
+      "message": "NVDA driver 'GPU shipment': unchanged → improving — Record Q2 revenue $96.22B (+106% Y/Y); data-center revenue $89B (+18% QoQ) per IR release.",
+      "title": "NVDA driver 'GPU shipment': unchanged → improving — Record Q2 revenue $96.22B (+106% Y/Y); data-center revenue $89B (+18% QoQ) per IR release.",
+      "driver": "GPU shipment",
+      "previousStatus": "unchanged",
+      "currentStatus": "improving",
+      "sourceUrl": "https://investor.nvidia.com/news/press-release-details/2026/NVIDIA-Announces-Financial-Results-for-Second-Quarter-Fiscal-2027/default.aspx"
+    },
+    {
+      "id": "driver_status_change:AVGO:na",
+      "rule": "driver_status_change",
+      "severity": "medium",
+      "ticker": "AVGO",
+      "message": "AVGO driver 'AI ASIC': unchanged → improving — AI semiconductor revenue $16.7B (+221% Y/Y, +54% QoQ); FY27 AI ~$115B / FY28 ~$230B outlook (IR).",
+      "title": "AVGO driver 'AI ASIC': unchanged → improving — AI semiconductor revenue $16.7B (+221% Y/Y, +54% QoQ); FY27 AI ~$115B / FY28 ~$230B outlook (IR).",
+      "driver": "AI ASIC",
+      "previousStatus": "unchanged",
+      "currentStatus": "improving",
+      "sourceUrl": "https://investors.broadcom.com/news-releases/news-release-details/broadcom-inc-announces-third-quarter-fiscal-year-2026-financial"
+    }
+  ],
+  "alertEngineLastEvaluated": "2026-09-15T05:30:38Z",
+  "alertEngineStatus": "ok",
+  "alertEngineError": null
 }

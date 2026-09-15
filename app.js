@@ -14,6 +14,8 @@
     epsHistory: {},
     earnings: {},
     alerts: [],
+    alertEngineStatus: null,
+    alertEngineError: null,
     ready: false,
     chart: null,
     sort: { key: "ticker", dir: "asc" },
@@ -79,8 +81,62 @@
 
 
   function fmtDispersion(v) {
+    /* dispersion stored as fraction (H-L)/Cons — display as percent e.g. 57.3% */
     if (isMissing(v) || Number.isNaN(Number(v))) return null;
-    return Number(v).toFixed(3);
+    const n = Number(v);
+    const pct = Math.abs(n) <= 2 ? n * 100 : n; /* tolerate already-percent legacy */
+    return pct.toFixed(1) + "%";
+  }
+
+  function displayYearKeys() {
+    const m = state.meta || {};
+    if (Array.isArray(m.displayMappedYears) && m.displayMappedYears.length) {
+      return m.displayMappedYears;
+    }
+    /* Fallback: Taipei calendar year derived from consensus timestamp or local */
+    let y = null;
+    const iso = m.consensusDataAsOf || m.lastUpdated;
+    if (iso) {
+      const d = new Date(iso);
+      if (!Number.isNaN(d.getTime())) {
+        /* approximate Taipei = UTC+8 */
+        const taipei = new Date(d.getTime() + 8 * 3600 * 1000);
+        y = taipei.getUTCFullYear();
+      }
+    }
+    if (y == null) y = new Date().getFullYear();
+    return [y + "E", (y + 1) + "E", (y + 2) + "E", (y + 3) + "E"];
+  }
+
+  const STALE_MS = 48 * 3600 * 1000;
+
+  function isClientStale(iso) {
+    if (!iso) return true;
+    const t = Date.parse(iso);
+    if (Number.isNaN(t)) return true;
+    return Date.now() - t > STALE_MS;
+  }
+
+  function companyIsStale(c) {
+    if (!c) return true;
+    if (c.collectionFailed === true) return true;
+    const asOf = c.lastSuccessfulCollection || c.collectionAsOf || c.dataAsOf || (state.meta || {}).consensusDataAsOf;
+    return isClientStale(asOf);
+  }
+
+  function rangeBar(low, cons, high) {
+    if (isMissing(low) || isMissing(high) || isMissing(cons)) return null;
+    const l = Number(low), h = Number(high), c = Number(cons);
+    if (!(h > l)) return null;
+    const pct = Math.max(0, Math.min(100, ((c - l) / (h - l)) * 100));
+    const wrap = el("div", { className: "range-bar", title: "Low " + fmtNum(l, 2) + " · Cons " + fmtNum(c, 2) + " · High " + fmtNum(h, 2) });
+    const track = el("div", { className: "range-bar-track" });
+    const fill = el("div", { className: "range-bar-fill" });
+    fill.style.width = pct.toFixed(1) + "%";
+    track.appendChild(fill);
+    wrap.appendChild(track);
+    wrap.appendChild(el("div", { className: "range-bar-labels", text: fmtNum(l, 2) + " — " + fmtNum(h, 2) }));
+    return wrap;
   }
 
   function nextEarningsLabel(c, e) {
@@ -225,6 +281,8 @@
     state.epsHistory = epsHistory || {};
     state.earnings = earnings || {};
     state.alerts = (alerts && alerts.alerts) || [];
+    state.alertEngineStatus = (alerts && alerts.alertEngineStatus) || (meta && meta.alertEngineStatus) || null;
+    state.alertEngineError = (alerts && alerts.alertEngineError) || (meta && meta.alertEngineError) || null;
     state.ready = true;
     if (!state.chartTicker && state.watchlist.length) {
       state.chartTicker = state.watchlist[0];
@@ -300,17 +358,19 @@
     set(
       "#meta-collection",
       m.lastSuccessfulCollectionDisplay ||
-        m.latestSuccessfulRefresh ||
         m.lastSuccessfulCollection ||
         m.lastUpdatedDisplay
     );
-    set("#meta-published", m.sitePublishedDisplay || m.sitePublished || m.latestSuccessfulRefresh);
+    set("#meta-published", m.sitePublishedDisplay || m.sitePublished);
     set("#meta-source", m.primarySource);
     const staleRow = $("#meta-stale-row");
     if (staleRow) {
-      const stale = m.dataStale === true || m.dataStale === "true";
+      const serverStale = m.dataStale === true || m.dataStale === "true";
+      const clientStale = isClientStale(m.consensusDataAsOf || m.lastUpdated);
+      const stale = serverStale || clientStale;
       if (stale) {
         staleRow.removeAttribute("hidden");
+        staleRow.style.display = "";
         staleRow.classList.add("is-stale-visible");
       } else {
         staleRow.setAttribute("hidden", "");
@@ -319,7 +379,14 @@
       }
     }
     const fw = $("#footer-watchlist");
-    if (fw) fw.textContent = "Watchlist: " + state.watchlist.join(", ");
+    if (fw) {
+      const dv = m.dataVersion || m.buildId;
+      const short = dv ? String(dv).slice(0, 12) : null;
+      fw.textContent =
+        "Watchlist: " +
+        state.watchlist.join(", ") +
+        (short ? " · dataVersion " + short : "");
+    }
   }
 
   /* ---------- summary cards ---------- */
@@ -430,7 +497,23 @@
   function renderAlerts(parent) {
     const box = el("div", { className: "alerts-box section" });
     box.appendChild(el("h2", { className: "section-title", text: "Important Alerts" }));
-    if (!state.alerts || !state.alerts.length) {
+    const status = state.alertEngineStatus || (state.meta && state.meta.alertEngineStatus);
+    if (status !== "ok") {
+      box.appendChild(
+        el("div", {
+          className: "alerts-empty alerts-engine-error",
+          text: "ALERT ENGINE NOT UPDATED",
+        })
+      );
+      if (state.alertEngineError || (state.meta && state.meta.alertEngineError)) {
+        box.appendChild(
+          el("div", {
+            className: "section-note",
+            text: String(state.alertEngineError || state.meta.alertEngineError),
+          })
+        );
+      }
+    } else if (!state.alerts || !state.alerts.length) {
       box.appendChild(el("div", { className: "alerts-empty", text: "No material alerts" }));
     } else {
       state.alerts.forEach((a) => {
@@ -452,6 +535,11 @@
       })
     );
 
+    const years = displayYearKeys();
+    const y0 = years[0] || "2026E";
+    const y1 = years[1] || "2027E";
+    const y2 = years[2] || "2028E";
+
     const tableWrap = el("div", { className: "table-wrap" });
     const table = el("table", { className: "data" });
     const thead = el("thead");
@@ -459,10 +547,10 @@
     [
       ["Ticker", "left"],
       ["Last Close", ""],
-      ["Mapped 2026E", ""],
-      ["Mapped 2027E", ""],
-      ["Mapped 2028E", ""],
-      ["2027E PE", ""],
+      ["Mapped " + y0, ""],
+      ["Mapped " + y1, ""],
+      ["Mapped " + y2, ""],
+      [y1 + " PE", ""],
       ["1M Rev", ""],
       ["Momentum", ""],
       ["Last Earnings", "left"],
@@ -477,15 +565,19 @@
     state.watchlist.forEach((t) => {
       const c = state.companies[t];
       if (!c) return;
-      const e26 = (c.eps && c.eps["2026E"]) || {};
-      const e27 = (c.eps && c.eps["2027E"]) || {};
-      const e28 = (c.eps && c.eps["2028E"]) || {};
+      const e26 = (c.eps && c.eps[y0]) || {};
+      const e27 = (c.eps && c.eps[y1]) || {};
+      const e28 = (c.eps && c.eps[y2]) || {};
       const px = companyPrice(c);
       const pe27 = pe(px, e27.consensus);
-      const tr = el("tr");
+      const stale = companyIsStale(c);
+      const tr = el("tr", { className: stale ? "ticker-stale" : "" });
 
       const tdT = el("td", { className: "ticker left" });
       tdT.appendChild(el("a", { href: "#/company/" + t, text: t }));
+      if (stale) {
+        tdT.appendChild(el("span", { className: "stale-ticker-badge", text: "STALE", title: "Per-ticker data older than 48h or collection failed" }));
+      }
       tr.appendChild(tdT);
 
       const tdP = el("td");
@@ -1223,7 +1315,8 @@
       }
     }
     kv("FY Note", isMissing(c.fyNote) ? null : c.fyNote);
-    ["2026E", "2027E", "2028E", "2029E"].forEach((y) => {
+    const years = displayYearKeys();
+    years.forEach((y) => {
       const e = (c.eps && c.eps[y]) || {};
       const cons = fmtNum(e.consensus, 2);
       const lab = e.reportedFiscalLabel ? " (" + e.reportedFiscalLabel + ")" : "";
@@ -1237,15 +1330,20 @@
       }
       kv(y + " 1M Rev", revCell(e.rev1M));
     });
-    const pe27 = pe(px, ((c.eps || {})["2027E"] || {}).consensus);
-    kv("2027E PE (Last Close)", pe27 == null ? null : fmtNum(pe27, 2));
-    ["2027E", "2028E"].forEach((y) => {
+    const y1 = years[1] || "2027E";
+    const y2 = years[2] || "2028E";
+    const pe27 = pe(px, ((c.eps || {})[y1] || {}).consensus);
+    kv(y1 + " PE (Last Close)", pe27 == null ? null : fmtNum(pe27, 2));
+    [y1, y2].forEach((y) => {
       const e = (c.eps && c.eps[y]) || {};
       kv(y + " Analyst Count", isMissing(e.analysts) ? null : fmtNum(e.analysts, 0));
       kv(y + " Consensus Low", isMissing(e.low) ? null : fmtNum(e.low, 2));
+      kv(y + " Consensus", isMissing(e.consensus) ? null : fmtNum(e.consensus, 2));
       kv(y + " Consensus High", isMissing(e.high) ? null : fmtNum(e.high, 2));
       const disp = fmtDispersion(e.dispersion);
       kv(y + " Dispersion (H−L)/Cons", disp);
+      const bar = rangeBar(e.low, e.consensus, e.high);
+      if (bar) kv(y + " Range", bar);
     });
     snap.appendChild(dl);
     grid.appendChild(snap);
@@ -1265,11 +1363,11 @@
         const li = el("li");
         const left = el("span");
         left.textContent = d.name || "—";
-        if (d.note) {
-          left.title = d.note;
-        }
+        const tip = d.reason || d.note;
+        if (tip) left.title = tip;
         li.appendChild(left);
-        const st = driverLabel(d.status);
+        const statusVal = d.currentStatus || d.status;
+        const st = driverLabel(statusVal);
         li.appendChild(el("span", { className: "driver-status " + st.cls, text: st.text }));
         ul.appendChild(li);
       });

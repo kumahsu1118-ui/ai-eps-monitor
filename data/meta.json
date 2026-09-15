@@ -2,7 +2,6 @@
   "lastUpdated": "2026-09-15T01:36:00Z",
   "lastUpdatedDisplay": "Sep 15, 2026 09:36 Taipei Time",
   "primarySource": "Seeking Alpha",
-  "latestSuccessfulRefresh": "Sep 15, 2026 12:22 Taipei Time",
   "snapshotFile": "2026-09-15.json",
   "revisionWindowNote": "Seeking Alpha displayed 1M/3M/6M revision % only; 7D/30D/90D fields = Data unavailable. Dashboard uses 1M as the primary short-window revision proxy (not identical to 30D).",
   "calendarAlignmentRule": "Fiscal period ending Jan-Mar → calendar year = ending year - 1; otherwise calendar year = ending year. Reported labels never overwritten.",
@@ -12,8 +11,23 @@
   "consensusDataAsOfDisplay": "Sep 15, 2026 09:36 Taipei Time",
   "lastSuccessfulCollection": "2026-09-15T01:36:00Z",
   "lastSuccessfulCollectionDisplay": "Sep 15, 2026 09:36 Taipei Time",
-  "sitePublished": "2026-09-15T04:22:25Z",
-  "sitePublishedDisplay": "Sep 15, 2026 12:22 Taipei Time",
+  "sitePublished": "2026-09-15T05:30:38Z",
+  "sitePublishedDisplay": "Sep 15, 2026 13:30 Taipei Time",
   "dataStale": false,
-  "siteRepoCommit": "29f3d27e4de19bb29253b34cba1375f453f69a0f"
+  "displayMappedYears": [
+    "2026E",
+    "2027E",
+    "2028E",
+    "2029E"
+  ],
+  "chartYears": [
+    "2026E",
+    "2027E",
+    "2028E"
+  ],
+  "dataVersion": "bf00de0d3deeceb85ad106ba7fc0523e91dd4154b022f068208ab6165d9de47b",
+  "buildId": "bf00de0d3deeceb85ad106ba7fc0523e91dd4154b022f068208ab6165d9de47b",
+  "alertEngineLastEvaluated": "2026-09-15T05:30:38Z",
+  "alertEngineStatus": "ok",
+  "alertEngineError": null
 }
