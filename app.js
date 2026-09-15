@@ -952,6 +952,44 @@
     return root;
   }
 
+
+  function earnItemText(item) {
+    if (item == null) return "—";
+    if (typeof item === "string") return item;
+    if (typeof item === "object") {
+      const text = item.text || item.question || item.title || "";
+      const src = item.source || "";
+      if (text && src) return text + " [" + src + "]";
+      return text || JSON.stringify(item);
+    }
+    return String(item);
+  }
+
+  function appendEarnItems(listEl, arr) {
+    if (!arr || !arr.length) {
+      listEl.appendChild(el("li", { text: "No items yet" }));
+      return;
+    }
+    arr.forEach((item) => {
+      const li = el("li");
+      if (item && typeof item === "object" && item.url && (item.text || item.title)) {
+        li.appendChild(document.createTextNode((item.text || item.title) + " "));
+        li.appendChild(
+          el("a", {
+            className: "source-link",
+            href: item.url,
+            target: "_blank",
+            rel: "noopener",
+            text: "source",
+          })
+        );
+      } else {
+        li.textContent = earnItemText(item);
+      }
+      listEl.appendChild(li);
+    });
+  }
+
   /* ---------- earnings ---------- */
   function renderEarnings() {
     const root = el("div", { className: "section" });
@@ -959,7 +997,7 @@
     root.appendChild(
       el("p", {
         className: "section-note",
-        text: "Digest stubs ready for post-report fills. Last/next dates from the latest snapshot.",
+        text: "Investor digests from persistent data/earnings/{TICKER}.json. Missing digests show empty sections.",
       })
     );
 
@@ -983,11 +1021,7 @@
       function stubSection(title, arr) {
         card.appendChild(el("div", { className: "stub-note", text: title }));
         const list = el("ul", { className: "earn-section-list" + (!arr || !arr.length ? " empty" : "") });
-        if (!arr || !arr.length) {
-          list.appendChild(el("li", { text: "No items yet" }));
-        } else {
-          arr.forEach((item) => list.appendChild(el("li", { text: typeof item === "string" ? item : JSON.stringify(item) })));
-        }
+        appendEarnItems(list, arr);
         card.appendChild(list);
       }
 
@@ -1234,12 +1268,46 @@
     ["positives", "negatives", "uncertainties"].forEach((key) => {
       const title = key.charAt(0).toUpperCase() + key.slice(1);
       earnPanel.appendChild(el("div", { className: "stub-note", text: title }));
-      const list = el("ul", { className: "earn-section-list empty" });
-      const arr = earn[key] || [];
-      if (!arr.length) list.appendChild(el("li", { text: "No items yet" }));
-      else arr.forEach((x) => list.appendChild(el("li", { text: String(x) })));
+      const list = el("ul", { className: "earn-section-list" + (!(earn[key] || []).length ? " empty" : "") });
+      appendEarnItems(list, earn[key] || []);
       earnPanel.appendChild(list);
     });
+    if (earn.guidance) {
+      earnPanel.appendChild(el("div", { className: "stub-note", text: "Guidance" }));
+      earnPanel.appendChild(el("p", { className: "section-note", text: String(earn.guidance) }));
+    }
+    if (earn.comparison) {
+      earnPanel.appendChild(el("div", { className: "stub-note", text: "Results vs consensus: " + String(earn.comparison) }));
+    }
+    if (earn.commentary) {
+      earnPanel.appendChild(el("div", { className: "stub-note", text: "Management Commentary" }));
+      earnPanel.appendChild(el("p", { className: "section-note", text: String(earn.commentary) }));
+    }
+    if (earn.qa && earn.qa.length) {
+      earnPanel.appendChild(el("div", { className: "stub-note", text: "Important Q&A" }));
+      const qlist = el("ul", { className: "earn-section-list" });
+      earn.qa.forEach((q) => {
+        const li = el("li");
+        li.textContent = (q.question || "") + " → " + (q.answer || "") + (q.whyMattersForEps ? " (" + q.whyMattersForEps + ")" : "");
+        qlist.appendChild(li);
+      });
+      earnPanel.appendChild(qlist);
+    }
+    if (earn.sources && earn.sources.length) {
+      earnPanel.appendChild(el("div", { className: "stub-note", text: "Digest Sources" }));
+      earn.sources.forEach((s) => {
+        if (s && s.url) {
+          earnPanel.appendChild(
+            el("div", null, [
+              el("a", { className: "source-link", href: s.url, target: "_blank", rel: "noopener", text: s.title || s.url }),
+            ])
+          );
+        }
+      });
+    }
+    if (earn.periodLabel) {
+      earnPanel.appendChild(el("p", { className: "section-note", text: "Period: " + earn.periodLabel + (earn.reportDate ? " · Report " + earn.reportDate : "") }));
+    }
     root.appendChild(earnPanel);
 
     /* revision history for ticker */

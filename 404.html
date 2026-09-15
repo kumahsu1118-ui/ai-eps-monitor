@@ -15,9 +15,13 @@
       <p class="subtitle">EPS • Earnings • Valuation • Revisions</p>
     </div>
     <div class="header-meta" id="header-meta">
-      <div class="meta-row"><span class="meta-label">Last Updated</span><span id="meta-last-updated">—</span></div>
+      <div class="meta-row"><span class="meta-label">Consensus Data As Of</span><span id="meta-consensus">—</span></div>
+      <div class="meta-row"><span class="meta-label">Last Successful Collection</span><span id="meta-collection">—</span></div>
+      <div class="meta-row"><span class="meta-label">Site Published</span><span id="meta-published">—</span></div>
       <div class="meta-row"><span class="meta-label">Primary Estimate Source</span><span id="meta-source">—</span></div>
-      <div class="meta-row"><span class="meta-label">Latest Successful Refresh</span><span id="meta-refresh">—</span></div>
+      <div class="meta-row meta-stale-row" id="meta-stale-row" hidden>
+        <span class="stale-badge" id="meta-stale-badge">DATA STALE</span>
+      </div>
     </div>
     <button type="button" class="theme-toggle" id="theme-toggle" title="Toggle light/dark" aria-label="Toggle theme">◐</button>
   </header>
@@ -35,7 +39,7 @@
   </main>
 
   <footer class="app-footer">
-    <span>Missing values shown as — (Data unavailable from source). Never invented.</span>
+    <span>Missing values shown as — (Data unavailable from source). Never invented. Mapped slots ≠ true calendar-year EPS.</span>
     <span id="footer-watchlist"></span>
   </footer>
 </body>
