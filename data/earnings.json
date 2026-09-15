@@ -320,6 +320,20 @@
     "nextEarningsSource": "Seeking Alpha",
     "resultsVsConsensus": "Above",
     "guidanceVsConsensus": "unknown",
+    "actuals": {
+      "eps": "$2.22",
+      "revenue": "$96.22B",
+      "grossMargin": "75% GAAP and non-GAAP",
+      "sourceUrl": "https://investor.nvidia.com/news/press-release-details/2026/NVIDIA-Announces-Financial-Results-for-Second-Quarter-Fiscal-2027/default.aspx",
+      "secUrl": "https://www.sec.gov/Archives/edgar/data/1045810/000104581026000073/nvda-20260826.htm",
+      "sourceTier": 1
+    },
+    "consensusComparison": {
+      "vsConsensus": "Above",
+      "sourceUrl": "https://seekingalpha.com/article/4940563-nvidia-corporation-nvda-q2-2027-earnings-call-transcript",
+      "sourceTier": 4,
+      "note": "Beat/miss vs consensus attributed to Seeking Alpha summary (Tier 4), not Company IR actuals"
+    },
     "nextEarningsRaw": "11/25/2026 (Post-Market)"
   },
   "AVGO": {

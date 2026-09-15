@@ -12,6 +12,7 @@
     "nextEarningsSource": "Seeking Alpha",
     "fyNote": "Annual view; table column shown as 'Fiscal Period Ending'.",
     "momentum": "Positive",
+    "momentumFormula": "Deterministic EPS momentum from mapped Y+1 and Y+2 SA 1M revision % only (no management guidance / drivers): both >= +3 → Strong Positive; both >= +1 → Positive; both <= -3 → Strong Negative; both <= -1 → Negative; else Neutral. Missing either leg → Neutral.",
     "eps": {
       "2026E": {
         "consensus": 9.31,
@@ -258,6 +259,7 @@
     "nextEarningsSource": "Seeking Alpha",
     "fyNote": "Annual view; table column shown as 'Fiscal Period Ending'.",
     "momentum": "Neutral",
+    "momentumFormula": "Deterministic EPS momentum from mapped Y+1 and Y+2 SA 1M revision % only (no management guidance / drivers): both >= +3 → Strong Positive; both >= +1 → Positive; both <= -3 → Strong Negative; both <= -1 → Negative; else Neutral. Missing either leg → Neutral.",
     "eps": {
       "2026E": {
         "consensus": 11.66,
@@ -494,6 +496,7 @@
     "nextEarningsSource": "Seeking Alpha",
     "fyNote": "Annual view; table column shown as 'Fiscal Period Ending'.",
     "momentum": "Neutral",
+    "momentumFormula": "Deterministic EPS momentum from mapped Y+1 and Y+2 SA 1M revision % only (no management guidance / drivers): both >= +3 → Strong Positive; both >= +1 → Positive; both <= -3 → Strong Negative; both <= -1 → Negative; else Neutral. Missing either leg → Neutral.",
     "eps": {
       "2026E": {
         "consensus": 16.93,
@@ -687,6 +690,7 @@
     "nextEarningsSource": "Seeking Alpha",
     "fyNote": "Annual view; table column shown as 'Fiscal Period Ending'.",
     "momentum": "Neutral",
+    "momentumFormula": "Deterministic EPS momentum from mapped Y+1 and Y+2 SA 1M revision % only (no management guidance / drivers): both >= +3 → Strong Positive; both >= +1 → Positive; both <= -3 → Strong Negative; both <= -1 → Negative; else Neutral. Missing either leg → Neutral.",
     "eps": {
       "2026E": {
         "consensus": null,
@@ -878,6 +882,7 @@
     "nextEarningsSource": "Seeking Alpha",
     "fyNote": "Annual view; table column shown as 'Fiscal Period Ending'.",
     "momentum": "Neutral",
+    "momentumFormula": "Deterministic EPS momentum from mapped Y+1 and Y+2 SA 1M revision % only (no management guidance / drivers): both >= +3 → Strong Positive; both >= +1 → Positive; both <= -3 → Strong Negative; both <= -1 → Negative; else Neutral. Missing either leg → Neutral.",
     "eps": {
       "2026E": {
         "consensus": 2.71,
@@ -1082,6 +1087,7 @@
     "nextEarningsSource": null,
     "fyNote": "Annual view; table column shown as 'Fiscal Period Ending'.",
     "momentum": "Positive",
+    "momentumFormula": "Deterministic EPS momentum from mapped Y+1 and Y+2 SA 1M revision % only (no management guidance / drivers): both >= +3 → Strong Positive; both >= +1 → Positive; both <= -3 → Strong Negative; both <= -1 → Negative; else Neutral. Missing either leg → Neutral.",
     "eps": {
       "2026E": {
         "consensus": 11.47,

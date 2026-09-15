@@ -230,9 +230,14 @@
   }
 
   function growthCell(v) {
-    /* ratio 0.67 → +67.67% */
+    /* ratio 0.67 → +67.67%; string sentinels for zero-crossing / N/M */
+    if (typeof v === "string") {
+      const cls = /profit/i.test(v) ? "pos" : /loss/i.test(v) ? "neg" : "";
+      return el("span", { className: cls || "na", text: v, title: v });
+    }
+    if (v === null || v === undefined) return naCell("N/M");
     const s = fmtPct(v, 2, false);
-    if (s == null) return naCell();
+    if (s == null) return naCell("N/M");
     const n = Number(v);
     const cls = n > 0 ? "pos" : n < 0 ? "neg" : "";
     return el("span", { className: cls, text: s });
@@ -265,7 +270,7 @@
   }
 
   function pe(price, eps) {
-    if (isMissing(price) || isMissing(eps) || Number(eps) === 0) return null;
+    if (isMissing(price) || isMissing(eps) || Number(eps) <= 0) return null;
     return Number(price) / Number(eps);
   }
 
@@ -428,6 +433,23 @@
     );
     set("#meta-published", m.sitePublishedDisplay || m.sitePublished);
     set("#meta-source", m.primarySource);
+    const collEl = $("#meta-collection-status");
+    if (collEl) {
+      const label = m.collectionStatusLabel || m.collectionStatus;
+      if (label && String(m.collectionStatus || "").toLowerCase() === "partial") {
+        collEl.textContent = String(label);
+        collEl.removeAttribute("hidden");
+        collEl.style.display = "";
+      } else if (label && String(m.collectionStatus || "").toLowerCase() === "failed") {
+        collEl.textContent = String(label);
+        collEl.removeAttribute("hidden");
+        collEl.style.display = "";
+      } else {
+        collEl.textContent = "";
+        collEl.setAttribute("hidden", "");
+        collEl.style.display = "none";
+      }
+    }
     const staleRow = $("#meta-stale-row");
     if (staleRow) {
       const serverStale = m.dataStale === true || m.dataStale === "true";
@@ -564,7 +586,7 @@
     );
     grid.appendChild(
       card(
-        "Lowest " + y1 + " PE",
+        "Lowest Mapped " + y1 + " P/E",
         s.lowestPe && s.lowestPe.ticker,
         s.lowestPe ? fmtNum(s.lowestPe._pe, 2) + "x" : null
       )
@@ -699,7 +721,7 @@
       const tdT = el("td", { className: "ticker left" });
       tdT.appendChild(el("a", { href: "#/company/" + t, text: t }));
       if (stale) {
-        tdT.appendChild(el("span", { className: "stale-ticker-badge", text: "STALE", title: "Per-ticker data older than 48h or collection failed" }));
+        tdT.appendChild(el("span", { className: "stale-ticker-badge", text: "STALE", title: "Per-ticker past weekday 08:00 Taipei collection+grace without success, or collection failed" }));
       }
       tr.appendChild(tdT);
 
