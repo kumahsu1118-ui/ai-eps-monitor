@@ -424,9 +424,9 @@ def format_next_earnings_display(
 def _is_company_ir_url(url: str | None) -> bool:
     if not url:
         return False
-    u = str(url).lower()
-    if "seekingalpha.com" in u:
+    if _url_is_seekingalpha(url):
         return False
+    u = str(url).lower()
     return bool(
         re.search(r"investor\.|investors\.|/ir/|investor-relations|newsroom|press-release", u)
         or "company ir" in u
@@ -1882,12 +1882,42 @@ def load_official_domains_by_ticker(root: Path | None = None) -> dict[str, list[
     return out
 
 
+def _is_seekingalpha_hostname(host: str | None) -> bool:
+    """Strict: host == seekingalpha.com or endswith .seekingalpha.com (not evilseekingalpha.com)."""
+    if not host:
+        return False
+    h = host.lower().rstrip(".")
+    return h == "seekingalpha.com" or h.endswith(".seekingalpha.com")
+
+
+def _url_is_seekingalpha(url: str | None) -> bool:
+    """True only when the parsed hostname is seekingalpha.com or a subdomain."""
+    return _is_seekingalpha_hostname(_hostname_of(url))
+
+
 def _is_sec_hostname(host: str | None) -> bool:
     """SEC only sec.gov or *.sec.gov — spoofed-sec.gov.evil must NOT match."""
     if not host:
         return False
     h = host.lower().rstrip(".")
     return h == "sec.gov" or h.endswith(".sec.gov")
+
+
+def _host_matches_registered(host: str | None, domain: str) -> bool:
+    if not host:
+        return False
+    h = host.lower().rstrip(".")
+    d = domain.lower().rstrip(".")
+    return h == d or h.endswith("." + d)
+
+
+_PUBLISHER_DOMAINS = {
+    "reuters": ("reuters.com",),
+    "bloomberg": ("bloomberg.com",),
+    "wsj": ("wsj.com",),
+    "cnbc": ("cnbc.com",),
+    "dowjones": ("dowjones.com", "wsj.com"),
+}
 
 
 def _is_official_ir_hostname(host: str | None, ticker: str | None = None) -> bool:
@@ -1917,17 +1947,53 @@ def _is_generic_ir_hostname(host: str | None) -> bool:
     h = host.lower().rstrip(".")
     if h.startswith("investor.") or h.startswith("investors."):
         return True
-    if h.startswith("ir.") and not (h == "seekingalpha.com" or h.endswith(".seekingalpha.com")):
+    if h.startswith("ir.") and not _is_seekingalpha_hostname(h):
         return True
     return False
 
 
-def _is_seekingalpha_hostname(host: str | None) -> bool:
-    """Strict: host == seekingalpha.com or endswith .seekingalpha.com (not evilseekingalpha.com)."""
-    if not host:
-        return False
-    h = host.lower().rstrip(".")
-    return h == "seekingalpha.com" or h.endswith(".seekingalpha.com")
+def _source_type_consistent_tier(
+    source_type: str,
+    url: str | None,
+    ticker: str | None,
+) -> str | int | None:
+    """Map explicit sourceType to a tier, requiring hostname agreement when URL is present.
+
+    Mismatch → source_mismatch (never Tier 1 / claimed publisher tier).
+    """
+    st = str(source_type).strip().lower()
+    host = _hostname_of(url) if url else None
+    ir_types = {"company_ir", "ir", "earnings_presentation"}
+    sec_types = {"sec", "8-k", "10-k", "10-q"}
+    sa_types = {"seeking_alpha", "seekingalpha", "sa"}
+    transcript_types = {"official_transcript", "transcript"}
+
+    if st in ir_types:
+        if url:
+            return 1 if _is_official_ir_hostname(host, ticker=ticker) else "source_mismatch"
+        return 1
+    if st in sec_types:
+        if url:
+            return 1 if _is_sec_hostname(host) else "source_mismatch"
+        return 1
+    if st in transcript_types:
+        if url:
+            if _is_official_ir_hostname(host, ticker=ticker) or _is_sec_hostname(host):
+                return "official"
+            return "source_mismatch"
+        return "official"
+    if st in _PUBLISHER_DOMAINS:
+        if url:
+            domains = _PUBLISHER_DOMAINS[st]
+            if host and any(_host_matches_registered(host, d) for d in domains):
+                return 3
+            return "source_mismatch"
+        return 3
+    if st in sa_types:
+        if url:
+            return 4 if _is_seekingalpha_hostname(host) else "source_mismatch"
+        return 4
+    return None
 
 
 def classify_source_tier(
@@ -1938,23 +2004,18 @@ def classify_source_tier(
 ) -> str | int | None:
     """Deterministic source classifier by real hostname (urlparse).
 
-    Prefer ingest sourceType as source-of-truth when provided.
+    When URL is present, explicit sourceType and hostname must be mutually consistent.
+    Claimed company_ir/ir is Tier1 only if the host is that ticker's allowlisted official
+    domain. SEC types require sec.gov / *.sec.gov. Mismatch → source_mismatch (not Tier1).
     Official IR (officialDomainsByTicker) / SEC → Tier1; generic investor.*/ir.* → unverified_ir_candidate;
     official transcript → official;
     Reuters/Bloomberg/WSJ/CNBC → Tier3; Seeking Alpha → Tier4;
     Unknown → Unknown. Never Tier1 merely because a URL / query string exists.
     """
-    # Prefer explicit ingest sourceType
     if source_type:
-        st = str(source_type).strip().lower()
-        if st in {"sec", "company_ir", "ir", "8-k", "10-k", "10-q", "earnings_presentation"}:
-            return 1
-        if st in {"official_transcript", "transcript"}:
-            return "official"
-        if st in {"reuters", "bloomberg", "wsj", "cnbc", "dowjones"}:
-            return 3
-        if st in {"seeking_alpha", "seekingalpha", "sa"}:
-            return 4
+        typed = _source_type_consistent_tier(source_type, url, ticker)
+        if typed is not None:
+            return typed
     if not url:
         return None
     host = _hostname_of(url)
@@ -1966,8 +2027,7 @@ def classify_source_tier(
     # Generic investor.*/ir.* — NOT Tier1 (unverified_ir_candidate at most)
     if _is_generic_ir_hostname(host):
         return "unverified_ir_candidate"
-    # Spoofed domains / investor string in query must NOT be Tier1
-    if host and any(host == d or host.endswith("." + d) for d in (
+    if host and any(_host_matches_registered(host, d) for d in (
         "reuters.com", "bloomberg.com", "wsj.com", "cnbc.com", "dowjones.com"
     )):
         return 3
@@ -1990,10 +2050,16 @@ def ensure_earnings_provenance(data: dict) -> dict:
     if not data.get("hasDigest"):
         return data
     out = dict(data)
+    ticker = out.get("ticker") or out.get("Ticker")
+    if ticker:
+        ticker = str(ticker).upper()
+    src_type = None
+    results = out.get("results") if isinstance(out.get("results"), dict) else {}
+    if isinstance(results, dict):
+        src_type = results.get("sourceType") or results.get("source_type")
 
     # --- actuals ---
     actuals = out.get("actuals") if isinstance(out.get("actuals"), dict) else None
-    results = out.get("results") if isinstance(out.get("results"), dict) else {}
     if actuals is None:
         metrics = {}
         for k in ("eps", "revenue", "grossMargin", "operatingMargin", "fcf"):
@@ -2030,12 +2096,12 @@ def ensure_earnings_provenance(data: dict) -> dict:
                     src_url = row.get("sourceUrl")
                     break
         tier = results.get("sourceTier")
-        classified = classify_source_tier(src_url)
+        classified = classify_source_tier(src_url, ticker=ticker, source_type=src_type)
         if classified is not None:
-            # Never retain Tier1 when the URL is clearly not Company IR/SEC
+            # Never retain Tier1 when the URL is clearly not this issuer's IR/SEC
             if tier is None or (tier == 1 and classified != 1):
                 tier = classified
-            elif tier is None:
+            elif classified == "source_mismatch":
                 tier = classified
         elif tier is None and not src_url:
             tier = None
@@ -2063,6 +2129,17 @@ def ensure_earnings_provenance(data: dict) -> dict:
             actuals["sourceUrl"] = results.get("sourceUrl")
         if actuals.get("sourceTier") is None and results.get("sourceTier") is not None:
             actuals["sourceTier"] = results.get("sourceTier")
+        src_url = actuals.get("sourceUrl")
+        classified = classify_source_tier(
+            src_url,
+            ticker=ticker,
+            source_type=actuals.get("sourceType") or src_type,
+        )
+        if classified is not None and src_url:
+            if actuals.get("sourceTier") == 1 and classified != 1:
+                actuals["sourceTier"] = classified
+            elif actuals.get("sourceTier") is None:
+                actuals["sourceTier"] = classified
         out["actuals"] = actuals
 
     # --- consensusComparison ---
@@ -2072,19 +2149,26 @@ def ensure_earnings_provenance(data: dict) -> dict:
         vs = cc.get("vsConsensus") or cc.get("beatMiss") or cc.get("comparison")
     if vs is None:
         vs = out.get("comparison") or results.get("vsConsensus") or out.get("guidanceVsConsensus")
-    # Find SA (non-IR) source for beat/miss
+    # Find SA (non-IR) source for beat/miss — hostname-strict, never substring.
     sa_url = None
     sa_tier = 4
-    if cc and cc.get("sourceUrl"):
+    if cc and cc.get("sourceUrl") and _url_is_seekingalpha(cc.get("sourceUrl")):
         sa_url = cc.get("sourceUrl")
         if cc.get("sourceTier") is not None:
             sa_tier = cc.get("sourceTier")
+    elif cc and cc.get("sourceUrl") and not _url_is_seekingalpha(cc.get("sourceUrl")):
+        # Keep a non-SA existing consensus URL only when it is not a SA-host spoof
+        host_cc = _hostname_of(cc.get("sourceUrl"))
+        if not (host_cc and "seekingalpha" in host_cc):
+            sa_url = cc.get("sourceUrl")
+            if cc.get("sourceTier") is not None:
+                sa_tier = cc.get("sourceTier")
     if not sa_url:
         for s in out.get("sources") or []:
             if not isinstance(s, dict):
                 continue
-            u = str(s.get("url") or "")
-            if "seekingalpha.com" in u.lower():
+            u = s.get("url") or s.get("sourceUrl")
+            if _url_is_seekingalpha(u):
                 sa_url = u
                 sa_tier = s.get("sourceTier") if s.get("sourceTier") is not None else 4
                 break
@@ -2095,7 +2179,7 @@ def ensure_earnings_provenance(data: dict) -> dict:
                 if not isinstance(item, dict):
                     continue
                 u = item.get("supplementalUrl") or item.get("url")
-                if u and "seekingalpha.com" in str(u).lower():
+                if _url_is_seekingalpha(u):
                     sa_url = u
                     sa_tier = 4
                     break
@@ -2105,7 +2189,7 @@ def ensure_earnings_provenance(data: dict) -> dict:
     ir_url = (out.get("actuals") or {}).get("sourceUrl") if isinstance(out.get("actuals"), dict) else None
     if sa_url and ir_url and sa_url == ir_url:
         # Prefer to keep IR only on actuals; clear SA claim
-        if "seekingalpha.com" not in str(sa_url).lower():
+        if not _url_is_seekingalpha(sa_url):
             sa_url = None
 
     # Always materialize consensusComparison for hasDigest
@@ -2119,7 +2203,7 @@ def ensure_earnings_provenance(data: dict) -> dict:
             "note": (
                 "Beat/miss vs consensus attributed to Seeking Alpha / secondary summary "
                 "(not Company IR actuals Tier 1)"
-                if sa_url and "seekingalpha.com" in str(sa_url).lower()
+                if _url_is_seekingalpha(sa_url)
                 else "Beat/miss attribution; actuals remain on Company IR when Tier 1"
             ),
         }
@@ -2128,13 +2212,24 @@ def ensure_earnings_provenance(data: dict) -> dict:
             for k, v in cc.items():
                 if k not in new_cc or new_cc[k] is None:
                     new_cc[k] = v
-            # Force: if sourceUrl is IR-looking and claims consensus, demote
-            u = str(new_cc.get("sourceUrl") or "").lower()
-            if new_cc.get("sourceTier") == 1 and "seekingalpha.com" not in u and (
-                "investor." in u or "investors." in u or "sec.gov" in u
+            # Drop SA-host spoofs that survived merge
+            if new_cc.get("sourceUrl") and not _url_is_seekingalpha(new_cc.get("sourceUrl")):
+                host_merged = _hostname_of(new_cc.get("sourceUrl"))
+                if host_merged and "seekingalpha" in host_merged:
+                    if sa_url and _url_is_seekingalpha(sa_url):
+                        new_cc["sourceUrl"] = sa_url
+                        new_cc["sourceTier"] = sa_tier
+                    else:
+                        new_cc["sourceUrl"] = None
+                        new_cc["sourceTier"] = None
+            cc_host = _hostname_of(new_cc.get("sourceUrl"))
+            if new_cc.get("sourceTier") == 1 and not _url_is_seekingalpha(new_cc.get("sourceUrl")) and (
+                _is_official_ir_hostname(cc_host, ticker=ticker)
+                or _is_generic_ir_hostname(cc_host)
+                or _is_sec_hostname(cc_host)
             ):
                 # IR URL must not be the consensusComparison claim as Tier 1 beat/miss
-                if sa_url:
+                if sa_url and _url_is_seekingalpha(sa_url):
                     new_cc["sourceUrl"] = sa_url
                     new_cc["sourceTier"] = sa_tier
                 else:

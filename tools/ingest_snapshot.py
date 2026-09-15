@@ -23,6 +23,7 @@ import os
 import re
 import subprocess
 import sys
+import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -179,6 +180,30 @@ def content_hash_snapshot(snap: dict) -> str:
     payload = {k: v for k, v in (snap or {}).items() if k not in {"qualityGate", "runId", "runStatus"}}
     blob = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
     return hashlib.sha256(blob).hexdigest()
+
+
+def new_run_id(snap: dict | None = None) -> str:
+    """Unconditionally unique run identity.
+
+    Never second-resolution wall-clock + short hash: identical same-second
+    replays must not reuse stage/generation paths. Combines UTC microseconds,
+    the full snapshot content hash, and a UUID4.
+    """
+    ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
+    digest = content_hash_snapshot(snap) if isinstance(snap, dict) else hashlib.sha256(b"").hexdigest()
+    return f"{ts}_{digest}_{uuid.uuid4().hex}"
+
+
+def allocate_unique_run_id(snap: dict | None = None) -> str:
+    """Allocate a runId that does not collide with staging or generations."""
+    STAGING_DIR.mkdir(parents=True, exist_ok=True)
+    GENERATIONS_DIR.mkdir(parents=True, exist_ok=True)
+    for _ in range(16):
+        rid = new_run_id(snap)
+        if (STAGING_DIR / rid).exists() or (GENERATIONS_DIR / rid).exists():
+            continue
+        return rid
+    raise RuntimeError("unable to allocate unique runId")
 
 
 def load_revision_history(rev_path: Path | None = None) -> list[dict]:
@@ -798,17 +823,68 @@ def materialize_generation(gen_dir: Path) -> None:
     atomic_write_text(marker, str(cur.get("runId") or gen_dir.name) + "\n")
 
 
+def _required_live_artifact_pairs(gen_dir: Path) -> list[tuple[Path, Path]]:
+    """Generation files that must exist in the live cache after materialize."""
+    gen_dir = Path(gen_dir)
+    pairs: list[tuple[Path, Path]] = []
+    snap_src_dir = gen_dir / "snapshots"
+    if snap_src_dir.is_dir():
+        for src in sorted(snap_src_dir.glob("*.json")):
+            pairs.append((src, SNAP_DIR / src.name))
+    rev_src = gen_dir / "revisions" / "history.jsonl"
+    if rev_src.exists():
+        pairs.append((rev_src, REV_PATH))
+    daily_src = gen_dir / "daily_eps_snapshots"
+    if daily_src.is_dir():
+        for src in sorted(p for p in daily_src.rglob("*") if p.is_file()):
+            pairs.append((src, DAILY_DIR / src.relative_to(daily_src)))
+    alerts_src = gen_dir / "alerts" / "index.json"
+    if alerts_src.exists():
+        pairs.append((alerts_src, ALERTS_PATH))
+    cp_src = gen_dir / "comparison_checkpoint.json"
+    if cp_src.exists():
+        pairs.append((cp_src, COMPARISON_CHECKPOINT_PATH))
+    web_src = gen_dir / "web" / "data"
+    if web_src.is_dir():
+        for src in sorted(web_src.glob("*.json")):
+            pairs.append((src, WEB_DATA / src.name))
+    return pairs
+
+
+def live_cache_matches_generation(gen_dir: Path, run_id: str) -> bool:
+    """True only if marker AND required CURRENT artifacts exist and match identity."""
+    rid = str(run_id or "").strip()
+    if not rid:
+        return False
+    marker = ROOT / "data" / ".materialized_run_id"
+    if not marker.exists() or marker.read_text(encoding="utf-8").strip() != rid:
+        return False
+    pairs = _required_live_artifact_pairs(gen_dir)
+    if not pairs:
+        # Generation with no copyable artifacts: marker match is insufficient if
+        # CURRENT web/data exists in gen after a successful export; otherwise OK.
+        return True
+    for src, dest in pairs:
+        if not dest.exists():
+            return False
+        try:
+            if dest.read_bytes() != src.read_bytes():
+                return False
+        except OSError:
+            return False
+    return True
+
+
 def ensure_live_matches_current() -> None:
-    """If CURRENT points at a generation not yet materialized, rematerialize."""
+    """Rematerialize unless marker AND required CURRENT artifacts match identity."""
     cur = read_current_pointer()
     if not cur:
         return
     gen = resolve_current_generation()
     if not gen:
         return
-    marker = ROOT / "data" / ".materialized_run_id"
-    rid = str(cur.get("runId") or "")
-    if marker.exists() and marker.read_text(encoding="utf-8").strip() == rid:
+    rid = str(cur.get("runId") or gen.name)
+    if live_cache_matches_generation(gen, rid):
         return
     materialize_generation(gen)
 
@@ -860,12 +936,15 @@ def commit_staged_run(
 
     rid = run_id or stage_dir.name
     gen_dir = GENERATIONS_DIR / rid
-    gen_dir.mkdir(parents=True, exist_ok=True)
     validated_path: Path | None = None
     n_rev = 0
     current_flipped = False
 
     try:
+        # Existing generation directories are immutable — never overwrite-in-place.
+        if gen_dir.exists():
+            raise CommitAborted(f"generation directory already exists (immutable): {rid}")
+        gen_dir.mkdir(parents=True, exist_ok=False)
         # --- Full generation package (append-only; safe if CURRENT never flips) ---
         atomic_write_json(gen_dir / "snapshot.json", snap_norm)
         atomic_write_json(gen_dir / "proposed_revisions.json", {"events": events})
@@ -1176,9 +1255,9 @@ def ingest_and_build(
         raise SystemExit(f"Incoming snapshot not an object: {incoming_path}")
 
     snap_utc = raw.get("snapshot_utc") or datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-    run_id = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ") + "_" + content_hash_snapshot(raw)[:8]
+    run_id = allocate_unique_run_id(raw)
     stage_dir = STAGING_DIR / run_id
-    stage_dir.mkdir(parents=True, exist_ok=True)
+    stage_dir.mkdir(parents=True, exist_ok=False)
 
     result = {
         "incoming": str(incoming_path),

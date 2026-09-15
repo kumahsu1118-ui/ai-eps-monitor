@@ -100,7 +100,8 @@ Seeking Alpha cookies/sessions, GitHub tokens beyond Actions secrets (none requi
 
 - **CURRENT flip = financial commit DONE.** Post-CURRENT materialize failure → committed + materializationStatus=failed/pending (never aborted; no CURRENT rollback).
 - **Single writer:** `ingest_snapshot.py` only. `export_web_data.py` read-only by default; `publish_github_pages.sh` publish-only.
-- **Readers:** `ensure_live_matches_current()` before live cache use (incl. pending publish retry).
+- **Readers:** `ensure_live_matches_current()` verifies marker AND required CURRENT artifacts/build identity before trusting live cache; otherwise rematerialize from CURRENT (incl. pending publish retry).
+- **runId:** unconditionally unique (UTC microseconds + full snapshot hash + UUID). Existing `generations/<runId>/` is immutable; collision fail-closed (never overwrite-in-place).
 - **Release identity:** stamp cache-bust then finalize; `appVersion` hashes canonicalized index (strip `?v=`) + assets; `releaseVersion = hash(appVersion|schema|data|refresh)`.
-- **Official domains:** Tier1 only `officialDomainsByTicker[ticker]` (or any listed domain when ticker unknown). Generic `investor.*`/`ir.*` → `unverified_ir_candidate`. Seeking Alpha host must be `seekingalpha.com` / `*.seekingalpha.com`.
+- **Official domains:** Tier1 only `officialDomainsByTicker[ticker]` (or any listed domain when ticker unknown). Explicit `sourceType` cannot bypass hostname checks when a URL is present. Generic `investor.*`/`ir.*` → `unverified_ir_candidate`. Seeking Alpha host must be `seekingalpha.com` / `*.seekingalpha.com` (no substring).
 - **Parser:** duplicate identical fiscal rows dedupe; conflicting → `needs_verification` / `duplicate_conflicting_fiscal_row`; slot collision → `mapped_slot_collision`.

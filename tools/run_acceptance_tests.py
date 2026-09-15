@@ -3935,9 +3935,11 @@ def test_official_domain_mapping(fixture: Path) -> None:
     exp = import_mod(fixture, "export_web_data")
     ok = exp.classify_source_tier("https://investor.nvidia.com/news", ticker="NVDA") == 1
     ok = ok and exp.classify_source_tier("https://investors.broadcom.com/news", ticker="AVGO") == 1
-    # Prefer sourceType
-    ok = ok and exp.classify_source_tier("https://random.example/x", source_type="sec") == 1
-    ok = ok and exp.classify_source_tier("https://random.example/x", source_type="reuters") == 3
+    # sourceType without URL may still classify; URL+sourceType must be consistent
+    ok = ok and exp.classify_source_tier(None, source_type="sec") == 1
+    ok = ok and exp.classify_source_tier("https://www.sec.gov/Archives/x", source_type="sec") == 1
+    ok = ok and exp.classify_source_tier("https://random.example/x", source_type="sec") != 1
+    ok = ok and exp.classify_source_tier("https://www.reuters.com/x", source_type="reuters") == 3
     mapping = exp.load_official_domains_by_ticker(fixture)
     ok = ok and "NVDA" in mapping and any("nvidia" in d for d in mapping["NVDA"])
     record("official_domain_mapping_test", ok, f"nvda_domains={mapping.get('NVDA')}")
@@ -4784,6 +4786,308 @@ def test_mapped_slot_collision_rejected(fixture: Path) -> None:
     record("mapped_slot_collision_rejected_test", ok, f"reason={packed.get('reason')} slot={packed.get('slot')}")
 
 
+def _complete_watchlist_snap(fixture: Path, snap: dict) -> dict:
+    u = json.loads((fixture / "data" / "universe.json").read_text(encoding="utf-8"))
+    for t in u.get("tickers") or []:
+        if t not in (snap.get("tickers") or {}):
+            snap.setdefault("tickers", {})[t] = _good_ticker()
+    return snap
+
+
+def _generation_fingerprint(gen: Path) -> dict[str, str]:
+    out: dict[str, str] = {}
+    if not gen.exists():
+        return out
+    for p in sorted(gen.rglob("*")):
+        if p.is_file():
+            out[str(p.relative_to(gen))] = hashlib.sha256(p.read_bytes()).hexdigest()
+    return out
+
+
+def test_same_second_identical_ingest_has_unique_run_id(fixture: Path) -> None:
+    """Identical snapshots ingested in the same second must get unique runIds."""
+    import os
+    from datetime import datetime as dt_cls
+
+    ing = import_mod(fixture, "ingest_snapshot")
+    ing.rebind_paths(fixture)
+    snap = _complete_watchlist_snap(fixture, _load_base_snap(fixture))
+    snap["snapshot_utc"] = "2026-09-14T15:00:00Z"
+    frozen = dt_cls(2026, 9, 14, 15, 0, 0, tzinfo=timezone.utc)
+
+    class _FrozenDateTime(dt_cls):
+        @classmethod
+        def now(cls, tz=None):
+            if tz is None:
+                return frozen
+            return frozen.astimezone(tz) if frozen.tzinfo else frozen.replace(tzinfo=tz)
+
+    os.environ["PIPELINE_LOCK_HELD"] = "1"
+    orig_dt = ing.datetime
+    incoming1 = _write_incoming_from_snap(fixture, snap, name="same_second_a.json")
+    incoming2_payload = json.loads(json.dumps(snap))
+    try:
+        ing.datetime = _FrozenDateTime
+        r1 = ing.ingest_and_build(incoming1, run_export=False, run_publish=False)
+        incoming2 = _write_incoming_from_snap(fixture, incoming2_payload, name="same_second_b.json")
+        r2 = ing.ingest_and_build(incoming2, run_export=False, run_publish=False)
+    finally:
+        ing.datetime = orig_dt
+    rid1, rid2 = r1.get("runId"), r2.get("runId")
+    ok = r1.get("runStatus") == "committed" and r2.get("runStatus") == "committed"
+    ok = ok and bool(rid1) and bool(rid2) and rid1 != rid2
+    ok = ok and (fixture / "data" / "generations" / str(rid1)).is_dir()
+    ok = ok and (fixture / "data" / "generations" / str(rid2)).is_dir()
+    src = (fixture / "tools" / "ingest_snapshot.py").read_text(encoding="utf-8")
+    ok = ok and "allocate_unique_run_id" in src and "uuid.uuid4" in src
+    ok = ok and "content_hash_snapshot(raw)[:8]" not in src
+    record(
+        "same_second_identical_ingest_has_unique_run_id_test",
+        ok,
+        f"rid1={rid1} rid2={rid2}",
+    )
+
+
+def test_committed_generation_never_mutated_by_replay(fixture: Path) -> None:
+    """Exact replay may no-op events but must never mutate a committed generation dir."""
+    import os
+    ing = import_mod(fixture, "ingest_snapshot")
+    ing.rebind_paths(fixture)
+    snap = _complete_watchlist_snap(fixture, _load_base_snap(fixture))
+    snap["snapshot_utc"] = "2026-09-14T15:10:00Z"
+    os.environ["PIPELINE_LOCK_HELD"] = "1"
+    incoming1 = _write_incoming_from_snap(fixture, snap, name="replay_a.json")
+    r1 = ing.ingest_and_build(incoming1, run_export=False, run_publish=False)
+    rid1 = r1.get("runId")
+    gen1 = fixture / "data" / "generations" / str(rid1)
+    ok = r1.get("runStatus") == "committed" and gen1.is_dir()
+    before = _generation_fingerprint(gen1)
+    incoming2 = _write_incoming_from_snap(fixture, json.loads(json.dumps(snap)), name="replay_b.json")
+    r2 = ing.ingest_and_build(incoming2, run_export=False, run_publish=False)
+    after = _generation_fingerprint(gen1)
+    ok = ok and r2.get("runStatus") == "committed"
+    ok = ok and r2.get("runId") != rid1
+    ok = ok and after == before and before
+    record(
+        "committed_generation_never_mutated_by_replay_test",
+        ok,
+        f"rid1={rid1} rid2={r2.get('runId')} files={len(before)}",
+    )
+
+
+def test_existing_generation_directory_fail_closed(fixture: Path) -> None:
+    """commit_staged_run must error if generations/<runId> already exists; never overwrite."""
+    ing = import_mod(fixture, "ingest_snapshot")
+    ing.rebind_paths(fixture)
+    rid = "preexisting-immutable-gen"
+    gen = fixture / "data" / "generations" / rid
+    gen.mkdir(parents=True, exist_ok=True)
+    sentinel = gen / "IMMUTABLE.txt"
+    sentinel.write_text("do-not-touch\n", encoding="utf-8")
+    nested = gen / "snapshots" / "keep.json"
+    nested.parent.mkdir(parents=True, exist_ok=True)
+    nested.write_text('{"keep": true}\n', encoding="utf-8")
+    stage = fixture / "data" / "staging" / "stage-fail-closed"
+    stage.mkdir(parents=True, exist_ok=True)
+    snap = {"snapshot_utc": "2026-09-14T10:00:00Z", "tickers": {"NVDA": _good_ticker()}}
+    raised = False
+    try:
+        ing.commit_staged_run(stage, snap, [], "2026-09-14T10:00:00Z", run_id=rid)
+    except ing.CommitAborted:
+        raised = True
+    except Exception as exc:
+        raised = "immutable" in str(exc).lower() or "already exists" in str(exc).lower()
+    ok = raised
+    ok = ok and sentinel.read_text(encoding="utf-8") == "do-not-touch\n"
+    ok = ok and json.loads(nested.read_text(encoding="utf-8")).get("keep") is True
+    ok = ok and not (gen / "snapshot.json").exists()
+    src = (fixture / "tools" / "ingest_snapshot.py").read_text(encoding="utf-8")
+    ok = ok and "already exists (immutable)" in src
+    record("existing_generation_directory_fail_closed_test", ok, f"raised={raised}")
+
+
+def test_claimed_ir_with_unofficial_domain_not_tier1(fixture: Path) -> None:
+    exp = import_mod(fixture, "export_web_data")
+    unofficial = "https://random.example/ir/earnings"
+    ok = exp.classify_source_tier(unofficial, source_type="ir", ticker="NVDA") != 1
+    ok = ok and exp.classify_source_tier(unofficial, source_type="company_ir", ticker="NVDA") != 1
+    ok = ok and exp.classify_source_tier(
+        "https://investor.nvidia.com/news", source_type="ir", ticker="NVDA"
+    ) == 1
+    record("claimed_ir_with_unofficial_domain_not_tier1_test", ok, unofficial)
+
+
+def test_claimed_sec_with_non_sec_domain_not_tier1(fixture: Path) -> None:
+    exp = import_mod(fixture, "export_web_data")
+    fake = "https://random.example/sec/archives"
+    ok = exp.classify_source_tier(fake, source_type="sec") != 1
+    ok = ok and exp.classify_source_tier(fake, source_type="8-k") != 1
+    ok = ok and exp.classify_source_tier("https://www.sec.gov/Archives/x", source_type="sec") == 1
+    ok = ok and exp.classify_source_tier("https://efts.sec.gov/x", source_type="10-q") == 1
+    record("claimed_sec_with_non_sec_domain_not_tier1_test", ok, fake)
+
+
+def test_source_type_domain_mismatch(fixture: Path) -> None:
+    exp = import_mod(fixture, "export_web_data")
+    got_ir = exp.classify_source_tier(
+        "https://evil.com/x", source_type="company_ir", ticker="NVDA"
+    )
+    got_sec = exp.classify_source_tier("https://news.example/x", source_type="sec")
+    got_sa = exp.classify_source_tier(
+        "https://evilseekingalpha.com/article/1", source_type="seeking_alpha"
+    )
+    mismatch = {"source_mismatch", "Unknown", "needs_verification", "unverified_ir_candidate"}
+    ok = got_ir != 1 and got_ir in mismatch
+    ok = ok and got_sec != 1 and got_sec in mismatch
+    ok = ok and got_sa != 4
+    record(
+        "source_type_domain_mismatch_test",
+        ok,
+        f"ir={got_ir} sec={got_sec} sa={got_sa}",
+    )
+
+
+def test_cross_issuer_official_domain_not_tier1_for_ticker(fixture: Path) -> None:
+    """NVDA digest + Broadcom IR URL must not be Tier 1; SEC stays globally valid."""
+    exp = import_mod(fixture, "export_web_data")
+    avgo_ir = "https://investors.broadcom.com/news"
+    ok = exp.classify_source_tier(avgo_ir, ticker="NVDA") != 1
+    data = {
+        "hasDigest": True,
+        "ticker": "NVDA",
+        "results": {
+            "eps": "$1.00",
+            "sourceUrl": avgo_ir,
+            "sourceTier": 1,
+            "sourceType": "company_ir",
+        },
+        "guidanceDetail": {"foo": 1},
+        "sources": [],
+    }
+    out = exp.ensure_earnings_provenance(data)
+    tier = (out.get("actuals") or {}).get("sourceTier")
+    ok = ok and tier != 1
+    sec = {
+        "hasDigest": True,
+        "ticker": "NVDA",
+        "results": {
+            "eps": "$1.00",
+            "sourceUrl": "https://www.sec.gov/Archives/edgar/data/1",
+            "sourceTier": 1,
+            "sourceType": "sec",
+        },
+    }
+    out_sec = exp.ensure_earnings_provenance(sec)
+    ok = ok and (out_sec.get("actuals") or {}).get("sourceTier") == 1
+    ok = ok and exp.classify_source_tier("https://www.sec.gov/Archives/x", ticker="NVDA") == 1
+    record(
+        "cross_issuer_official_domain_not_tier1_for_ticker_test",
+        ok,
+        f"tier={tier} avgo_for_nvda={exp.classify_source_tier(avgo_ir, ticker='NVDA')}",
+    )
+
+
+def test_fake_sa_domain_not_selected_as_consensus_source(fixture: Path) -> None:
+    exp = import_mod(fixture, "export_web_data")
+    fake = "https://evilseekingalpha.com/article/1"
+    real = "https://seekingalpha.com/article/real-nvda"
+    data = {
+        "hasDigest": True,
+        "ticker": "NVDA",
+        "results": {
+            "eps": "1.0",
+            "sourceUrl": "https://investor.nvidia.com/results",
+            "sourceTier": 1,
+        },
+        "sources": [
+            {"url": fake, "sourceTier": 4, "attribution": "Seeking Alpha"},
+        ],
+        "comparison": "beat",
+        "positives": [{"text": "beat", "supplementalUrl": fake}],
+    }
+    out = exp.ensure_earnings_provenance(data)
+    cc = out.get("consensusComparison") or {}
+    selected = str(cc.get("sourceUrl") or "")
+    ok = fake not in selected
+    ok = ok and "evilseekingalpha.com" not in selected.lower()
+    data2 = dict(data)
+    data2["sources"] = [
+        {"url": fake, "sourceTier": 4},
+        {"url": real, "sourceTier": 4},
+    ]
+    out2 = exp.ensure_earnings_provenance(data2)
+    cc2 = out2.get("consensusComparison") or {}
+    host2 = exp._hostname_of(cc2.get("sourceUrl"))
+    ok = ok and exp._is_seekingalpha_hostname(host2)
+    ok = ok and "evilseekingalpha.com" not in str(cc2.get("sourceUrl") or "").lower()
+    record(
+        "fake_sa_domain_not_selected_as_consensus_source_test",
+        ok,
+        f"cc={selected} cc2={cc2.get('sourceUrl')}",
+    )
+
+
+def test_strict_sa_hostname_used_everywhere(fixture: Path) -> None:
+    """Provenance paths must use parsed hostname + _is_seekingalpha_hostname, not substring."""
+    hits = []
+    for name in ("export_web_data.py", "build_alerts.py"):
+        src = (fixture / "tools" / name).read_text(encoding="utf-8")
+        if "def _is_seekingalpha_hostname" not in src:
+            hits.append(f"{name}:missing_helper")
+        for i, line in enumerate(src.splitlines(), 1):
+            code = line.split("#", 1)[0]
+            if '"seekingalpha.com" in' in code or "'seekingalpha.com' in" in code:
+                hits.append(f"{name}:{i}:{code.strip()}")
+    exp = import_mod(fixture, "export_web_data")
+    ok = not hits
+    ok = ok and exp._url_is_seekingalpha("https://www.seekingalpha.com/x")
+    ok = ok and not exp._url_is_seekingalpha("https://evilseekingalpha.com/x")
+    ok = ok and not exp._url_is_seekingalpha("https://seekingalpha.com.evil.com/x")
+    record("strict_sa_hostname_used_everywhere_test", ok, f"hits={hits[:8]}")
+
+
+def test_materialized_marker_with_missing_live_file_repairs_from_current(fixture: Path) -> None:
+    """Marker matching CURRENT is not enough if a required live artifact is missing."""
+    import os
+    ing = import_mod(fixture, "ingest_snapshot")
+    ing.rebind_paths(fixture)
+    snap = _complete_watchlist_snap(fixture, _load_base_snap(fixture))
+    snap["snapshot_utc"] = "2026-09-14T16:00:00Z"
+    os.environ["PIPELINE_LOCK_HELD"] = "1"
+    incoming = _write_incoming_from_snap(fixture, snap, name="live_repair.json")
+    result = ing.ingest_and_build(incoming, run_export=True, run_publish=False)
+    ok = result.get("runStatus") == "committed"
+    gen = ing.resolve_current_generation()
+    ok = ok and gen is not None
+    marker = fixture / "data" / ".materialized_run_id"
+    rid = str(result.get("runId") or "")
+    ok = ok and marker.exists() and marker.read_text(encoding="utf-8").strip() == rid
+    gen_web = gen / "web" / "data"
+    live_target = None
+    gen_src = None
+    for cand in ("meta.json", "companies.json", "earnings.json"):
+        if (gen_web / cand).exists():
+            live_target = fixture / "web" / "data" / cand
+            gen_src = gen_web / cand
+            break
+    ok = ok and live_target is not None and live_target.exists()
+    expect = gen_src.read_bytes() if gen_src else b""
+    live_target.unlink()
+    ok = ok and not live_target.exists()
+    # Marker still claims CURRENT — must rematerialize, not early-return
+    marker.write_text(rid + "\n", encoding="utf-8")
+    ing.ensure_live_matches_current()
+    ok = ok and live_target.exists()
+    ok = ok and live_target.read_bytes() == expect
+    ok = ok and marker.read_text(encoding="utf-8").strip() == rid
+    src = (fixture / "tools" / "ingest_snapshot.py").read_text(encoding="utf-8")
+    ok = ok and "live_cache_matches_generation" in src
+    record(
+        "materialized_marker_with_missing_live_file_repairs_from_current_test",
+        ok,
+        f"rid={rid} restored={live_target.name if live_target else None}",
+    )
+
 
 # Suite classification: integration = subprocess/crash/publish/heavy ingest
 INTEGRATION_TEST_NAMES = {
@@ -4816,6 +5120,9 @@ INTEGRATION_TEST_NAMES = {
     "test_current_generation_remains_source_of_truth",
     "test_pending_publish_uses_current_generation",
     "test_revision_generation_failure_blocks_export",
+    "test_same_second_identical_ingest_has_unique_run_id",
+    "test_committed_generation_never_mutated_by_replay",
+    "test_materialized_marker_with_missing_live_file_repairs_from_current",
 }
 
 
@@ -4964,6 +5271,16 @@ def _all_suite_tests():
         ("test_duplicate_identical_fiscal_row_dedup", test_duplicate_identical_fiscal_row_dedup),
         ("test_duplicate_conflicting_fiscal_row_rejected", test_duplicate_conflicting_fiscal_row_rejected),
         ("test_mapped_slot_collision_rejected", test_mapped_slot_collision_rejected),
+        ("test_same_second_identical_ingest_has_unique_run_id", test_same_second_identical_ingest_has_unique_run_id),
+        ("test_committed_generation_never_mutated_by_replay", test_committed_generation_never_mutated_by_replay),
+        ("test_existing_generation_directory_fail_closed", test_existing_generation_directory_fail_closed),
+        ("test_claimed_ir_with_unofficial_domain_not_tier1", test_claimed_ir_with_unofficial_domain_not_tier1),
+        ("test_claimed_sec_with_non_sec_domain_not_tier1", test_claimed_sec_with_non_sec_domain_not_tier1),
+        ("test_source_type_domain_mismatch", test_source_type_domain_mismatch),
+        ("test_cross_issuer_official_domain_not_tier1_for_ticker", test_cross_issuer_official_domain_not_tier1_for_ticker),
+        ("test_fake_sa_domain_not_selected_as_consensus_source", test_fake_sa_domain_not_selected_as_consensus_source),
+        ("test_strict_sa_hostname_used_everywhere", test_strict_sa_hostname_used_everywhere),
+        ("test_materialized_marker_with_missing_live_file_repairs_from_current", test_materialized_marker_with_missing_live_file_repairs_from_current),
     ]
 
 

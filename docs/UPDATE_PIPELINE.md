@@ -17,10 +17,10 @@ Repo: https://github.com/kumahsu1118-ui/ai-eps-monitor
 
 ## Commit vs materialization
 
-1. Gate + stage under `data/staging/<runId>/work`.
+1. Gate + stage under `data/staging/<runId>/` with an unconditionally unique `runId` (UTC microseconds + full snapshot hash + UUID). An existing `generations/<runId>/` is immutable — collision fail-closed, never overwrite-in-place.
 2. Export (legacy-mutate **inside the work root only**).
 3. Snapshot `data/generations/<id>/` and **atomically flip `CURRENT`** — this is COMMIT (`runStatus=committed`).
-4. Materialize live trees from CURRENT (`materializationStatus=ok`).
+4. Materialize live trees from CURRENT (`materializationStatus=ok`). `ensure_live_matches_current()` trusts the live cache only when the marker **and** required CURRENT artifacts match build identity; otherwise it rematerializes.
 5. If step 4 fails: **still committed**. `materializationStatus` is `failed` or `pending`, **never `aborted`**. Retry:
 
 ```bash
