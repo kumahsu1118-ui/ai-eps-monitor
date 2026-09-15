@@ -21,17 +21,20 @@ Buy-side monitor for NVDA, AVGO, TSM, MSFT, BE, KEYS.
 | `tests/fixtures/` | Sanitized universe/snapshots + SA HTML parser fixtures |
 | `docs/` | Mapping audit, pipeline, Round 2 spec, test results |
 
-GitHub Pages is served from the **repo root**. After export, copy `web/` public files to root:
+GitHub Pages is served from the **repo root**. Ingest is the sole pipeline writer; standalone export is read-only and publish is publish-only (`--legacy-mutate` only):
 
 ```bash
-python3 tools/export_web_data.py
-bash tools/sync_pages_root.sh
+python3 tools/ingest_snapshot.py --publish
+# or publish-only from CURRENT generation web/:
+bash tools/publish_github_pages.sh
 ```
 
 ## Tests (must PASS on a clean checkout)
 
 ```bash
-python3 tools/run_acceptance_tests.py
+python3 tools/run_acceptance_tests.py              # all
+python3 tools/run_unit_tests.py                    # unit (in-process)
+python3 tools/run_integration_tests.py             # integration (subprocess timeouts)
 ```
 
 Isolated tempfile suite — does not mutate production `data/` or `web/data`. Creates synthetic fixtures when needed; ships `tests/fixtures/` so universe/snapshots are not hand-added.

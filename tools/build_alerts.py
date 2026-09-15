@@ -37,6 +37,7 @@ Writes data/alerts/index.json with activeAlerts + alertHistory (+ legacy alerts 
 from __future__ import annotations
 
 import json
+import math
 import re
 import sys
 from datetime import datetime, timedelta, timezone
@@ -113,17 +114,22 @@ def now_utc_iso() -> str:
 
 
 def to_num(x):
+    """Parse number; reject non-finite (NaN/Infinity) — math.isfinite only."""
     if x is None:
         return None
+    if isinstance(x, bool):
+        return None
     if isinstance(x, (int, float)):
-        return float(x)
+        v = float(x)
+        return v if math.isfinite(v) else None
     s = str(x).strip().replace(",", "").replace("%", "").replace("$", "")
-    if s.lower() in {"", "n/a", "na", "n/a (baseline)", "data unavailable", "null", "none"}:
+    if s.lower() in {"", "n/a", "na", "n/a (baseline)", "data unavailable", "null", "none", "nan", "inf", "-inf", "+inf", "infinity", "-infinity"}:
         return None
     try:
-        return float(s)
+        v = float(s)
     except Exception:
         return None
+    return v if math.isfinite(v) else None
 
 
 def load_tickers() -> list[str]:
@@ -702,6 +708,31 @@ def _norm_vs(val) -> str | None:
 
 
 
+def _hostname_of(url: str | None) -> str | None:
+    if not url:
+        return None
+    from urllib.parse import urlparse
+    try:
+        host = urlparse(str(url)).hostname
+    except Exception:
+        return None
+    if not host:
+        return None
+    return host.lower().rstrip(".")
+
+
+def _is_seekingalpha_hostname(host: str | None) -> bool:
+    """Strict: host == seekingalpha.com or endswith .seekingalpha.com (not evilseekingalpha.com)."""
+    if not host:
+        return False
+    h = host.lower().rstrip(".")
+    return h == "seekingalpha.com" or h.endswith(".seekingalpha.com")
+
+
+def _url_is_seekingalpha(url: str | None) -> bool:
+    return _is_seekingalpha_hostname(_hostname_of(url))
+
+
 def _consensus_comparison_source(dig: dict) -> tuple[str | None, int | None]:
     """Field-level provenance for results-vs-consensus.
 
@@ -713,6 +744,12 @@ def _consensus_comparison_source(dig: dict) -> tuple[str | None, int | None]:
         url = cc.get("sourceUrl") or cc.get("url")
         tier = cc.get("sourceTier") if cc.get("sourceTier") is not None else cc.get("tier")
         if url or tier is not None:
+            if url and not _url_is_seekingalpha(url):
+                host = _hostname_of(url)
+                if host and "seekingalpha" in host:
+                    url = None
+                    if tier == 4:
+                        tier = None
             return url, tier
     # Heuristic: Seeking Alpha sources in digest.sources list
     for s in dig.get("sources") or []:
@@ -721,15 +758,17 @@ def _consensus_comparison_source(dig: dict) -> tuple[str | None, int | None]:
         tier = s.get("sourceTier") if s.get("sourceTier") is not None else s.get("tier")
         attr = str(s.get("attribution") or s.get("title") or "").lower()
         url = s.get("url") or s.get("sourceUrl")
-        if tier == 4 or "seeking alpha" in attr or (url and "seekingalpha.com" in str(url).lower()):
+        if _url_is_seekingalpha(url):
             return url, tier if tier is not None else 4
+        if (tier == 4 or "seeking alpha" in attr) and not url:
+            return None, 4
     # results.notes often cite SA beat/miss — still do not use results.sourceUrl (IR)
     notes = str(((dig.get("results") or {}) if isinstance(dig.get("results"), dict) else {}).get("notes") or "")
     if "seeking alpha" in notes.lower() or "sa earnings" in notes.lower():
-        # Find any SA URL in sources; else leave url None but tier 4
+        # Find any validated SA URL in sources; else leave url None but tier 4
         for s in dig.get("sources") or []:
-            if isinstance(s, dict) and s.get("url") and "seekingalpha.com" in str(s.get("url")).lower():
-                return s.get("url"), 4
+            if isinstance(s, dict) and _url_is_seekingalpha(s.get("url") or s.get("sourceUrl")):
+                return s.get("url") or s.get("sourceUrl"), 4
         return None, 4
     return None, None
 

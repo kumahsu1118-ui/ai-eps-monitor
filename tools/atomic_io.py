@@ -80,8 +80,11 @@ def _default_lock_path(path: Path) -> Path:
 
 
 def atomic_write_json(path: Path, obj, *, lock_path: Path | None = None) -> None:
-    """JSON write via temp + atomic rename; optional process lock."""
-    payload = json.dumps(obj, indent=2, ensure_ascii=False) + "\n"
+    """JSON write via temp + atomic rename; optional process lock.
+
+    Fail-closed: allow_nan=False rejects NaN/Infinity (non-finite must not persist).
+    """
+    payload = json.dumps(obj, indent=2, ensure_ascii=False, allow_nan=False) + "\n"
     lock = Path(lock_path) if lock_path else _default_lock_path(Path(path))
     with ProcessLock(lock):
         atomic_write_text(path, payload)
@@ -101,7 +104,7 @@ def append_jsonl_atomic(path: Path, rows: list[dict], *, lock_path: Path | None 
         if buf and not buf.endswith("\n"):
             buf += "\n"
         for row in rows:
-            buf += json.dumps(row, ensure_ascii=False) + "\n"
+            buf += json.dumps(row, ensure_ascii=False, allow_nan=False) + "\n"
         atomic_write_text(path, buf)
 
 

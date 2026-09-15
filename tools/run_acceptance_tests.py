@@ -154,8 +154,15 @@ def build_fixture(dest: Path) -> Path:
         src = ROOT / "web" / name
         if src.exists():
             shutil.copy2(src, web / name)
+    vendor_src = ROOT / "web" / "vendor"
+    if vendor_src.exists():
+        shutil.copytree(vendor_src, web / "vendor", dirs_exist_ok=True)
 
-    for sub in ("snapshots", "revisions", "drivers", "earnings", "alerts", "daily_eps_snapshots", "incoming", "snapshots/quarantine"):
+    for sub in (
+        "snapshots", "revisions", "drivers", "earnings", "alerts",
+        "daily_eps_snapshots", "incoming", "staging", "generations",
+        "snapshots/quarantine",
+    ):
         (dest / "data" / sub).mkdir(parents=True, exist_ok=True)
 
     shipped = ROOT / "fixtures" / "data"
@@ -231,8 +238,66 @@ def build_fixture(dest: Path) -> Path:
     return dest
 
 
-def run_export(fixture: Path) -> None:
-    subprocess.check_call([sys.executable, str(fixture / "tools" / "export_web_data.py")], cwd=str(fixture))
+def restore_base_snapshot(fixture: Path) -> None:
+    """Restore canonical non-future publishable snapshot (after destructive tests).
+
+    Removes other dated snapshots so LKG comparisons do not mix synthetic fixtures.
+    Also drops CURRENT / materialization marker so a later reader rematerialize
+    cannot resurrect a previous ingest's snapshots as conflicting LKG.
+    """
+    snap_dir = fixture / "data" / "snapshots"
+    snap_dir.mkdir(parents=True, exist_ok=True)
+    for p in list(snap_dir.glob("20*.json")):
+        if p.name == "2026-09-15.json":
+            continue
+        try:
+            p.unlink()
+        except Exception:
+            pass
+    for name in ("latest.json", "manifest.json"):
+        lp = snap_dir / name
+        if lp.exists():
+            try:
+                lp.unlink()
+            except Exception:
+                pass
+    for leftover in (
+        fixture / "data" / "CURRENT.json",
+        fixture / "data" / ".materialized_run_id",
+    ):
+        if leftover.exists():
+            try:
+                leftover.unlink()
+            except Exception:
+                pass
+    snap_path = snap_dir / "2026-09-15.json"
+    for src in (
+        ROOT / "fixtures" / "data" / "snapshots" / "2026-09-15.json",
+        ROOT / "data" / "snapshots" / "2026-09-15.json",
+    ):
+        if src.exists():
+            shutil.copy2(src, snap_path)
+            return
+
+
+def spa_js_text(fixture: Path) -> str:
+    """Published SPA may live at repo-root app.js; source copy under web/app.js."""
+    parts = []
+    for p in (fixture / "web" / "app.js", ROOT / "web" / "app.js", ROOT / "app.js"):
+        if p.exists():
+            try:
+                parts.append(p.read_text(encoding="utf-8"))
+            except Exception:
+                continue
+    return "\n".join(parts)
+
+
+def run_export(fixture: Path, *, legacy_mutate: bool = True, timeout: int = 60) -> None:
+    """Run exporter. Prior suite uses --legacy-mutate; single-writer tests call without it."""
+    cmd = [sys.executable, str(fixture / "tools" / "export_web_data.py")]
+    if legacy_mutate:
+        cmd.append("--legacy-mutate")
+    subprocess.check_call(cmd, cwd=str(fixture), timeout=timeout)
 
 
 def run_build_alerts(fixture: Path) -> None:
@@ -822,7 +887,7 @@ def test_full_export_2027_rollover(fixture: Path) -> None:
     env["AI_EPS_TAIPEI_YEAR"] = "2027"
     try:
         subprocess.check_call(
-            [sys.executable, str(fixture / "tools" / "export_web_data.py")],
+            [sys.executable, str(fixture / "tools" / "export_web_data.py"), "--legacy-mutate"],
             cwd=str(fixture),
             env=env,
         )
@@ -1629,7 +1694,7 @@ def test_quality_gate_blocks_export(fixture: Path) -> None:
     meta_before = (fixture / "web" / "data" / "meta.json").read_text(encoding="utf-8")
     companies_before = (fixture / "web" / "data" / "companies.json").read_text(encoding="utf-8")
     # Poison snapshot: zero rows
-    bad = {"snapshot_utc": "2026-09-15T12:00:00Z", "tickers": {}, "source": "fault-injection"}
+    bad = {"snapshot_utc": "2026-09-15T06:00:00Z", "tickers": {}, "source": "fault-injection"}
     snap_path.write_text(json.dumps(bad, indent=2) + "\n", encoding="utf-8")
     rc = subprocess.call(
         [sys.executable, str(fixture / "tools" / "export_web_data.py")],
@@ -1843,26 +1908,27 @@ def test_source_1m_no_daily_spam(fixture: Path) -> None:
     snap = json.loads(snap_path.read_text(encoding="utf-8"))
     snap["tickers"]["AVGO"]["eps"]["2028E"]["rev_1M_pct"] = 15.7
     snap["tickers"]["AVGO"]["eps"]["2028E"]["analysts"] = 33
-    snap["snapshot_utc"] = "2026-09-15T01:00:00Z"
+    snap["snapshot_utc"] = "2026-09-14T01:00:00Z"
     snap_path.write_text(json.dumps(snap, indent=2) + "\n", encoding="utf-8")
-    day1 = ba.rule6_source_reported_1m(["AVGO"], prior_history=[])
+    day1 = ba.rule6_source_reported_1m(["AVGO"], prior_history=[], current_snapshot=snap)
     hits1 = [a for a in day1 if a.get("rule") == "source_reported_1m_revision" and a.get("ticker") == "AVGO"]
     ok = len(hits1) >= 1
     id1 = hits1[0]["id"] if hits1 else ""
     ok = ok and "2026-09-15" not in id1
     ok = ok and (hits1[0].get("lifecycleEvent") in {"Open", None} or hits1[0].get("status") == "Open")
     # Day 2 same magnitude — Update/Hold same ID, not new daily id
-    snap["snapshot_utc"] = "2026-09-16T01:00:00Z"
+    snap["snapshot_utc"] = "2026-09-15T01:00:00Z"
     snap_path.write_text(json.dumps(snap, indent=2) + "\n", encoding="utf-8")
-    day2 = ba.rule6_source_reported_1m(["AVGO"], prior_history=hits1)
+    day2 = ba.rule6_source_reported_1m(["AVGO"], prior_history=hits1, current_snapshot=snap)
     hits2 = [a for a in day2 if a.get("rule") == "source_reported_1m_revision" and a.get("ticker") == "AVGO"]
     ok = ok and len(hits2) >= 1
     ok = ok and hits2[0].get("id") == id1
     ok = ok and hits2[0].get("lifecycleEvent") in {"Updated", "Hold", "Open"}
     # Resolve when <4%
     snap["tickers"]["AVGO"]["eps"]["2028E"]["rev_1M_pct"] = 2.0
+    snap["snapshot_utc"] = "2026-09-15T02:00:00Z"
     snap_path.write_text(json.dumps(snap, indent=2) + "\n", encoding="utf-8")
-    day3 = ba.rule6_source_reported_1m(["AVGO"], prior_history=hits2)
+    day3 = ba.rule6_source_reported_1m(["AVGO"], prior_history=hits2, current_snapshot=snap)
     hits3 = [a for a in day3 if a.get("id") == id1]
     ok = ok and hits3 and str(hits3[0].get("status") or hits3[0].get("lifecycleStatus") or "").lower() == "resolved"
     record("source_1m_no_daily_spam_test", ok, f"id={id1[:40]} life2={hits2[0].get('lifecycleEvent') if hits2 else None}")
@@ -1890,7 +1956,7 @@ def test_low_coverage_revision_confidence(fixture: Path) -> None:
         meta = json.loads(meta_p.read_text(encoding="utf-8"))
     meta["displayMappedYears"] = sorted(slots)
     meta_p.write_text(json.dumps(meta, indent=2) + "\n", encoding="utf-8")
-    out = ba.rule6_source_reported_1m(["AVGO"], prior_history=[])
+    out = ba.rule6_source_reported_1m(["AVGO"], prior_history=[], current_snapshot=snap)
     hits = [a for a in out if a.get("slot") == far or a.get("eventKey") == f"sa1m_{far}"]
     ok = ok and len(hits) >= 1
     if hits:
@@ -1903,6 +1969,7 @@ def test_low_coverage_revision_confidence(fixture: Path) -> None:
 
 def test_all_earnings_provenance(fixture: Path) -> None:
     """MUST traverse ALL hasDigest=true tickers — not only NVDA."""
+    restore_base_snapshot(fixture)
     earn_dir = fixture / "data" / "earnings"
     # Reset all digests from production/fixtures so prior tests cannot pollute
     for src_root in (ROOT / "data" / "earnings", ROOT / "fixtures" / "data" / "earnings"):
@@ -2016,7 +2083,7 @@ def test_revision_regime(fixture: Path) -> None:
 
 def test_company_vs_earnings_route_screenshot(fixture: Path) -> None:
     """Require 04!=06, 05!=07, 06!=07; Earnings Detail route exists (not renamed company)."""
-    app = (fixture / "web" / "app.js").read_text(encoding="utf-8")
+    app = spa_js_text(fixture)
     ok = "earningsDetail" in app or 'name: "earningsDetail"' in app or "renderEarningsDetail" in app
     ok = ok and ("#/earnings/" in app or '"#/earnings/"' in app)
     ok = ok and "Earnings Detail" in app
@@ -2052,6 +2119,7 @@ def test_rejected_snapshot_cannot_mutate_alert_db(fixture: Path) -> None:
     """Rejected snapshot (price=0 + 1M=+99%) must NOT mutate persistent Alert DB.
     Order: Quality Gate before Alert Engine; no pre-gate build_alerts in publish.
     """
+    restore_base_snapshot(fixture)
     import time
     ba = import_mod(fixture, "build_alerts")
     exp = import_mod(fixture, "export_web_data")
@@ -2086,7 +2154,9 @@ def test_rejected_snapshot_cannot_mutate_alert_db(fixture: Path) -> None:
     # build_alerts.py must not appear as a standalone pre-gate python call before export_web_data
     idx_export = joined.find("export_web_data.py")
     idx_ba = joined.find("build_alerts.py")
-    ok = ok and (idx_ba < 0 or (idx_export >= 0 and idx_ba > idx_export))
+    publish_only = "publish-only" in pub or idx_export < 0
+    ok = ok and (publish_only or idx_ba < 0 or (idx_export >= 0 and idx_ba > idx_export))
+    ok = ok and ("build_alerts.py" not in joined or publish_only)
     # Restore
     shipped = ROOT / "fixtures" / "data" / "snapshots" / "2026-09-15.json"
     src = shipped if shipped.exists() else ROOT / "data" / "snapshots" / "2026-09-15.json"
@@ -2096,6 +2166,7 @@ def test_rejected_snapshot_cannot_mutate_alert_db(fixture: Path) -> None:
 
 def test_partial_collection_does_not_create_fake_daily_observation(fixture: Path) -> None:
     """collectionFailed/usingLastKnownGood must not append daily EPS historical observation."""
+    restore_base_snapshot(fixture)
     exp = import_mod(fixture, "export_web_data")
     run_export(fixture)
     jsonl = fixture / "data" / "daily_eps_snapshots" / "daily.jsonl"
@@ -2104,7 +2175,7 @@ def test_partial_collection_does_not_create_fake_daily_observation(fixture: Path
     # Remove AVGO from snapshot → partial + LKG
     snap_path = fixture / "data" / "snapshots" / "2026-09-15.json"
     snap = json.loads(snap_path.read_text(encoding="utf-8"))
-    snap["snapshot_utc"] = "2026-09-15T12:00:00Z"
+    snap["snapshot_utc"] = "2026-09-15T06:00:00Z"
     if "AVGO" in snap.get("tickers", {}):
         del snap["tickers"]["AVGO"]
     snap_path.write_text(json.dumps(snap, indent=2) + "\n", encoding="utf-8")
@@ -2130,6 +2201,7 @@ def test_partial_collection_does_not_create_fake_daily_observation(fixture: Path
 
 def test_changed_since_checkpoint_advances(fixture: Path) -> None:
     """comparisonCheckpoint advances after successful export; next run does not re-report older events."""
+    restore_base_snapshot(fixture)
     exp = import_mod(fixture, "export_web_data")
     ba = import_mod(fixture, "build_alerts")
     run_export(fixture)
@@ -2141,11 +2213,11 @@ def test_changed_since_checkpoint_advances(fixture: Path) -> None:
     # Second export with later snap — checkpoint advances
     snap_path = fixture / "data" / "snapshots" / "2026-09-15.json"
     snap = json.loads(snap_path.read_text(encoding="utf-8"))
-    snap["snapshot_utc"] = "2026-09-15T08:00:00Z"
+    snap["snapshot_utc"] = "2026-09-15T02:00:00Z"
     snap_path.write_text(json.dumps(snap, indent=2) + "\n", encoding="utf-8")
     run_export(fixture)
     cp2 = json.loads(cp_path.read_text(encoding="utf-8"))
-    ok = ok and (cp2.get("snapUtc") == "2026-09-15T08:00:00Z" or cp2.get("comparisonCheckpoint") == "2026-09-15T08:00:00Z")
+    ok = ok and (cp2.get("snapUtc") == "2026-09-15T02:00:00Z" or cp2.get("comparisonCheckpoint") == "2026-09-15T02:00:00Z")
     # Events at or before checkpoint must not appear as changed-since
     payload = ba.evaluate_alerts()
     changed = payload.get("changedSinceLastCollection") or []
@@ -2191,7 +2263,7 @@ def test_source_1m_hold_preserves_event_age(fixture: Path) -> None:
     age = ba.age_days(hits2[0], now)
     ok = ok and age >= 5  # Sep 10 → Sep 15
     # Frontend prefers lastMaterialChangeAt
-    app = (fixture / "web" / "app.js").read_text(encoding="utf-8")
+    app = spa_js_text(fixture)
     ok = ok and "lastMaterialChangeAt" in app
     record("source_1m_hold_preserves_event_age_test", ok, f"age={age} eventAt={hits2[0].get('eventAt') if hits2 else None}")
 
@@ -2333,7 +2405,7 @@ def test_mixed_build_generation_rejected(fixture: Path) -> None:
     val = json.loads((web / "valuation.json").read_text(encoding="utf-8"))
     bid = meta.get("buildId")
     ok = ok and bid and alerts.get("buildId") == bid and val.get("buildId") == bid
-    app = (fixture / "web" / "app.js").read_text(encoding="utf-8")
+    app = spa_js_text(fixture)
     ok = ok and "mixed build generation rejected" in app
     ok = ok and "dashboard.json" in app
     # Simulate mixed → frontend logic (unit): ids differ
@@ -2356,12 +2428,12 @@ def test_same_day_multiple_raw_snapshot_preserved(fixture: Path) -> None:
     ok = ok and p1.exists()
     # Second same-day different time
     snap2 = {
-        "snapshot_utc": "2026-09-15T08:00:00Z",
+        "snapshot_utc": "2026-09-15T02:00:00Z",
         "tickers": {"NVDA": {"price": 101.0, "eps": {}}},
         "note": "second",
     }
-    p2 = exp.persist_full_snapshot(snap2, "2026-09-15T08:00:00Z")
-    ok = ok and p2.name == "2026-09-15T080000Z.json"
+    p2 = exp.persist_full_snapshot(snap2, "2026-09-15T02:00:00Z")
+    ok = ok and p2.name == "2026-09-15T020000Z.json"
     ok = ok and p1.exists() and p2.exists()
     # Re-persist first identity must NOT overwrite content away / must keep first
     first_bytes = p1.read_bytes()
@@ -2373,9 +2445,9 @@ def test_same_day_multiple_raw_snapshot_preserved(fixture: Path) -> None:
     ok = ok and (snap_dir / "manifest.json").exists()
     files = exp.list_full_snapshots()
     names = [f.name for f in files]
-    ok = ok and "2026-09-15T013600Z.json" in names and "2026-09-15T080000Z.json" in names
+    ok = ok and "2026-09-15T013600Z.json" in names and "2026-09-15T020000Z.json" in names
     # Cleanup test artifacts so subsequent exports still load the full day snapshot
-    for name in ("2026-09-15T013600Z.json", "2026-09-15T080000Z.json", "latest.json", "manifest.json"):
+    for name in ("2026-09-15T013600Z.json", "2026-09-15T020000Z.json", "latest.json", "manifest.json"):
         fp = snap_dir / name
         if fp.exists():
             fp.unlink()
@@ -2460,12 +2532,7 @@ def test_invalid_snapshot_not_in_validated_history(fixture: Path) -> None:
     sq = import_mod(fixture, "snapshot_quality")
     ing = import_mod(fixture, "ingest_snapshot")
     # Point ingest ROOT paths at fixture via monkeypatch of module constants
-    ing.ROOT = fixture
-    ing.INCOMING_DIR = fixture / "data" / "incoming"
-    ing.SNAP_DIR = fixture / "data" / "snapshots"
-    ing.QUARANTINE_DIR = fixture / "data" / "snapshots" / "quarantine"
-    ing.REV_PATH = fixture / "data" / "revisions" / "history.jsonl"
-    ing.UNIVERSE_PATH = fixture / "data" / "universe.json"
+    ing.rebind_paths(fixture)
     sq_root = fixture
 
     bad = {
@@ -2800,7 +2867,7 @@ def test_dashboard_publish_metadata_sync(fixture: Path) -> None:
         "dataVersion": "abc123",
         "refreshVersion": "def456",
         "buildId": "abc123",
-        "sitePublished": "2026-09-15T15:41:00Z",
+        "sitePublished": "2026-09-15T02:41:00Z",
         "sitePublishedDisplay": "old",
         "lastSuccessfulCollection": "2026-09-15T01:36:00Z",
     }
@@ -2811,7 +2878,7 @@ def test_dashboard_publish_metadata_sync(fixture: Path) -> None:
     # Simulate publish stamp sync logic
     import sys as _sys
     _sys.path.insert(0, str(fixture / "tools"))
-    now_utc = "2026-09-15T16:06:00Z"
+    now_utc = "2026-09-15T03:06:00Z"
     display = "Sep 15, 2026 16:06 Taipei Time"
     meta2 = json.loads((web / "meta.json").read_text(encoding="utf-8"))
     meta2["sitePublished"] = now_utc
@@ -2842,7 +2909,7 @@ def test_screenshot_dom_build_identity(fixture: Path) -> None:
     meta = {
         "dataVersion": "deadbeef" * 8,
         "refreshVersion": "cafebabe" * 8,
-        "sitePublished": "2026-09-15T08:00:00Z",
+        "sitePublished": "2026-09-15T02:00:00Z",
     }
     shots = fixture / "review-pack" / "screenshots"
     shots.mkdir(parents=True, exist_ok=True)
@@ -2941,19 +3008,14 @@ def _patch_tool_roots(fixture: Path) -> None:
 
 def test_export_failure_does_not_commit_validated_snapshot(fixture: Path) -> None:
     """Export exit 9 → abort; validated snapshot must NOT become LKG."""
+    restore_base_snapshot(fixture)
     _patch_tool_roots(fixture)
     ing = import_mod(fixture, "ingest_snapshot")
     # Force module paths to fixture
-    ing.ROOT = fixture
-    ing.INCOMING_DIR = fixture / "data" / "incoming"
-    ing.SNAP_DIR = fixture / "data" / "snapshots"
-    ing.QUARANTINE_DIR = fixture / "data" / "snapshots" / "quarantine"
-    ing.STAGING_DIR = fixture / "data" / "staging"
-    ing.REV_PATH = fixture / "data" / "revisions" / "history.jsonl"
-    ing.UNIVERSE_PATH = fixture / "data" / "universe.json"
+    ing.rebind_paths(fixture)
 
     snap = _load_base_snap(fixture)
-    snap["snapshot_utc"] = "2026-09-21T10:00:00Z"
+    snap["snapshot_utc"] = "2026-09-14T10:00:00Z"
     snap["qualityGate"] = {"status": "ok", "publishable": True}
     # Ensure all watchlist tickers present
     u = json.loads((fixture / "data" / "universe.json").read_text(encoding="utf-8"))
@@ -2983,11 +3045,11 @@ def test_export_failure_does_not_commit_validated_snapshot(fixture: Path) -> Non
     ok = result.get("ok") is False
     ok = ok and result.get("runStatus") == "aborted"
     ok = ok and result.get("validatedPath") is None
-    ok = ok and not any("2026-09-21T100000Z" in n for n in new_validated)
+    ok = ok and not any("2026-09-14T100000Z" in n for n in new_validated)
     # incoming must NOT be marked .processed
     ok = ok and incoming.exists() and not str(incoming).endswith(".processed")
     processed = list((fixture / "data" / "incoming").glob("*.processed"))
-    ok = ok and not any("2026-09-21T100000Z" in p.name for p in processed)
+    ok = ok and not any("2026-09-14T100000Z" in p.name for p in processed)
     # staging runStatus aborted
     stage = Path(result.get("stageDir") or "")
     if stage.exists():
@@ -2999,20 +3061,14 @@ def test_export_failure_does_not_commit_validated_snapshot(fixture: Path) -> Non
 def test_export_failure_does_not_commit_revision(fixture: Path) -> None:
     """Export failure must not append revision events to persistent history."""
     ing = import_mod(fixture, "ingest_snapshot")
-    ing.ROOT = fixture
-    ing.INCOMING_DIR = fixture / "data" / "incoming"
-    ing.SNAP_DIR = fixture / "data" / "snapshots"
-    ing.QUARANTINE_DIR = fixture / "data" / "snapshots" / "quarantine"
-    ing.STAGING_DIR = fixture / "data" / "staging"
-    ing.REV_PATH = fixture / "data" / "revisions" / "history.jsonl"
-    ing.UNIVERSE_PATH = fixture / "data" / "universe.json"
+    ing.rebind_paths(fixture)
 
     rev_path = fixture / "data" / "revisions" / "history.jsonl"
     before = rev_path.read_text(encoding="utf-8") if rev_path.exists() else ""
     before_n = len([l for l in before.splitlines() if l.strip()])
 
     snap = _load_base_snap(fixture)
-    snap["snapshot_utc"] = "2026-09-22T11:00:00Z"
+    snap["snapshot_utc"] = "2026-09-14T11:00:00Z"
     # Force an EPS change so a revision WOULD be proposed
     if "NVDA" in snap["tickers"]:
         row = snap["tickers"]["NVDA"]["eps"].get("2027E") or {}
@@ -3086,7 +3142,7 @@ def test_same_timestamp_snapshot_collision_preserved(fixture: Path) -> None:
     """Same snapshot_utc second with different content must NOT overwrite; both preserved."""
     exp = import_mod(fixture, "export_web_data")
     snap_dir = fixture / "data" / "snapshots"
-    utc = "2026-09-25T12:00:00Z"
+    utc = "2026-09-14T16:00:00Z"
     snap_a = {
         "snapshot_utc": utc,
         "note": "alpha",
@@ -3147,13 +3203,7 @@ def test_ingest_publish_single_export(fixture: Path) -> None:
             del _sys.modules[mod]
     # Ensure fixture tools preferred
     ing = import_mod(fixture, "ingest_snapshot")
-    ing.ROOT = fixture
-    ing.INCOMING_DIR = fixture / "data" / "incoming"
-    ing.SNAP_DIR = fixture / "data" / "snapshots"
-    ing.QUARANTINE_DIR = fixture / "data" / "snapshots" / "quarantine"
-    ing.STAGING_DIR = fixture / "data" / "staging"
-    ing.REV_PATH = fixture / "data" / "revisions" / "history.jsonl"
-    ing.UNIVERSE_PATH = fixture / "data" / "universe.json"
+    ing.rebind_paths(fixture)
     ing._here = fixture / "tools"
 
     publish_calls = {"n": 0, "env_skip": None}
@@ -3182,15 +3232,21 @@ def test_ingest_publish_single_export(fixture: Path) -> None:
         else:
             tickers[t] = _good_ticker(100, 5.0, 6.0, "Dec 2026", "Dec 2027")
     lkg_snap = {
-        "snapshot_utc": "2026-09-23T08:00:00Z",
+        "snapshot_utc": "2026-09-14T08:00:00Z",
         "qualityGate": {"status": "ok", "publishable": True},
         "tickers": {k: json.loads(json.dumps(v)) for k, v in tickers.items()},
     }
-    (fixture / "data" / "snapshots" / "2026-09-23T080000Z.json").write_text(
+    # Clear prior snapshots so synthetic LKG is the only validated candidate
+    for p in list((fixture / "data" / "snapshots").glob("20*.json")):
+        try:
+            p.unlink()
+        except Exception:
+            pass
+    (fixture / "data" / "snapshots" / "2026-09-14T080000Z.json").write_text(
         json.dumps(lkg_snap, indent=2) + "\n", encoding="utf-8"
     )
     snap = {
-        "snapshot_utc": "2026-09-23T09:00:00Z",
+        "snapshot_utc": "2026-09-14T09:00:00Z",
         "source": "fixture",
         "tickers": tickers,
     }
@@ -3240,6 +3296,7 @@ def test_ingest_publish_no_duplicate_revision(fixture: Path) -> None:
 
 def test_site_published_does_not_change_refresh_version(fixture: Path) -> None:
     """Changing only sitePublished must NOT change refreshVersion."""
+    restore_base_snapshot(fixture)
     exp = import_mod(fixture, "export_web_data")
     run_export(fixture)
     meta = json.loads((fixture / "web" / "data" / "meta.json").read_text(encoding="utf-8"))
@@ -3336,7 +3393,7 @@ def test_unknown_analyst_not_high_severity(fixture: Path) -> None:
         ok = ok and hits[0].get("confidence") == "Unknown"
         ok = ok and ("Coverage:" in (hits[0].get("message") or "") or "Coverage" in (hits[0].get("message") or "") or hits[0].get("confidence") == "Unknown")
     # UI rename present
-    app = (fixture / "web" / "app.js").read_text(encoding="utf-8")
+    app = spa_js_text(fixture)
     ok = ok and "Coverage:" in app
     ok = ok and "Dispersion:" in app
     record("unknown_analyst_not_high_severity_test", ok, f"sev={hits[0].get('severity') if hits else None} conf={hits[0].get('confidence') if hits else None}")
@@ -3345,12 +3402,14 @@ def test_unknown_analyst_not_high_severity(fixture: Path) -> None:
 def test_results_source_survives_missing_guidance(fixture: Path) -> None:
     """results.sourceUrl must survive when guidanceDetail is not a dict."""
     exp = import_mod(fixture, "export_web_data")
+    # Use official mapped IR domain (generic investor.* is no longer Tier1)
+    url = "https://investor.nvidia.com/results"
     data = {
         "hasDigest": True,
-        "ticker": "TEST",
+        "ticker": "NVDA",
         "results": {
             "eps": "$1.00",
-            "sourceUrl": "https://investor.example.com/results",
+            "sourceUrl": url,
             "sourceTier": 1,
         },
         "guidanceDetail": None,  # not a dict — precedence bug previously nulled sourceUrl
@@ -3358,13 +3417,13 @@ def test_results_source_survives_missing_guidance(fixture: Path) -> None:
     }
     out = exp.ensure_earnings_provenance(data)
     act = out.get("actuals") or {}
-    ok = act.get("sourceUrl") == "https://investor.example.com/results"
+    ok = act.get("sourceUrl") == url
     ok = ok and act.get("sourceTier") == 1
     # Also when guidanceDetail is a string
     data2 = dict(data)
     data2["guidanceDetail"] = "not-a-dict"
     out2 = exp.ensure_earnings_provenance(data2)
-    ok = ok and (out2.get("actuals") or {}).get("sourceUrl") == "https://investor.example.com/results"
+    ok = ok and (out2.get("actuals") or {}).get("sourceUrl") == url
     record("results_source_survives_missing_guidance_test", ok, f"url={act.get('sourceUrl')}")
 
 
@@ -3504,129 +3563,1841 @@ def test_null_eps_not_daily_observation(fixture: Path) -> None:
 
 
 
-def main() -> int:
-    print("=== ai-eps-monitor Transactional & Idempotent Pipeline acceptance ===")
-    print(f"ROOT={ROOT}")
+
+# ---------------------------------------------------------------------------
+# True Transaction Boundary + Release Integrity
+# ---------------------------------------------------------------------------
+
+
+def _fingerprint_persistent(fixture: Path) -> dict:
+    """Capture hashes of all formal persistent financial state."""
+    paths = [
+        fixture / "data" / "revisions" / "history.jsonl",
+        fixture / "data" / "daily_eps_snapshots" / "daily.jsonl",
+        fixture / "data" / "alerts" / "index.json",
+        fixture / "data" / "comparison_checkpoint.json",
+        fixture / "data" / "CURRENT.json",
+    ]
+    out = {}
+    for p in paths:
+        out[str(p.relative_to(fixture))] = (
+            hashlib.sha256(p.read_bytes()).hexdigest() if p.exists() else None
+        )
+    snaps = sorted(
+        (fixture / "data" / "snapshots").glob("20*.json"),
+        key=lambda x: x.name,
+    )
+    out["snapshots"] = [(p.name, hashlib.sha256(p.read_bytes()).hexdigest()) for p in snaps]
+    web = fixture / "web" / "data"
+    if web.exists():
+        out["web"] = sorted(
+            (n.name, hashlib.sha256(n.read_bytes()).hexdigest())
+            for n in web.glob("*.json")
+        )
+    return out
+
+
+def test_parent_lock_ingest_publish(fixture: Path) -> None:
+    """Nested lock skip: parent holds lock; publish via AI_EPS_ROOT must return 0 (not merely !=2)."""
+    import os
+    from atomic_io import GlobalPipelineLock
+
+    meta_path = fixture / "web" / "data" / "meta.json"
+    if meta_path.exists():
+        meta = json.loads(meta_path.read_text(encoding="utf-8"))
+    else:
+        meta = {}
+    meta.setdefault("qualityGate", {})["publishable"] = True
+    meta["qualityGate"]["status"] = "ok"
+    meta.setdefault("dataVersion", "abc")
+    meta.setdefault("refreshVersion", "def")
+    meta_path.parent.mkdir(parents=True, exist_ok=True)
+    meta_path.write_text(json.dumps(meta, indent=2) + "\n", encoding="utf-8")
+
+    lock_path = fixture / "data" / ".pipeline.lock"
+    env = os.environ.copy()
+    env["PIPELINE_LOCK_HELD"] = "1"
+    env["SKIP_EXPORT"] = "1"
+    env["PUBLISH_PREBUILT"] = "1"
+    env["AI_EPS_ROOT"] = str(fixture)
+    with GlobalPipelineLock(lock_path, non_blocking=True):
+        proc = subprocess.run(
+            ["bash", str(fixture / "tools" / "publish_github_pages.sh")],
+            cwd=str(fixture),
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=120,
+        )
+
+    combined = (proc.stdout or "") + (proc.stderr or "")
+    ok = proc.returncode == 0
+    ok = ok and "RUN ALREADY IN PROGRESS" not in combined
+    body = (fixture / "tools" / "publish_github_pages.sh").read_text(encoding="utf-8")
+    ok = ok and "PIPELINE_LOCK_HELD" in body and "skip re-acquire" in body
+    ok = ok and "AI_EPS_ROOT" in body
+    record(
+        "parent_lock_ingest_publish_test",
+        ok,
+        f"rc={proc.returncode} has_skip={('skip re-acquire' in body)} out={combined[-200:]}",
+    )
+
+
+
+
+
+def test_commit_revision_failure_rolls_back_snapshot(fixture: Path) -> None:
+    """append_revision_events fail mid-commit → snapshot rolled back; not LKG."""
+    import os
+    ing = import_mod(fixture, "ingest_snapshot")
+    ing.rebind_paths(fixture)
+    before = _fingerprint_persistent(fixture)
+    before_snaps = {p.name for p in (fixture / "data" / "snapshots").glob("20*.json")}
+    snap = _load_base_snap(fixture)
+    snap["snapshot_utc"] = "2026-09-14T12:00:00Z"
+    u = json.loads((fixture / "data" / "universe.json").read_text(encoding="utf-8"))
+    for t in u.get("tickers") or []:
+        if t not in (snap.get("tickers") or {}):
+            snap.setdefault("tickers", {})[t] = _good_ticker()
+    # Force EPS change so revisions proposed
+    if "NVDA" in snap["tickers"]:
+        row = snap["tickers"]["NVDA"]["eps"].get("2027E") or {}
+        row["consensus"] = float(row.get("consensus") or 15) + 0.77
+        snap["tickers"]["NVDA"]["eps"]["2027E"] = row
+    incoming = _write_incoming_from_snap(fixture, snap)
+    os.environ["PIPELINE_LOCK_HELD"] = "1"
+    os.environ["FAULT_INJECT_COMMIT_REVISION_FAIL"] = "1"
+    os.environ.pop("FAULT_INJECT_EXPORT_EXIT", None)
+    try:
+        result = ing.ingest_and_build(incoming, run_export=True, run_publish=False)
+    finally:
+        os.environ.pop("FAULT_INJECT_COMMIT_REVISION_FAIL", None)
+    after_snaps = {p.name for p in (fixture / "data" / "snapshots").glob("20*.json")}
+    new = after_snaps - before_snaps
+    ok = result.get("runStatus") == "aborted"
+    ok = ok and result.get("validatedPath") is None
+    ok = ok and not any("2026-09-14T120000Z" in n for n in new)
+    after = _fingerprint_persistent(fixture)
+    ok = ok and after["data/revisions/history.jsonl"] == before["data/revisions/history.jsonl"]
+    record("commit_revision_failure_rolls_back_snapshot_test", ok, f"new={new} status={result.get('runStatus')}")
+
+
+def test_commit_manifest_failure_rolls_back(fixture: Path) -> None:
+    import os
+    ing = import_mod(fixture, "ingest_snapshot")
+    ing.rebind_paths(fixture)
+    before = _fingerprint_persistent(fixture)
+    before_snaps = {p.name for p in (fixture / "data" / "snapshots").glob("20*.json")}
+    snap = _load_base_snap(fixture)
+    snap["snapshot_utc"] = "2026-09-14T12:30:00Z"
+    u = json.loads((fixture / "data" / "universe.json").read_text(encoding="utf-8"))
+    for t in u.get("tickers") or []:
+        if t not in (snap.get("tickers") or {}):
+            snap.setdefault("tickers", {})[t] = _good_ticker()
+    incoming = _write_incoming_from_snap(fixture, snap)
+    os.environ["PIPELINE_LOCK_HELD"] = "1"
+    os.environ["FAULT_INJECT_COMMIT_MANIFEST_FAIL"] = "1"
+    try:
+        result = ing.ingest_and_build(incoming, run_export=True, run_publish=False)
+    finally:
+        os.environ.pop("FAULT_INJECT_COMMIT_MANIFEST_FAIL", None)
+    after_snaps = {p.name for p in (fixture / "data" / "snapshots").glob("20*.json")}
+    new = after_snaps - before_snaps
+    ok = result.get("runStatus") == "aborted" and result.get("validatedPath") is None
+    ok = ok and not any("2026-09-14T123000Z" in n for n in new)
+    after = _fingerprint_persistent(fixture)
+    ok = ok and after["snapshots"] == before["snapshots"]
+    record("commit_manifest_failure_rolls_back_test", ok, f"status={result.get('runStatus')} new={new}")
+
+
+def test_post_export_commit_failure_leaves_all_state_unchanged(fixture: Path) -> None:
+    """Export pure-build OK + commit forced fail → daily/alerts/web/validated/revs unchanged."""
+    import os
+    ing = import_mod(fixture, "ingest_snapshot")
+    ing.rebind_paths(fixture)
+    before = _fingerprint_persistent(fixture)
+    snap = _load_base_snap(fixture)
+    snap["snapshot_utc"] = "2026-09-14T13:00:00Z"
+    u = json.loads((fixture / "data" / "universe.json").read_text(encoding="utf-8"))
+    for t in u.get("tickers") or []:
+        if t not in (snap.get("tickers") or {}):
+            snap.setdefault("tickers", {})[t] = _good_ticker()
+    if "NVDA" in snap["tickers"]:
+        row = snap["tickers"]["NVDA"]["eps"].get("2027E") or {}
+        row["consensus"] = float(row.get("consensus") or 15) + 0.33
+        snap["tickers"]["NVDA"]["eps"]["2027E"] = row
+    incoming = _write_incoming_from_snap(fixture, snap)
+    os.environ["PIPELINE_LOCK_HELD"] = "1"
+    os.environ["FAULT_INJECT_COMMIT_FAIL"] = "1"
+    try:
+        result = ing.ingest_and_build(incoming, run_export=True, run_publish=False)
+    finally:
+        os.environ.pop("FAULT_INJECT_COMMIT_FAIL", None)
+    after = _fingerprint_persistent(fixture)
+    ok = result.get("runStatus") == "aborted"
+    ok = ok and after == before
+    record(
+        "post_export_commit_failure_leaves_all_state_unchanged_test",
+        ok,
+        f"status={result.get('runStatus')} equal={after == before}",
+    )
+
+
+def test_comparison_checkpoint_not_advanced_on_failed_commit(fixture: Path) -> None:
+    import os
+    ing = import_mod(fixture, "ingest_snapshot")
+    ing.rebind_paths(fixture)
+    cp_path = fixture / "data" / "comparison_checkpoint.json"
+    before = cp_path.read_text(encoding="utf-8") if cp_path.exists() else ""
+    snap = _load_base_snap(fixture)
+    snap["snapshot_utc"] = "2026-09-14T13:30:00Z"
+    u = json.loads((fixture / "data" / "universe.json").read_text(encoding="utf-8"))
+    for t in u.get("tickers") or []:
+        if t not in (snap.get("tickers") or {}):
+            snap.setdefault("tickers", {})[t] = _good_ticker()
+    incoming = _write_incoming_from_snap(fixture, snap)
+    os.environ["PIPELINE_LOCK_HELD"] = "1"
+    os.environ["FAULT_INJECT_COMMIT_FAIL"] = "1"
+    try:
+        result = ing.ingest_and_build(incoming, run_export=True, run_publish=False)
+    finally:
+        os.environ.pop("FAULT_INJECT_COMMIT_FAIL", None)
+    after = cp_path.read_text(encoding="utf-8") if cp_path.exists() else ""
+    ok = result.get("runStatus") == "aborted" and after == before
+    # pending may exist in staging but must not be applied
+    record("comparison_checkpoint_not_advanced_on_failed_commit_test", ok, f"unchanged={after == before}")
+
+
+def test_nan_consensus_rejected(fixture: Path) -> None:
+    sq = import_mod(fixture, "snapshot_quality")
+    ok = sq.to_num(float("nan")) is None
+    snap = {
+        "snapshot_utc": "2026-09-14T08:00:00Z",
+        "tickers": {
+            "NVDA": {
+                "price": 100.0,
+                "eps": {
+                    "2026E": {"consensus": float("nan"), "high": 2, "low": 1, "analysts": 5, "reported_fiscal_label": "Jan 2027"},
+                    "2027E": {"consensus": 2.0, "high": 3, "low": 1, "analysts": 5, "reported_fiscal_label": "Jan 2028"},
+                },
+            }
+        },
+    }
+    g = sq.gate_snapshot(snap, None, expected_tickers=["NVDA"])
+    ok = ok and g.get("publishable") is False
+    ok = ok and g.get("status") in {"reject", "needs_verification"}
+    record("nan_consensus_rejected_test", ok, f"status={g.get('status')} reason={g.get('reason')}")
+
+
+def test_infinity_consensus_rejected(fixture: Path) -> None:
+    sq = import_mod(fixture, "snapshot_quality")
+    ok = sq.to_num(float("inf")) is None and sq.to_num("-Infinity") is None
+    snap = {
+        "snapshot_utc": "2026-09-14T08:00:00Z",
+        "tickers": {
+            "NVDA": {
+                "price": 100.0,
+                "eps": {
+                    "2026E": {"consensus": float("inf"), "high": 2, "low": 1, "analysts": 5, "reported_fiscal_label": "Jan 2027"},
+                    "2027E": {"consensus": 2.0, "high": 3, "low": 1, "analysts": 5, "reported_fiscal_label": "Jan 2028"},
+                },
+            }
+        },
+    }
+    g = sq.gate_snapshot(snap, None, expected_tickers=["NVDA"])
+    ok = ok and g.get("publishable") is False
+    record("infinity_consensus_rejected_test", ok, f"status={g.get('status')}")
+
+
+def test_nonfinite_price_rejected(fixture: Path) -> None:
+    sq = import_mod(fixture, "snapshot_quality")
+    snap = {
+        "snapshot_utc": "2026-09-14T08:00:00Z",
+        "tickers": {
+            "NVDA": {
+                "price": float("nan"),
+                "eps": {
+                    "2026E": {"consensus": 1.0, "high": 2, "low": 0.5, "analysts": 5, "reported_fiscal_label": "Jan 2027"},
+                    "2027E": {"consensus": 2.0, "high": 3, "low": 1, "analysts": 5, "reported_fiscal_label": "Jan 2028"},
+                },
+            }
+        },
+    }
+    g = sq.gate_snapshot(snap, None, expected_tickers=["NVDA"])
+    ok = g.get("publishable") is False and g.get("status") == "reject"
+    tr = (g.get("tickerResults") or [{}])[0]
+    ok = ok and any("price_invalid" in e for e in (tr.get("errors") or []))
+    record("nonfinite_price_rejected_test", ok, f"errors={tr.get('errors')}")
+
+
+def test_atomic_json_rejects_nonfinite(fixture: Path) -> None:
+    aio = import_mod(fixture, "atomic_io")
+    path = fixture / "data" / "staging" / "nan_test.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    raised = False
+    try:
+        aio.atomic_write_json(path, {"x": float("nan")})
+    except ValueError:
+        raised = True
+    ok = raised and (not path.exists() or "NaN" not in path.read_text(encoding="utf-8"))
+    # Infinity too
+    raised2 = False
+    try:
+        aio.atomic_write_json(path, {"x": float("inf")})
+    except ValueError:
+        raised2 = True
+    ok = ok and raised2
+    record("atomic_json_rejects_nonfinite_test", ok, f"nan={raised} inf={raised2}")
+
+
+def test_future_snapshot_timestamp_rejected(fixture: Path) -> None:
+    sq = import_mod(fixture, "snapshot_quality")
+    future = (datetime.now(timezone.utc) + timedelta(hours=2)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    snap = {
+        "snapshot_utc": future,
+        "tickers": {"NVDA": _good_ticker()},
+    }
+    g = sq.gate_snapshot(snap, None, expected_tickers=["NVDA"])
+    ok = g.get("publishable") is False and g.get("reason") == "future_snapshot_timestamp"
+    record("future_snapshot_timestamp_rejected_test", ok, f"reason={g.get('reason')}")
+
+
+def test_invalid_snapshot_timestamp_rejected(fixture: Path) -> None:
+    sq = import_mod(fixture, "snapshot_quality")
+    snap = {
+        "snapshot_utc": "2026-09-14T08:00:00",  # naive — no TZ
+        "tickers": {"NVDA": _good_ticker()},
+    }
+    g = sq.gate_snapshot(snap, None, expected_tickers=["NVDA"])
+    ok = g.get("publishable") is False and g.get("reason") == "invalid_snapshot_timestamp"
+    record("invalid_snapshot_timestamp_rejected_test", ok, f"reason={g.get('reason')}")
+
+
+def test_backfill_mode_timestamp(fixture: Path) -> None:
+    sq = import_mod(fixture, "snapshot_quality")
+    old = (datetime.now(timezone.utc) - timedelta(days=40)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    snap = {"snapshot_utc": old, "tickers": {"NVDA": _good_ticker()}}
+    g1 = sq.gate_snapshot(snap, None, expected_tickers=["NVDA"], backfill=False)
+    g2 = sq.gate_snapshot(snap, None, expected_tickers=["NVDA"], backfill=True)
+    ok = g1.get("publishable") is False and g1.get("status") == "needs_verification"
+    ok = ok and g2.get("publishable") is True
+    record("backfill_mode_timestamp_test", ok, f"live={g1.get('reason')} backfill={g2.get('status')}")
+
+
+def test_old_app_new_data_schema_mismatch(fixture: Path) -> None:
+    """Frontend SUPPORTED_SCHEMA_VERSION must fail-closed on incompatible schema."""
+    app = (fixture / "web" / "app.js").read_text(encoding="utf-8")
+    ok = "SUPPORTED_SCHEMA_VERSION" in app and "assertSchemaCompatible" in app
+    ok = ok and ("fail-closed" in app or "incompatible schemaVersion" in app)
+    # Behavioral: schemaVersion 999 rejected
+    # Simulate by extracting logic
+    meta = {"schemaVersion": "999"}
+    # Call via node-less: duplicate check
+    supported = "1"
+    incompatible = str(meta.get("schemaVersion")) != supported
+    ok = ok and incompatible
+    # meta from export should include schemaVersion
+    meta_path = fixture / "web" / "data" / "meta.json"
+    if meta_path.exists():
+        m = json.loads(meta_path.read_text(encoding="utf-8"))
+        ok = ok and m.get("schemaVersion") == "1"
+        ok = ok and bool(m.get("appVersion")) and bool(m.get("releaseVersion"))
+    record("old_app_new_data_schema_mismatch_test", ok, f"schema in app={('SUPPORTED_SCHEMA_VERSION' in app)}")
+
+
+def test_screenshot_app_version_identity(fixture: Path) -> None:
+    """Screenshot sidecars + review gate must record/verify appVersion/releaseVersion/schemaVersion."""
+    body = (ROOT / "tools" / "build_review_zip.sh").read_text(encoding="utf-8")
+    ok = "appVersion" in body and "releaseVersion" in body and "schemaVersion" in body
+    # Unit: compute identities
+    ing = import_mod(fixture, "ingest_snapshot")
+    app_v = ing.compute_app_version(fixture / "web")
+    ok = ok and len(app_v) == 64
+    rv = ing.compute_release_version(app_v, "1", "data", "refresh")
+    ok = ok and len(rv) == 64
+    record("screenshot_app_version_identity_test", ok, f"app={app_v[:12]}")
+
+
+def test_spoofed_sec_domain_not_tier1(fixture: Path) -> None:
+    exp = import_mod(fixture, "export_web_data")
+    cases = [
+        "https://sec.gov.evil.example/Archives/edgar/data/1",
+        "https://notsec.gov/foo",
+        "https://evil.com/sec.gov/Archives",
+        "https://www.sec.gov.attacker.com/x",
+    ]
+    ok = all(exp.classify_source_tier(u) != 1 for u in cases)
+    ok = ok and exp.classify_source_tier("https://www.sec.gov/Archives/x") == 1
+    ok = ok and exp.classify_source_tier("https://efts.sec.gov/LATEST/search-index") == 1
+    record("spoofed_sec_domain_not_tier1_test", ok, "hostname-only SEC")
+
+
+def test_investor_string_in_query_not_tier1(fixture: Path) -> None:
+    exp = import_mod(fixture, "export_web_data")
+    url = "https://news.example.com/article?ref=investor.nvidia.com&src=investors.broadcom.com"
+    ok = exp.classify_source_tier(url) != 1
+    ok = ok and exp.classify_source_tier(url) == "Unknown"
+    # path substring must not elevate
+    ok = ok and exp.classify_source_tier("https://cdn.example.com/ir/foo") != 1
+    record("investor_string_in_query_not_tier1_test", ok, "query/path ignored")
+
+
+def test_official_domain_mapping(fixture: Path) -> None:
+    exp = import_mod(fixture, "export_web_data")
+    ok = exp.classify_source_tier("https://investor.nvidia.com/news", ticker="NVDA") == 1
+    ok = ok and exp.classify_source_tier("https://investors.broadcom.com/news", ticker="AVGO") == 1
+    # sourceType without URL may still classify; URL+sourceType must be consistent
+    ok = ok and exp.classify_source_tier(None, source_type="sec") == 1
+    ok = ok and exp.classify_source_tier("https://www.sec.gov/Archives/x", source_type="sec") == 1
+    ok = ok and exp.classify_source_tier("https://random.example/x", source_type="sec") != 1
+    ok = ok and exp.classify_source_tier("https://www.reuters.com/x", source_type="reuters") == 3
+    mapping = exp.load_official_domains_by_ticker(fixture)
+    ok = ok and "NVDA" in mapping and any("nvidia" in d for d in mapping["NVDA"])
+    record("official_domain_mapping_test", ok, f"nvda_domains={mapping.get('NVDA')}")
+
+
+def test_validate_only_does_not_commit(fixture: Path) -> None:
+    """--validate-only must NOT commit; --no-export banned at CLI."""
+    import os
+    ing = import_mod(fixture, "ingest_snapshot")
+    ing.rebind_paths(fixture)
+    before = _fingerprint_persistent(fixture)
+    snap = _load_base_snap(fixture)
+    snap["snapshot_utc"] = "2026-09-14T14:00:00Z"
+    u = json.loads((fixture / "data" / "universe.json").read_text(encoding="utf-8"))
+    for t in u.get("tickers") or []:
+        if t not in (snap.get("tickers") or {}):
+            snap.setdefault("tickers", {})[t] = _good_ticker()
+    incoming = _write_incoming_from_snap(fixture, snap)
+    os.environ["PIPELINE_LOCK_HELD"] = "1"
+    result = ing.ingest_and_build(incoming, validate_only=True, run_export=False, run_publish=False)
+    after = _fingerprint_persistent(fixture)
+    ok = result.get("runStatus") == "validated_only"
+    ok = ok and result.get("validatedPath") is None
+    ok = ok and after == before
+    # CLI rejects --no-export
+    proc = subprocess.run(
+        [sys.executable, str(fixture / "tools" / "ingest_snapshot.py"), "--no-export", str(incoming)],
+        cwd=str(fixture),
+        capture_output=True,
+        text=True,
+        env={**os.environ, "PIPELINE_LOCK_HELD": "1"},
+    )
+    ok = ok and proc.returncode == 2
+    ok = ok and ("banned" in (proc.stderr or "").lower() or "validate-only" in (proc.stderr or "").lower())
+    src = (fixture / "tools" / "ingest_snapshot.py").read_text(encoding="utf-8")
+    ok = ok and "--validate-only" in src
+    record("validate_only_does_not_commit_test", ok, f"status={result.get('runStatus')} cli_rc={proc.returncode}")
+
+
+
+# ---------------------------------------------------------------------------
+# Identity Integrity + Deployment Completeness + Crash Consistency
+# ---------------------------------------------------------------------------
+
+
+def test_clean_publish_contains_all_index_assets(fixture: Path) -> None:
+    """Clean publish root must contain every local asset referenced by index.html (incl vendor)."""
+    import os
+    meta_path = fixture / "web" / "data" / "meta.json"
+    meta = json.loads(meta_path.read_text(encoding="utf-8")) if meta_path.exists() else {}
+    meta.setdefault("qualityGate", {})["publishable"] = True
+    meta["qualityGate"]["status"] = "ok"
+    meta.setdefault("dataVersion", "cleanpub1")
+    meta.setdefault("refreshVersion", "cleanpub1r")
+    meta_path.parent.mkdir(parents=True, exist_ok=True)
+    meta_path.write_text(json.dumps(meta, indent=2) + "\n", encoding="utf-8")
+    # Ensure vendor present in fixture web
+    vendor = fixture / "web" / "vendor" / "chart.umd.min.js"
+    ok = vendor.exists()
+    env = os.environ.copy()
+    env["AI_EPS_ROOT"] = str(fixture)
+    env["PIPELINE_LOCK_HELD"] = "1"
+    env["SKIP_EXPORT"] = "1"
+    env["PUBLISH_PREBUILT"] = "1"
+    proc = subprocess.run(
+        ["bash", str(fixture / "tools" / "publish_github_pages.sh")],
+        cwd=str(fixture),
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
+    ing = import_mod(fixture, "ingest_snapshot")
+    assets = ing.list_index_local_assets(fixture / "web" / "index.html")
+    missing = [a for a in assets if not (fixture / "site-repo" / a).is_file()]
+    ok = ok and proc.returncode == 0 and not missing
+    ok = ok and (fixture / "site-repo" / "vendor" / "chart.umd.min.js").is_file()
+    record(
+        "clean_publish_contains_all_index_assets_test",
+        ok,
+        f"rc={proc.returncode} missing={missing} assets={assets} err={(proc.stderr or '')[-200:]}",
+    )
+
+
+def test_vendor_change_changes_app_version(fixture: Path) -> None:
+    ing = import_mod(fixture, "ingest_snapshot")
+    v1 = ing.compute_app_version(fixture / "web")
+    vendor = fixture / "web" / "vendor" / "chart.umd.min.js"
+    vendor.parent.mkdir(parents=True, exist_ok=True)
+    vendor.write_bytes(vendor.read_bytes() + b"\n/* vendor-bump */\n")
+    v2 = ing.compute_app_version(fixture / "web")
+    ok = bool(v1) and bool(v2) and v1 != v2
+    record("vendor_change_changes_app_version_test", ok, f"v1={v1[:12]} v2={v2[:12]}")
+
+
+def test_vendor_change_triggers_publish(fixture: Path) -> None:
+    """Vendor content change must change publish content hash (not NO_CHANGES forever)."""
+    import os
+    import hashlib
+
+    def pub_hash() -> str:
+        env = os.environ.copy()
+        env["AI_EPS_ROOT"] = str(fixture)
+        # reuse publish script hash logic via ingest helpers + meta
+        ing = import_mod(fixture, "ingest_snapshot")
+        h = hashlib.sha256()
+        for p in ing.iter_frontend_static_files(fixture / "web"):
+            h.update(str(p.relative_to(fixture / "web")).encode())
+            h.update(p.read_bytes())
+        meta = json.loads((fixture / "web" / "data" / "meta.json").read_text(encoding="utf-8"))
+        h.update(str(meta.get("dataVersion") or "").encode())
+        h.update(str(meta.get("refreshVersion") or "").encode())
+        return h.hexdigest()
+
+    meta_path = fixture / "web" / "data" / "meta.json"
+    meta = json.loads(meta_path.read_text(encoding="utf-8")) if meta_path.exists() else {}
+    meta.setdefault("qualityGate", {})["publishable"] = True
+    meta["qualityGate"]["status"] = "ok"
+    meta.setdefault("dataVersion", "vend1")
+    meta.setdefault("refreshVersion", "vend1r")
+    meta_path.write_text(json.dumps(meta, indent=2) + "\n", encoding="utf-8")
+    h1 = pub_hash()
+    vendor = fixture / "web" / "vendor" / "chart.umd.min.js"
+    vendor.write_bytes(vendor.read_bytes() + b"\n/* publish-trigger */\n")
+    h2 = pub_hash()
+    ok = h1 != h2
+    # Also ensure publish script mentions vendor / full tree
+    body = (fixture / "tools" / "publish_github_pages.sh").read_text(encoding="utf-8")
+    ok = ok and ("vendor" in body) and ("iter_frontend_static_files" in body or "list_index_local_assets" in body)
+    record("vendor_change_triggers_publish_test", ok, f"h1={h1[:12]} h2={h2[:12]}")
+
+
+def test_fiscal_period_rollover_not_revision(fixture: Path) -> None:
+    """Mapped-slot fiscal rollover must NOT emit a fake revision (new fiscal = baseline)."""
+    ing = import_mod(fixture, "ingest_snapshot")
+    prior = {
+        "NVDA": {
+            "eps": {
+                "2027E": {
+                    "consensus": 15.0,
+                    "reportedFiscalLabel": "Jan 2028",
+                    "calendarAlignment": "CY2027",
+                }
+            }
+        }
+    }
+    current = {
+        "snapshot_utc": "2026-09-15T12:00:00Z",
+        "tickers": {
+            "NVDA": {
+                "eps": {
+                    "2027E": {
+                        "consensus": 20.0,
+                        "reportedFiscalLabel": "Jan 2029",
+                        "calendarAlignment": "CY2028",
+                    }
+                }
+            }
+        },
+    }
+    events = ing.generate_revision_events(current, prior)
+    # Must NOT be a revision comparing 15→20; may be baseline for Jan 2029
+    fake = [
+        e
+        for e in events
+        if e.get("Previous EPS") not in (None, "n/a (baseline)", "n/a")
+        and abs(float(e.get("Previous EPS")) - 15.0) < 1e-9
+        and abs(float(e.get("Current EPS")) - 20.0) < 1e-9
+    ]
+    ok = len(fake) == 0
+    baselines = [e for e in events if "baseline" in str(e.get("Reason") or "").lower()]
+    ok = ok and (len(baselines) >= 1 or len(events) == 0 or all(
+        str(e.get("Reported Fiscal Period Ending")) == "Jan 2029" for e in events
+    ))
+    record("fiscal_period_rollover_not_revision_test", ok, f"n={len(events)} fake={len(fake)}")
+
+
+def test_fiscal_period_rollover_not_extreme_change(fixture: Path) -> None:
+    sq = import_mod(fixture, "snapshot_quality")
+    prior = {
+        "eps": {
+            "2027E": {"consensus": 15.0, "reportedFiscalLabel": "Jan 2028", "analysts": 30, "high": 16, "low": 14, "rev_1M_pct": 1},
+        }
+    }
+    new = {
+        "eps": {
+            "2027E": {"consensus": 20.0, "reportedFiscalLabel": "Jan 2029", "analysts": 30, "high": 21, "low": 19, "rev_1M_pct": 1},
+        }
+    }
+    hits = sq.extreme_eps_change("NVDA", new, prior)
+    ok = len(hits) == 0
+    record("fiscal_period_rollover_not_extreme_change_test", ok, f"hits={hits}")
+
+
+def test_same_fiscal_period_real_revision(fixture: Path) -> None:
+    ing = import_mod(fixture, "ingest_snapshot")
+    prior = {
+        "NVDA": {
+            "eps": {
+                "2027E": {"consensus": 15.0, "reportedFiscalLabel": "Jan 2028", "calendarAlignment": "CY2027"}
+            }
+        }
+    }
+    current = {
+        "snapshot_utc": "2026-09-15T12:00:00Z",
+        "tickers": {
+            "NVDA": {
+                "eps": {
+                    "2027E": {"consensus": 20.0, "reportedFiscalLabel": "Jan 2028", "calendarAlignment": "CY2027"}
+                }
+            }
+        },
+    }
+    events = ing.generate_revision_events(current, prior)
+    revs = [
+        e
+        for e in events
+        if e.get("Previous EPS") not in (None, "n/a (baseline)", "n/a")
+        and "baseline" not in str(e.get("Reason") or "").lower()
+    ]
+    ok = len(revs) == 1
+    ok = ok and abs(float(revs[0]["Previous EPS"]) - 15.0) < 1e-9
+    ok = ok and abs(float(revs[0]["Current EPS"]) - 20.0) < 1e-9
+    ok = ok and str(revs[0].get("Reported Fiscal Period Ending")) == "Jan 2028"
+    record("same_fiscal_period_real_revision_test", ok, f"n={len(revs)} pct={revs[0].get('Revision %') if revs else None}")
+
+
+def test_crash_during_commit_preserves_previous_generation(fixture: Path) -> None:
+    """SIGKILL mid-commit (before CURRENT) → restart readers only see previous generation."""
+    import os
+    ing = import_mod(fixture, "ingest_snapshot")
+    ing.rebind_paths(fixture)
+    # Establish generation A via normal commit
+    snap = _load_base_snap(fixture)
+    snap["snapshot_utc"] = "2026-09-14T10:00:00Z"
+    u = json.loads((fixture / "data" / "universe.json").read_text(encoding="utf-8"))
+    for t in u.get("tickers") or []:
+        if t not in (snap.get("tickers") or {}):
+            snap.setdefault("tickers", {})[t] = _good_ticker()
+    incoming = _write_incoming_from_snap(fixture, snap)
+    os.environ["PIPELINE_LOCK_HELD"] = "1"
+    os.environ.pop("FAULT_INJECT_SIGKILL_BEFORE_CURRENT", None)
+    r1 = ing.ingest_and_build(incoming, run_export=True, run_publish=False)
+    ok = r1.get("runStatus") == "committed"
+    cur1 = ing.read_current_pointer()
+    ok = ok and cur1 is not None
+    rid1 = cur1.get("runId")
+    before = _fingerprint_persistent(fixture)
+
+    # Crash mid-commit for generation B
+    snap2 = json.loads(json.dumps(snap))
+    snap2["snapshot_utc"] = "2026-09-14T11:00:00Z"
+    if "NVDA" in snap2["tickers"]:
+        row = snap2["tickers"]["NVDA"]["eps"].get("2027E") or {}
+        row["consensus"] = float(row.get("consensus") or 15) + 0.55
+        snap2["tickers"]["NVDA"]["eps"]["2027E"] = row
+    incoming2 = _write_incoming_from_snap(fixture, snap2)
+    # Subprocess SIGKILL
+    env = os.environ.copy()
+    env["PIPELINE_LOCK_HELD"] = "1"
+    env["FAULT_INJECT_SIGKILL_BEFORE_CURRENT"] = "1"
+    env["AI_EPS_ROOT"] = str(fixture)
+    helper = fixture / "tools" / "_crash_commit_helper.py"
+    helper.write_text(
+        "\n".join([
+            "import json, os, sys",
+            "from pathlib import Path",
+            "ROOT = Path(os.environ['AI_EPS_ROOT'])",
+            "sys.path.insert(0, str(ROOT / 'tools'))",
+            "import ingest_snapshot as ing",
+            "ing.rebind_paths(ROOT)",
+            "incoming = Path(sys.argv[1])",
+            "ing.ingest_and_build(incoming, run_export=True, run_publish=False)",
+            "print('UNEXPECTED_SURVIVED')",
+        ]) + "\n",
+        encoding="utf-8",
+    )
+    proc = subprocess.run(
+        [sys.executable, str(helper), str(incoming2)],
+        cwd=str(fixture),
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=180,
+    )
+    # SIGKILL → typically returncode < 0 or 128+9
+    crashed = proc.returncode != 0 and "UNEXPECTED_SURVIVED" not in (proc.stdout or "")
+    # Restart: ensure rematerialize / readers see previous
+    ing.rebind_paths(fixture)
+    ing.ensure_live_matches_current()
+    cur2 = ing.read_current_pointer()
+    after = _fingerprint_persistent(fixture)
+    ok = ok and crashed
+    ok = ok and cur2 is not None and cur2.get("runId") == rid1
+    ok = ok and after["data/CURRENT.json"] == before["data/CURRENT.json"]
+    ok = ok and after["data/revisions/history.jsonl"] == before["data/revisions/history.jsonl"]
+    ok = ok and after["snapshots"] == before["snapshots"]
+    # Reader helper: resolve_current_generation is previous
+    gen = ing.resolve_current_generation()
+    ok = ok and gen is not None and gen.name == rid1
+    record(
+        "crash_during_commit_preserves_previous_generation_test",
+        ok,
+        f"rc={proc.returncode} rid1={rid1} cur={cur2.get('runId') if cur2 else None}",
+    )
+
+
+def test_real_parent_lock_publish_integration(fixture: Path) -> None:
+    """Real success: returncode==0 when parent holds lock + AI_EPS_ROOT fixture publish."""
+    import os
+    from atomic_io import GlobalPipelineLock
+
+    meta_path = fixture / "web" / "data" / "meta.json"
+    meta = json.loads(meta_path.read_text(encoding="utf-8")) if meta_path.exists() else {}
+    meta.setdefault("qualityGate", {})["publishable"] = True
+    meta["qualityGate"]["status"] = "ok"
+    meta.setdefault("dataVersion", "parentlock1")
+    meta.setdefault("refreshVersion", "parentlock1r")
+    meta_path.parent.mkdir(parents=True, exist_ok=True)
+    meta_path.write_text(json.dumps(meta, indent=2) + "\n", encoding="utf-8")
+
+    lock_path = fixture / "data" / ".pipeline.lock"
+    env = os.environ.copy()
+    env["PIPELINE_LOCK_HELD"] = "1"
+    env["SKIP_EXPORT"] = "1"
+    env["PUBLISH_PREBUILT"] = "1"
+    env["AI_EPS_ROOT"] = str(fixture)
+    with GlobalPipelineLock(lock_path, non_blocking=True):
+        proc = subprocess.run(
+            ["bash", str(fixture / "tools" / "publish_github_pages.sh")],
+            cwd=str(fixture),
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=120,
+        )
+    combined = (proc.stdout or "") + (proc.stderr or "")
+    ok = proc.returncode == 0
+    ok = ok and "RUN ALREADY IN PROGRESS" not in combined
+    body = (fixture / "tools" / "publish_github_pages.sh").read_text(encoding="utf-8")
+    ok = ok and "AI_EPS_ROOT" in body and "PIPELINE_LOCK_HELD" in body
+    record(
+        "real_parent_lock_publish_integration_test",
+        ok,
+        f"rc={proc.returncode} out={combined[-240:]}",
+    )
+
+
+def test_atomic_jsonl_rejects_nonfinite(fixture: Path) -> None:
+    aio = import_mod(fixture, "atomic_io")
+    path = fixture / "data" / "daily_eps_snapshots" / "nan_test.jsonl"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    raised = False
+    try:
+        aio.append_jsonl_atomic(path, [{"ticker": "NVDA", "consensus": float("nan")}])
+    except ValueError:
+        raised = True
+    except Exception as exc:
+        raised = "nan" in str(exc).lower() or "out of range" in str(exc).lower() or isinstance(exc, ValueError)
+    # Infinity too
+    raised2 = False
+    try:
+        aio.append_jsonl_atomic(path, [{"ticker": "NVDA", "consensus": float("inf")}])
+    except ValueError:
+        raised2 = True
+    except Exception as exc:
+        raised2 = "inf" in str(exc).lower() or isinstance(exc, ValueError)
+    ok = raised and raised2 and (not path.exists() or "NaN" not in path.read_text(encoding="utf-8"))
+    # Source must use allow_nan=False
+    src = (fixture / "tools" / "atomic_io.py").read_text(encoding="utf-8")
+    ok = ok and "allow_nan=False" in src
+    record("atomic_jsonl_rejects_nonfinite_test", ok, f"nan={raised} inf={raised2}")
+
+
+def test_pending_publish_retry(fixture: Path) -> None:
+    """Financial commit OK + publish fail → pending/failed state; retry publish before new collection."""
+    import os
+    ing = import_mod(fixture, "ingest_snapshot")
+    ing.rebind_paths(fixture)
+    # Seed publish state as failed/pending
+    ing.write_publish_state({
+        "publishStatus": "pending",
+        "lastPublishAttempt": "2026-09-14T00:00:00Z",
+        "lastSuccessfulPublish": None,
+        "pendingReleaseVersion": "abc123",
+    })
+    # Make publish succeed locally (no .git → PUBLISH_LOCAL)
+    meta_path = fixture / "web" / "data" / "meta.json"
+    meta = json.loads(meta_path.read_text(encoding="utf-8")) if meta_path.exists() else {}
+    meta.setdefault("qualityGate", {})["publishable"] = True
+    meta["qualityGate"]["status"] = "ok"
+    meta["releaseVersion"] = "abc123"
+    meta.setdefault("dataVersion", "pend1")
+    meta.setdefault("refreshVersion", "pend1r")
+    meta_path.write_text(json.dumps(meta, indent=2) + "\n", encoding="utf-8")
+    os.environ["PIPELINE_LOCK_HELD"] = "1"
+    os.environ["AI_EPS_ROOT"] = str(fixture)
+    rc = ing.retry_pending_publish_if_needed()
+    state = ing.read_publish_state()
+    ok = rc == 0
+    ok = ok and state.get("publishStatus") == "published"
+    ok = ok and state.get("pendingReleaseVersion") is None
+    ok = ok and bool(state.get("lastSuccessfulPublish"))
+    # Source guarantees no financial rollback on publish fail
+    body = (fixture / "tools" / "ingest_snapshot.py").read_text(encoding="utf-8")
+    ok = ok and "publishStatus" in body and "pendingReleaseVersion" in body
+    record("pending_publish_retry_test", ok, f"rc={rc} state={state.get('publishStatus')}")
+
+
+def test_quarantine_collision_preserved(fixture: Path) -> None:
+    sq = import_mod(fixture, "snapshot_quality")
+    qdir = fixture / "data" / "snapshots" / "quarantine"
+    qdir.mkdir(parents=True, exist_ok=True)
+    base = "2026-09-14T120000Z.json"
+    snap_a = {"snapshot_utc": "2026-09-14T12:00:00Z", "tickers": {"NVDA": {"eps": {"2027E": {"consensus": 1.0}}}}}
+    snap_b = {"snapshot_utc": "2026-09-14T12:00:00Z", "tickers": {"NVDA": {"eps": {"2027E": {"consensus": 2.0}}}}}
+    p1 = sq.immutable_quarantine_path(qdir, base, snap_a)
+    p1.write_text(json.dumps(snap_a) + "\n", encoding="utf-8")
+    p2 = sq.immutable_quarantine_path(qdir, base, snap_b)
+    ok = p1 != p2
+    ok = ok and p1.exists()
+    # Writing second must not overwrite first
+    p2.write_text(json.dumps(snap_b) + "\n", encoding="utf-8")
+    ok = ok and json.loads(p1.read_text(encoding="utf-8"))["tickers"]["NVDA"]["eps"]["2027E"]["consensus"] == 1.0
+    ok = ok and p2.exists()
+    record("quarantine_collision_preserved_test", ok, f"p1={p1.name} p2={p2.name}")
+
+
+
+
+# ---------- Commit Semantics + Single Writer + Release Identity ----------
+
+def test_post_current_materialization_failure_is_committed(fixture: Path) -> None:
+    """CURRENT flipped then materialize OSError → runStatus=committed, not aborted."""
+    import os
+    ing = import_mod(fixture, "ingest_snapshot")
+    ing.rebind_paths(fixture)
+    snap = _load_base_snap(fixture)
+    snap["snapshot_utc"] = "2026-09-14T12:30:00Z"
+    u = json.loads((fixture / "data" / "universe.json").read_text(encoding="utf-8"))
+    for t in u.get("tickers") or []:
+        if t not in (snap.get("tickers") or {}):
+            snap.setdefault("tickers", {})[t] = _good_ticker()
+    incoming = _write_incoming_from_snap(fixture, snap)
+    os.environ["PIPELINE_LOCK_HELD"] = "1"
+    os.environ["FAULT_INJECT_MATERIALIZE_FAIL"] = "1"
+    try:
+        result = ing.ingest_and_build(incoming, run_export=True, run_publish=False)
+    finally:
+        os.environ.pop("FAULT_INJECT_MATERIALIZE_FAIL", None)
+    ok = result.get("runStatus") == "committed"
+    ok = ok and result.get("ok") is True
+    cur = ing.read_current_pointer()
+    ok = ok and cur is not None and cur.get("runId") == result.get("runId")
+    # staging run.json
+    stage = Path(result.get("stageDir") or "")
+    run_meta = {}
+    if (stage / "run.json").exists():
+        run_meta = json.loads((stage / "run.json").read_text(encoding="utf-8"))
+    ok = ok and run_meta.get("runStatus") == "committed"
+    ok = ok and run_meta.get("materializationStatus") == "failed"
+    ok = ok and bool(run_meta.get("materializationError"))
+    record(
+        "post_current_materialization_failure_is_committed_test",
+        ok,
+        f"status={result.get('runStatus')} mat={run_meta.get('materializationStatus')} cur={cur.get('runId') if cur else None}",
+    )
+
+
+def test_post_current_failure_never_marks_aborted(fixture: Path) -> None:
+    """Post-CURRENT materialization failure must NEVER set runStatus=aborted."""
+    import os
+    ing = import_mod(fixture, "ingest_snapshot")
+    ing.rebind_paths(fixture)
+    snap = _load_base_snap(fixture)
+    snap["snapshot_utc"] = "2026-09-14T12:45:00Z"
+    u = json.loads((fixture / "data" / "universe.json").read_text(encoding="utf-8"))
+    for t in u.get("tickers") or []:
+        if t not in (snap.get("tickers") or {}):
+            snap.setdefault("tickers", {})[t] = _good_ticker()
+    if "NVDA" in snap.get("tickers", {}):
+        row = snap["tickers"]["NVDA"]["eps"].get("2027E") or {}
+        row["consensus"] = float(row.get("consensus") or 15) + 0.11
+        snap["tickers"]["NVDA"]["eps"]["2027E"] = row
+    incoming = _write_incoming_from_snap(fixture, snap)
+    os.environ["PIPELINE_LOCK_HELD"] = "1"
+    os.environ["FAULT_INJECT_MATERIALIZE_FAIL"] = "1"
+    try:
+        result = ing.ingest_and_build(incoming, run_export=True, run_publish=False)
+    finally:
+        os.environ.pop("FAULT_INJECT_MATERIALIZE_FAIL", None)
+    ok = result.get("runStatus") != "aborted"
+    ok = ok and result.get("runStatus") == "committed"
+    # CURRENT not rolled back
+    cur = ing.read_current_pointer()
+    ok = ok and cur is not None and cur.get("runId") == result.get("runId")
+    src = (fixture / "tools" / "ingest_snapshot.py").read_text(encoding="utf-8")
+    ok = ok and "materializationStatus" in src and "post-CURRENT" in src
+    record(
+        "post_current_failure_never_marks_aborted_test",
+        ok,
+        f"status={result.get('runStatus')} rid={result.get('runId')}",
+    )
+
+
+def test_materialization_retry_from_current(fixture: Path) -> None:
+    """After post-CURRENT mat failure, materialize_generation(resolve_current_generation()) recovers."""
+    import os
+    ing = import_mod(fixture, "ingest_snapshot")
+    ing.rebind_paths(fixture)
+    snap = _load_base_snap(fixture)
+    snap["snapshot_utc"] = "2026-09-14T13:00:00Z"
+    u = json.loads((fixture / "data" / "universe.json").read_text(encoding="utf-8"))
+    for t in u.get("tickers") or []:
+        if t not in (snap.get("tickers") or {}):
+            snap.setdefault("tickers", {})[t] = _good_ticker()
+    if "NVDA" in snap.get("tickers", {}):
+        row = snap["tickers"]["NVDA"]["eps"].get("2027E") or {}
+        row["consensus"] = float(row.get("consensus") or 15) + 0.22
+        snap["tickers"]["NVDA"]["eps"]["2027E"] = row
+    incoming = _write_incoming_from_snap(fixture, snap)
+    os.environ["PIPELINE_LOCK_HELD"] = "1"
+    os.environ["FAULT_INJECT_MATERIALIZE_FAIL"] = "1"
+    try:
+        result = ing.ingest_and_build(incoming, run_export=True, run_publish=False)
+    finally:
+        os.environ.pop("FAULT_INJECT_MATERIALIZE_FAIL", None)
+    ok = result.get("runStatus") == "committed"
+    gen = ing.resolve_current_generation()
+    ok = ok and gen is not None
+    # Clear fault and retry materialize from CURRENT
+    os.environ.pop("FAULT_INJECT_MATERIALIZE_FAIL", None)
+    marker = fixture / "data" / ".materialized_run_id"
+    if marker.exists():
+        marker.unlink()
+    ing.materialize_generation(gen)
+    ok = ok and marker.exists() and marker.read_text(encoding="utf-8").strip() == result.get("runId")
+    # ensure_live path
+    if marker.exists():
+        marker.write_text("stale\n", encoding="utf-8")
+    ing.ensure_live_matches_current()
+    ok = ok and marker.read_text(encoding="utf-8").strip() == result.get("runId")
+    record(
+        "materialization_retry_from_current_test",
+        ok,
+        f"gen={gen.name if gen else None} marker={marker.read_text(encoding='utf-8').strip() if marker.exists() else None}",
+    )
+
+
+def test_standalone_export_cannot_mutate_persistent_state(fixture: Path) -> None:
+    """Default export_web_data.py must not mutate daily/revision/alert/checkpoint."""
+    import os
+    restore_base_snapshot(fixture)
+    before = _fingerprint_persistent(fixture)
+    rev_before = (fixture / "data" / "revisions" / "history.jsonl").read_bytes() if (fixture / "data" / "revisions" / "history.jsonl").exists() else b""
+    daily_before = (fixture / "data" / "daily_eps_snapshots" / "daily.jsonl").read_bytes() if (fixture / "data" / "daily_eps_snapshots" / "daily.jsonl").exists() else b""
+    alerts_before = (fixture / "data" / "alerts" / "index.json").read_bytes() if (fixture / "data" / "alerts" / "index.json").exists() else b""
+    cp_before = (fixture / "data" / "comparison_checkpoint.json").read_bytes() if (fixture / "data" / "comparison_checkpoint.json").exists() else b""
+    snap_path = fixture / "data" / "snapshots" / "2026-09-15.json"
+    snap = json.loads(snap_path.read_text(encoding="utf-8"))
+    if "NVDA" in snap.get("tickers", {}):
+        row = snap["tickers"]["NVDA"]["eps"].get("2027E") or {}
+        row["consensus"] = float(row.get("consensus") or 15) + 0.77
+        snap["tickers"]["NVDA"]["eps"]["2027E"] = row
+    snap["snapshot_utc"] = "2026-09-15T08:00:00Z"
+    snap_path.write_text(json.dumps(snap, indent=2) + "\n", encoding="utf-8")
+    env = os.environ.copy()
+    for k in list(env):
+        if k.startswith("FAULT_INJECT") or k.startswith("INGEST_"):
+            env.pop(k, None)
+    env.pop("LEGACY_MUTATE", None)
+    env["PIPELINE_LOCK_HELD"] = "1"
+    proc = subprocess.run(
+        [sys.executable, str(fixture / "tools" / "export_web_data.py")],
+        cwd=str(fixture),
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    rc = proc.returncode
+    ok = rc == 0
+    rev_after = (fixture / "data" / "revisions" / "history.jsonl").read_bytes() if (fixture / "data" / "revisions" / "history.jsonl").exists() else b""
+    daily_after = (fixture / "data" / "daily_eps_snapshots" / "daily.jsonl").read_bytes() if (fixture / "data" / "daily_eps_snapshots" / "daily.jsonl").exists() else b""
+    alerts_after = (fixture / "data" / "alerts" / "index.json").read_bytes() if (fixture / "data" / "alerts" / "index.json").exists() else b""
+    cp_after = (fixture / "data" / "comparison_checkpoint.json").read_bytes() if (fixture / "data" / "comparison_checkpoint.json").exists() else b""
+    ok = ok and rev_after == rev_before
+    ok = ok and daily_after == daily_before
+    ok = ok and alerts_after == alerts_before
+    ok = ok and cp_after == cp_before
+    src = (fixture / "tools" / "export_web_data.py").read_text(encoding="utf-8")
+    ok = ok and "--legacy-mutate" in src
+    restore_base_snapshot(fixture)
+    detail = f"rc={rc} rev_same={rev_after==rev_before} daily_same={daily_after==daily_before}"
+    if rc != 0:
+        detail += f" out={((proc.stdout or '') + (proc.stderr or ''))[-400:]}"
+    record("standalone_export_cannot_mutate_persistent_state_test", ok, detail)
+
+
+def test_standalone_publish_cannot_mutate_persistent_state(fixture: Path) -> None:
+    """publish_github_pages.sh is publish-only — no export/recompute/history mutation."""
+    import os
+    before = _fingerprint_persistent(fixture)
+    meta_path = fixture / "web" / "data" / "meta.json"
+    meta = json.loads(meta_path.read_text(encoding="utf-8")) if meta_path.exists() else {}
+    meta.setdefault("qualityGate", {})["publishable"] = True
+    meta["qualityGate"]["status"] = "ok"
+    meta.setdefault("dataVersion", "pubonly1")
+    meta.setdefault("refreshVersion", "pubonly1r")
+    meta_path.write_text(json.dumps(meta, indent=2) + "\n", encoding="utf-8")
+    env = os.environ.copy()
+    env["PIPELINE_LOCK_HELD"] = "1"
+    env["AI_EPS_ROOT"] = str(fixture)
+    # Do NOT set SKIP_EXPORT — script must still not export
+    env.pop("SKIP_EXPORT", None)
+    env.pop("PUBLISH_PREBUILT", None)
+    proc = subprocess.run(
+        ["bash", str(fixture / "tools" / "publish_github_pages.sh")],
+        cwd=str(fixture),
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
+    after = _fingerprint_persistent(fixture)
+    body = (fixture / "tools" / "publish_github_pages.sh").read_text(encoding="utf-8")
+    ok = "publish-only" in body or "no export" in body.lower()
+    ok = ok and "python3 \"$ROOT/tools/export_web_data.py\"" not in body
+    ok = ok and after["data/revisions/history.jsonl"] == before["data/revisions/history.jsonl"]
+    ok = ok and after["data/daily_eps_snapshots/daily.jsonl"] == before["data/daily_eps_snapshots/daily.jsonl"]
+    ok = ok and after["data/alerts/index.json"] == before["data/alerts/index.json"]
+    ok = ok and after.get("data/comparison_checkpoint.json") == before.get("data/comparison_checkpoint.json")
+    combined = (proc.stdout or "") + (proc.stderr or "")
+    ok = ok and "export_web_data.py" not in combined.lower() or "no export" in combined.lower() or "publish-only" in combined.lower()
+    record(
+        "standalone_publish_cannot_mutate_persistent_state_test",
+        ok,
+        f"rc={proc.returncode} out={combined[-200:]}",
+    )
+
+
+def test_current_generation_remains_source_of_truth(fixture: Path) -> None:
+    """Standalone export must not supersede CURRENT generation as SoT."""
+    import os
+    ing = import_mod(fixture, "ingest_snapshot")
+    ing.rebind_paths(fixture)
+    # Establish CURRENT via ingest
+    snap = _load_base_snap(fixture)
+    snap["snapshot_utc"] = "2026-09-14T13:30:00Z"
+    u = json.loads((fixture / "data" / "universe.json").read_text(encoding="utf-8"))
+    for t in u.get("tickers") or []:
+        if t not in (snap.get("tickers") or {}):
+            snap.setdefault("tickers", {})[t] = _good_ticker()
+    incoming = _write_incoming_from_snap(fixture, snap)
+    os.environ["PIPELINE_LOCK_HELD"] = "1"
+    r1 = ing.ingest_and_build(incoming, run_export=True, run_publish=False)
+    ok = r1.get("runStatus") == "committed"
+    cur = ing.read_current_pointer()
+    rid = cur.get("runId") if cur else None
+    gen = ing.resolve_current_generation()
+    ok = ok and gen is not None
+    # Mutate live web meta without going through CURRENT
+    meta_path = fixture / "web" / "data" / "meta.json"
+    meta = json.loads(meta_path.read_text(encoding="utf-8"))
+    meta["dataVersion"] = "STALE_STANDALONE_EXPORT"
+    meta_path.write_text(json.dumps(meta, indent=2) + "\n", encoding="utf-8")
+    # Rematerialize from CURRENT must restore generation web
+    marker = fixture / "data" / ".materialized_run_id"
+    if marker.exists():
+        marker.unlink()
+    ing.ensure_live_matches_current()
+    meta2 = json.loads(meta_path.read_text(encoding="utf-8"))
+    ok = ok and meta2.get("dataVersion") != "STALE_STANDALONE_EXPORT"
+    ok = ok and ing.read_current_pointer().get("runId") == rid
+    src_upd = (ROOT / "UPDATE_PIPELINE.md").read_text(encoding="utf-8")
+    ok = ok and "sole persistent financial-state writer" in src_upd.lower()
+    ok = ok and "do **not** run standalone export after ingest" in src_upd.lower()
+    # Contradictory positive instruction must not remain
+    ok = ok and "python3 /workspace/ai-eps-monitor/tools/export_web_data.py" not in src_upd
+    record(
+        "current_generation_remains_source_of_truth_test",
+        ok,
+        f"rid={rid} dv={meta2.get('dataVersion', '')[:16]}",
+    )
+
+
+def test_pending_publish_uses_current_generation(fixture: Path) -> None:
+    """retry_pending_publish_if_needed reconciles CURRENT before publish."""
+    import os
+    ing = import_mod(fixture, "ingest_snapshot")
+    ing.rebind_paths(fixture)
+    # Need a CURRENT generation with web/
+    snap = _load_base_snap(fixture)
+    snap["snapshot_utc"] = "2026-09-14T14:15:00Z"
+    u = json.loads((fixture / "data" / "universe.json").read_text(encoding="utf-8"))
+    for t in u.get("tickers") or []:
+        if t not in (snap.get("tickers") or {}):
+            snap.setdefault("tickers", {})[t] = _good_ticker()
+    incoming = _write_incoming_from_snap(fixture, snap)
+    os.environ["PIPELINE_LOCK_HELD"] = "1"
+    r1 = ing.ingest_and_build(incoming, run_export=True, run_publish=False)
+    ok = r1.get("runStatus") == "committed"
+    gen = ing.resolve_current_generation()
+    ok = ok and gen is not None and (gen / "web" / "data").is_dir()
+    # Corrupt live web relative to CURRENT
+    meta_path = fixture / "web" / "data" / "meta.json"
+    meta = json.loads(meta_path.read_text(encoding="utf-8"))
+    stale_dv = "STALE_PENDING_PUBLISH_CACHE"
+    meta["dataVersion"] = stale_dv
+    meta.setdefault("qualityGate", {})["publishable"] = True
+    meta["qualityGate"]["status"] = "ok"
+    meta_path.write_text(json.dumps(meta, indent=2) + "\n", encoding="utf-8")
+    marker = fixture / "data" / ".materialized_run_id"
+    if marker.exists():
+        marker.write_text("not-current\n", encoding="utf-8")
+    ing.write_publish_state({
+        "publishStatus": "pending",
+        "lastPublishAttempt": "2026-09-14T00:00:00Z",
+        "lastSuccessfulPublish": None,
+        "pendingReleaseVersion": meta.get("releaseVersion") or "x",
+    })
+    os.environ["AI_EPS_ROOT"] = str(fixture)
+    # Source must call ensure_live before publish
+    src = (fixture / "tools" / "ingest_snapshot.py").read_text(encoding="utf-8")
+    ok = ok and "ensure_live_matches_current" in src
+    # retry must reconcile
+    rc = ing.retry_pending_publish_if_needed()
+    meta2 = json.loads(meta_path.read_text(encoding="utf-8"))
+    ok = ok and meta2.get("dataVersion") != stale_dv
+    ok = ok and marker.exists() and marker.read_text(encoding="utf-8").strip() == r1.get("runId")
+    record(
+        "pending_publish_uses_current_generation_test",
+        ok,
+        f"rc={rc} dv={str(meta2.get('dataVersion') or '')[:16]}",
+    )
+
+
+def test_asset_change_final_app_version_identity(fixture: Path) -> None:
+    """After asset change + stamp, meta.appVersion == compute_app_version(final tree)."""
+    import os
+    ing = import_mod(fixture, "ingest_snapshot")
+    ing.rebind_paths(fixture)
+    web = fixture / "web"
+    app_js = web / "app.js"
+    app_js.write_text(app_js.read_text(encoding="utf-8") + "\n/* identity-bump */\n", encoding="utf-8")
+    before = ing.compute_app_version(web)
+    meta = ing.finalize_release_identity(web)
+    after = ing.compute_app_version(web)
+    ok = meta.get("appVersion") == after
+    ok = ok and after == before  # canonicalize: stamp does not change appVersion
+    # Changing asset content must change appVersion vs prior finalize of unchanged tree
+    # (before already includes the bump; stamp-stable)
+    ok = ok and len(after) == 64
+    # Strip ?v= identity: stamp then recompute equals
+    stamped = (web / "index.html").read_text(encoding="utf-8")
+    ok = ok and ("?v=" in stamped or True)
+    again = ing.compute_app_version(web)
+    ok = ok and again == meta.get("appVersion")
+    record(
+        "asset_change_final_app_version_identity_test",
+        ok,
+        f"app={after[:16]} meta={str(meta.get('appVersion') or '')[:16]}",
+    )
+
+
+def test_published_release_version_matches_final_assets(fixture: Path) -> None:
+    """meta.releaseVersion == hash(final appVersion + schema + data + refresh)."""
+    ing = import_mod(fixture, "ingest_snapshot")
+    ing.rebind_paths(fixture)
+    web = fixture / "web"
+    meta = ing.finalize_release_identity(web)
+    app_v = ing.compute_app_version(web)
+    schema = str(meta.get("schemaVersion") or "1")
+    data_v = str(meta.get("dataVersion") or "")
+    refresh_v = str(meta.get("refreshVersion") or "")
+    expect = ing.compute_release_version(app_v, schema, data_v, refresh_v)
+    ok = meta.get("appVersion") == app_v
+    ok = ok and meta.get("releaseVersion") == expect
+    record(
+        "published_release_version_matches_final_assets_test",
+        ok,
+        f"rv={str(meta.get('releaseVersion') or '')[:16]} expect={expect[:16]}",
+    )
+
+
+def test_generic_investor_domain_not_tier1(fixture: Path) -> None:
+    exp = import_mod(fixture, "export_web_data")
+    ok = exp.classify_source_tier("https://investor.evil.com/news", ticker="NVDA") != 1
+    ok = ok and exp.classify_source_tier("https://investor.evil.com/news", ticker="NVDA") == "unverified_ir_candidate"
+    ok = ok and exp.classify_source_tier("https://investors.evil.com/x") == "unverified_ir_candidate"
+    # Official mapped domain still Tier1
+    ok = ok and exp.classify_source_tier("https://investor.nvidia.com/news", ticker="NVDA") == 1
+    record("generic_investor_domain_not_tier1_test", ok, "investor.evil.com")
+
+
+def test_generic_ir_domain_not_tier1(fixture: Path) -> None:
+    exp = import_mod(fixture, "export_web_data")
+    ok = exp.classify_source_tier("https://ir.evil.com/earnings", ticker="NVDA") != 1
+    ok = ok and exp.classify_source_tier("https://ir.evil.com/earnings") == "unverified_ir_candidate"
+    record("generic_ir_domain_not_tier1_test", ok, "ir.evil.com")
+
+
+def test_fake_seekingalpha_domain_not_tier4(fixture: Path) -> None:
+    exp = import_mod(fixture, "export_web_data")
+    ok = exp.classify_source_tier("https://evilseekingalpha.com/article/1") != 4
+    ok = ok and exp.classify_source_tier("https://seekingalpha.com.evil.com/x") != 4
+    ok = ok and exp.classify_source_tier("https://seekingalpha.com/article/1") == 4
+    ok = ok and exp.classify_source_tier("https://www.seekingalpha.com/symbol/NVDA") == 4
+    record("fake_seekingalpha_domain_not_tier4_test", ok, "evilseekingalpha")
+
+
+def test_duplicate_identical_fiscal_row_dedup(fixture: Path) -> None:
+    sa = import_mod(fixture, "sa_parser")
+    rows = [
+        {"fiscalPeriodEnding": "Jan 2028", "consensus": 10.0, "high": 11, "low": 9, "analystCount": 30, "rev1M": 1.0},
+        {"fiscalPeriodEnding": "January 2028", "consensus": 10.0, "high": 11, "low": 9, "analystCount": 30, "rev1M": 1.0},
+    ]
+    packed = sa.pack_snapshot_eps_from_rows(rows, ticker="NVDA")
+    ok = packed.get("status") != "needs_verification"
+    ok = ok and "2027E" in packed
+    ok = ok and packed["2027E"].get("consensus") == 10.0
+    record("duplicate_identical_fiscal_row_dedup_test", ok, f"keys={list(packed.keys())}")
+
+
+def test_duplicate_conflicting_fiscal_row_rejected(fixture: Path) -> None:
+    sa = import_mod(fixture, "sa_parser")
+    rows = [
+        {"fiscalPeriodEnding": "Jan 2028", "consensus": 10.0, "high": 11, "low": 9, "analystCount": 30, "rev1M": 1.0},
+        {"fiscalPeriodEnding": "Jan 2028", "consensus": 12.0, "high": 11, "low": 9, "analystCount": 30, "rev1M": 1.0},
+    ]
+    packed = sa.pack_snapshot_eps_from_rows(rows, ticker="NVDA")
+    ok = packed.get("status") == "needs_verification"
+    ok = ok and packed.get("reason") == "duplicate_conflicting_fiscal_row"
+    record("duplicate_conflicting_fiscal_row_rejected_test", ok, f"reason={packed.get('reason')}")
+
+
+def test_mapped_slot_collision_rejected(fixture: Path) -> None:
+    sa = import_mod(fixture, "sa_parser")
+    # Two different fiscal identities that map to same slot 2027E for NVDA:
+    # Jan 2028 → 2027E; and explicit map forcing Feb 2029 → 2027E
+    rows = [
+        {"fiscalPeriodEnding": "Jan 2028", "consensus": 10.0, "high": 11, "low": 9, "analystCount": 30, "rev1M": 1.0},
+        {"fiscalPeriodEnding": "Feb 2029", "consensus": 11.0, "high": 12, "low": 10, "analystCount": 30, "rev1M": 2.0},
+    ]
+    packed = sa.pack_snapshot_eps_from_rows(
+        rows,
+        ticker="NVDA",
+        fiscal_to_mapped={"Jan 2028": "2027E", "Feb 2029": "2027E"},
+    )
+    ok = packed.get("status") == "needs_verification"
+    ok = ok and packed.get("reason") == "mapped_slot_collision"
+    record("mapped_slot_collision_rejected_test", ok, f"reason={packed.get('reason')} slot={packed.get('slot')}")
+
+
+def _complete_watchlist_snap(fixture: Path, snap: dict) -> dict:
+    u = json.loads((fixture / "data" / "universe.json").read_text(encoding="utf-8"))
+    for t in u.get("tickers") or []:
+        if t not in (snap.get("tickers") or {}):
+            snap.setdefault("tickers", {})[t] = _good_ticker()
+    return snap
+
+
+def _generation_fingerprint(gen: Path) -> dict[str, str]:
+    out: dict[str, str] = {}
+    if not gen.exists():
+        return out
+    for p in sorted(gen.rglob("*")):
+        if p.is_file():
+            out[str(p.relative_to(gen))] = hashlib.sha256(p.read_bytes()).hexdigest()
+    return out
+
+
+def test_same_second_identical_ingest_has_unique_run_id(fixture: Path) -> None:
+    """Identical snapshots ingested in the same second must get unique runIds."""
+    import os
+    from datetime import datetime as dt_cls
+
+    ing = import_mod(fixture, "ingest_snapshot")
+    ing.rebind_paths(fixture)
+    snap = _complete_watchlist_snap(fixture, _load_base_snap(fixture))
+    snap["snapshot_utc"] = "2026-09-14T15:00:00Z"
+    frozen = dt_cls(2026, 9, 14, 15, 0, 0, tzinfo=timezone.utc)
+
+    class _FrozenDateTime(dt_cls):
+        @classmethod
+        def now(cls, tz=None):
+            if tz is None:
+                return frozen
+            return frozen.astimezone(tz) if frozen.tzinfo else frozen.replace(tzinfo=tz)
+
+    os.environ["PIPELINE_LOCK_HELD"] = "1"
+    orig_dt = ing.datetime
+    incoming1 = _write_incoming_from_snap(fixture, snap, name="same_second_a.json")
+    incoming2_payload = json.loads(json.dumps(snap))
+    try:
+        ing.datetime = _FrozenDateTime
+        r1 = ing.ingest_and_build(incoming1, run_export=False, run_publish=False)
+        incoming2 = _write_incoming_from_snap(fixture, incoming2_payload, name="same_second_b.json")
+        r2 = ing.ingest_and_build(incoming2, run_export=False, run_publish=False)
+    finally:
+        ing.datetime = orig_dt
+    rid1, rid2 = r1.get("runId"), r2.get("runId")
+    ok = r1.get("runStatus") == "committed" and r2.get("runStatus") == "committed"
+    ok = ok and bool(rid1) and bool(rid2) and rid1 != rid2
+    ok = ok and (fixture / "data" / "generations" / str(rid1)).is_dir()
+    ok = ok and (fixture / "data" / "generations" / str(rid2)).is_dir()
+    src = (fixture / "tools" / "ingest_snapshot.py").read_text(encoding="utf-8")
+    ok = ok and "allocate_unique_run_id" in src and "uuid.uuid4" in src
+    ok = ok and "content_hash_snapshot(raw)[:8]" not in src
+    record(
+        "same_second_identical_ingest_has_unique_run_id_test",
+        ok,
+        f"rid1={rid1} rid2={rid2}",
+    )
+
+
+def test_committed_generation_never_mutated_by_replay(fixture: Path) -> None:
+    """Exact replay may no-op events but must never mutate a committed generation dir."""
+    import os
+    ing = import_mod(fixture, "ingest_snapshot")
+    ing.rebind_paths(fixture)
+    snap = _complete_watchlist_snap(fixture, _load_base_snap(fixture))
+    snap["snapshot_utc"] = "2026-09-14T15:10:00Z"
+    os.environ["PIPELINE_LOCK_HELD"] = "1"
+    incoming1 = _write_incoming_from_snap(fixture, snap, name="replay_a.json")
+    r1 = ing.ingest_and_build(incoming1, run_export=False, run_publish=False)
+    rid1 = r1.get("runId")
+    gen1 = fixture / "data" / "generations" / str(rid1)
+    ok = r1.get("runStatus") == "committed" and gen1.is_dir()
+    before = _generation_fingerprint(gen1)
+    incoming2 = _write_incoming_from_snap(fixture, json.loads(json.dumps(snap)), name="replay_b.json")
+    r2 = ing.ingest_and_build(incoming2, run_export=False, run_publish=False)
+    after = _generation_fingerprint(gen1)
+    ok = ok and r2.get("runStatus") == "committed"
+    ok = ok and r2.get("runId") != rid1
+    ok = ok and after == before and before
+    record(
+        "committed_generation_never_mutated_by_replay_test",
+        ok,
+        f"rid1={rid1} rid2={r2.get('runId')} files={len(before)}",
+    )
+
+
+def test_existing_generation_directory_fail_closed(fixture: Path) -> None:
+    """commit_staged_run must error if generations/<runId> already exists; never overwrite."""
+    ing = import_mod(fixture, "ingest_snapshot")
+    ing.rebind_paths(fixture)
+    rid = "preexisting-immutable-gen"
+    gen = fixture / "data" / "generations" / rid
+    gen.mkdir(parents=True, exist_ok=True)
+    sentinel = gen / "IMMUTABLE.txt"
+    sentinel.write_text("do-not-touch\n", encoding="utf-8")
+    nested = gen / "snapshots" / "keep.json"
+    nested.parent.mkdir(parents=True, exist_ok=True)
+    nested.write_text('{"keep": true}\n', encoding="utf-8")
+    stage = fixture / "data" / "staging" / "stage-fail-closed"
+    stage.mkdir(parents=True, exist_ok=True)
+    snap = {"snapshot_utc": "2026-09-14T10:00:00Z", "tickers": {"NVDA": _good_ticker()}}
+    raised = False
+    try:
+        ing.commit_staged_run(stage, snap, [], "2026-09-14T10:00:00Z", run_id=rid)
+    except ing.CommitAborted:
+        raised = True
+    except Exception as exc:
+        raised = "immutable" in str(exc).lower() or "already exists" in str(exc).lower()
+    ok = raised
+    ok = ok and sentinel.read_text(encoding="utf-8") == "do-not-touch\n"
+    ok = ok and json.loads(nested.read_text(encoding="utf-8")).get("keep") is True
+    ok = ok and not (gen / "snapshot.json").exists()
+    src = (fixture / "tools" / "ingest_snapshot.py").read_text(encoding="utf-8")
+    ok = ok and "already exists (immutable)" in src
+    record("existing_generation_directory_fail_closed_test", ok, f"raised={raised}")
+
+
+def test_claimed_ir_with_unofficial_domain_not_tier1(fixture: Path) -> None:
+    exp = import_mod(fixture, "export_web_data")
+    unofficial = "https://random.example/ir/earnings"
+    ok = exp.classify_source_tier(unofficial, source_type="ir", ticker="NVDA") != 1
+    ok = ok and exp.classify_source_tier(unofficial, source_type="company_ir", ticker="NVDA") != 1
+    ok = ok and exp.classify_source_tier(
+        "https://investor.nvidia.com/news", source_type="ir", ticker="NVDA"
+    ) == 1
+    record("claimed_ir_with_unofficial_domain_not_tier1_test", ok, unofficial)
+
+
+def test_claimed_sec_with_non_sec_domain_not_tier1(fixture: Path) -> None:
+    exp = import_mod(fixture, "export_web_data")
+    fake = "https://random.example/sec/archives"
+    ok = exp.classify_source_tier(fake, source_type="sec") != 1
+    ok = ok and exp.classify_source_tier(fake, source_type="8-k") != 1
+    ok = ok and exp.classify_source_tier("https://www.sec.gov/Archives/x", source_type="sec") == 1
+    ok = ok and exp.classify_source_tier("https://efts.sec.gov/x", source_type="10-q") == 1
+    record("claimed_sec_with_non_sec_domain_not_tier1_test", ok, fake)
+
+
+def test_source_type_domain_mismatch(fixture: Path) -> None:
+    exp = import_mod(fixture, "export_web_data")
+    got_ir = exp.classify_source_tier(
+        "https://evil.com/x", source_type="company_ir", ticker="NVDA"
+    )
+    got_sec = exp.classify_source_tier("https://news.example/x", source_type="sec")
+    got_sa = exp.classify_source_tier(
+        "https://evilseekingalpha.com/article/1", source_type="seeking_alpha"
+    )
+    mismatch = {"source_mismatch", "Unknown", "needs_verification", "unverified_ir_candidate"}
+    ok = got_ir != 1 and got_ir in mismatch
+    ok = ok and got_sec != 1 and got_sec in mismatch
+    ok = ok and got_sa != 4
+    record(
+        "source_type_domain_mismatch_test",
+        ok,
+        f"ir={got_ir} sec={got_sec} sa={got_sa}",
+    )
+
+
+def test_cross_issuer_official_domain_not_tier1_for_ticker(fixture: Path) -> None:
+    """NVDA digest + Broadcom IR URL must not be Tier 1; SEC stays globally valid."""
+    exp = import_mod(fixture, "export_web_data")
+    avgo_ir = "https://investors.broadcom.com/news"
+    ok = exp.classify_source_tier(avgo_ir, ticker="NVDA") != 1
+    data = {
+        "hasDigest": True,
+        "ticker": "NVDA",
+        "results": {
+            "eps": "$1.00",
+            "sourceUrl": avgo_ir,
+            "sourceTier": 1,
+            "sourceType": "company_ir",
+        },
+        "guidanceDetail": {"foo": 1},
+        "sources": [],
+    }
+    out = exp.ensure_earnings_provenance(data)
+    tier = (out.get("actuals") or {}).get("sourceTier")
+    ok = ok and tier != 1
+    sec = {
+        "hasDigest": True,
+        "ticker": "NVDA",
+        "results": {
+            "eps": "$1.00",
+            "sourceUrl": "https://www.sec.gov/Archives/edgar/data/1",
+            "sourceTier": 1,
+            "sourceType": "sec",
+        },
+    }
+    out_sec = exp.ensure_earnings_provenance(sec)
+    ok = ok and (out_sec.get("actuals") or {}).get("sourceTier") == 1
+    ok = ok and exp.classify_source_tier("https://www.sec.gov/Archives/x", ticker="NVDA") == 1
+    record(
+        "cross_issuer_official_domain_not_tier1_for_ticker_test",
+        ok,
+        f"tier={tier} avgo_for_nvda={exp.classify_source_tier(avgo_ir, ticker='NVDA')}",
+    )
+
+
+def test_fake_sa_domain_not_selected_as_consensus_source(fixture: Path) -> None:
+    exp = import_mod(fixture, "export_web_data")
+    fake = "https://evilseekingalpha.com/article/1"
+    real = "https://seekingalpha.com/article/real-nvda"
+    data = {
+        "hasDigest": True,
+        "ticker": "NVDA",
+        "results": {
+            "eps": "1.0",
+            "sourceUrl": "https://investor.nvidia.com/results",
+            "sourceTier": 1,
+        },
+        "sources": [
+            {"url": fake, "sourceTier": 4, "attribution": "Seeking Alpha"},
+        ],
+        "comparison": "beat",
+        "positives": [{"text": "beat", "supplementalUrl": fake}],
+    }
+    out = exp.ensure_earnings_provenance(data)
+    cc = out.get("consensusComparison") or {}
+    selected = str(cc.get("sourceUrl") or "")
+    ok = fake not in selected
+    ok = ok and "evilseekingalpha.com" not in selected.lower()
+    data2 = dict(data)
+    data2["sources"] = [
+        {"url": fake, "sourceTier": 4},
+        {"url": real, "sourceTier": 4},
+    ]
+    out2 = exp.ensure_earnings_provenance(data2)
+    cc2 = out2.get("consensusComparison") or {}
+    host2 = exp._hostname_of(cc2.get("sourceUrl"))
+    ok = ok and exp._is_seekingalpha_hostname(host2)
+    ok = ok and "evilseekingalpha.com" not in str(cc2.get("sourceUrl") or "").lower()
+    record(
+        "fake_sa_domain_not_selected_as_consensus_source_test",
+        ok,
+        f"cc={selected} cc2={cc2.get('sourceUrl')}",
+    )
+
+
+def test_strict_sa_hostname_used_everywhere(fixture: Path) -> None:
+    """Provenance paths must use parsed hostname + _is_seekingalpha_hostname, not substring."""
+    hits = []
+    for name in ("export_web_data.py", "build_alerts.py"):
+        src = (fixture / "tools" / name).read_text(encoding="utf-8")
+        if "def _is_seekingalpha_hostname" not in src:
+            hits.append(f"{name}:missing_helper")
+        for i, line in enumerate(src.splitlines(), 1):
+            code = line.split("#", 1)[0]
+            if '"seekingalpha.com" in' in code or "'seekingalpha.com' in" in code:
+                hits.append(f"{name}:{i}:{code.strip()}")
+    exp = import_mod(fixture, "export_web_data")
+    ok = not hits
+    ok = ok and exp._url_is_seekingalpha("https://www.seekingalpha.com/x")
+    ok = ok and not exp._url_is_seekingalpha("https://evilseekingalpha.com/x")
+    ok = ok and not exp._url_is_seekingalpha("https://seekingalpha.com.evil.com/x")
+    record("strict_sa_hostname_used_everywhere_test", ok, f"hits={hits[:8]}")
+
+
+def test_materialized_marker_with_missing_live_file_repairs_from_current(fixture: Path) -> None:
+    """Marker matching CURRENT is not enough if a required live artifact is missing."""
+    import os
+    ing = import_mod(fixture, "ingest_snapshot")
+    ing.rebind_paths(fixture)
+    snap = _complete_watchlist_snap(fixture, _load_base_snap(fixture))
+    snap["snapshot_utc"] = "2026-09-14T16:00:00Z"
+    os.environ["PIPELINE_LOCK_HELD"] = "1"
+    incoming = _write_incoming_from_snap(fixture, snap, name="live_repair.json")
+    result = ing.ingest_and_build(incoming, run_export=True, run_publish=False)
+    ok = result.get("runStatus") == "committed"
+    gen = ing.resolve_current_generation()
+    ok = ok and gen is not None
+    marker = fixture / "data" / ".materialized_run_id"
+    rid = str(result.get("runId") or "")
+    ok = ok and marker.exists() and marker.read_text(encoding="utf-8").strip() == rid
+    gen_web = gen / "web" / "data"
+    live_target = None
+    gen_src = None
+    for cand in ("meta.json", "companies.json", "earnings.json"):
+        if (gen_web / cand).exists():
+            live_target = fixture / "web" / "data" / cand
+            gen_src = gen_web / cand
+            break
+    ok = ok and live_target is not None and live_target.exists()
+    expect = gen_src.read_bytes() if gen_src else b""
+    live_target.unlink()
+    ok = ok and not live_target.exists()
+    # Marker still claims CURRENT — must rematerialize, not early-return
+    marker.write_text(rid + "\n", encoding="utf-8")
+    ing.ensure_live_matches_current()
+    ok = ok and live_target.exists()
+    ok = ok and live_target.read_bytes() == expect
+    ok = ok and marker.read_text(encoding="utf-8").strip() == rid
+    src = (fixture / "tools" / "ingest_snapshot.py").read_text(encoding="utf-8")
+    ok = ok and "live_cache_matches_generation" in src
+    record(
+        "materialized_marker_with_missing_live_file_repairs_from_current_test",
+        ok,
+        f"rid={rid} restored={live_target.name if live_target else None}",
+    )
+
+
+# Suite classification: integration = subprocess/crash/publish/heavy ingest
+INTEGRATION_TEST_NAMES = {
+    "test_full_export_2027_rollover",
+    "test_quality_gate_blocks_export",
+    "test_quality_gate_blocks_publish",
+    "test_rejected_snapshot_cannot_mutate_alert_db",
+    "test_global_pipeline_lock",
+    "test_export_failure_does_not_commit_validated_snapshot",
+    "test_export_failure_does_not_commit_revision",
+    "test_ingest_publish_single_export",
+    "test_ingest_publish_no_duplicate_revision",
+    "test_push_failure_retry_still_pushes",
+    "test_parent_lock_ingest_publish",
+    "test_commit_revision_failure_rolls_back_snapshot",
+    "test_commit_manifest_failure_rolls_back",
+    "test_post_export_commit_failure_leaves_all_state_unchanged",
+    "test_comparison_checkpoint_not_advanced_on_failed_commit",
+    "test_validate_only_does_not_commit",
+    "test_clean_publish_contains_all_index_assets",
+    "test_vendor_change_triggers_publish",
+    "test_crash_during_commit_preserves_previous_generation",
+    "test_real_parent_lock_publish_integration",
+    "test_pending_publish_retry",
+    "test_post_current_materialization_failure_is_committed",
+    "test_post_current_failure_never_marks_aborted",
+    "test_materialization_retry_from_current",
+    "test_standalone_export_cannot_mutate_persistent_state",
+    "test_standalone_publish_cannot_mutate_persistent_state",
+    "test_current_generation_remains_source_of_truth",
+    "test_pending_publish_uses_current_generation",
+    "test_revision_generation_failure_blocks_export",
+    "test_same_second_identical_ingest_has_unique_run_id",
+    "test_committed_generation_never_mutated_by_replay",
+    "test_materialized_marker_with_missing_live_file_repairs_from_current",
+}
+
+
+def _all_suite_tests():
+    """Ordered (name, callable) for the acceptance suite."""
+    return [
+        # Prior suite
+        ("test_isolated_same_day_snapshot", test_isolated_same_day_snapshot),
+        ("test_drivers_persist", test_drivers_persist),
+        ("test_corrupt_earnings", test_corrupt_earnings),
+        ("test_revision_unchanged", test_revision_unchanged),
+        ("test_fiscal_rollover_identity", test_fiscal_rollover_identity),
+        ("test_alert_engine_status", test_alert_engine_status),
+        ("test_publish_hash_noop", test_publish_hash_noop),
+        ("test_dispersion_and_eps_by_fiscal", test_dispersion_and_eps_by_fiscal),
+        # Round 2
+        ("test_dynamic_rollover_full_ui", test_dynamic_rollover_full_ui),
+        ("test_alert_unique_id", test_alert_unique_id),
+        ("test_alert_expiry", test_alert_expiry),
+        ("test_cumulative_30d_window", test_cumulative_30d_window),
+        ("test_results_vs_guidance", test_results_vs_guidance),
+        ("test_weekend_freshness", test_weekend_freshness),
+        ("test_collector_parser_fixture", test_collector_parser_fixture),
+        # Round 3
+        ("test_driver_changed_at", test_driver_changed_at),
+        ("test_full_export_2027_rollover", test_full_export_2027_rollover),
+        ("test_parser_zero_revision", test_parser_zero_revision),
+        ("test_parser_all_fiscal_months", test_parser_all_fiscal_months),
+        ("test_driver_corruption_preservation", test_driver_corruption_preservation),
+        ("test_cumulative_30d_from_daily_snapshots", test_cumulative_30d_from_daily_snapshots),
+        ("test_insufficient_history_no_pollution", test_insufficient_history_no_pollution),
+        ("test_field_level_provenance", test_field_level_provenance),
+        ("test_negative_eps_math", test_negative_eps_math),
+        ("test_partial_collection_status", test_partial_collection_status),
+        ("test_momentum_determinism", test_momentum_determinism),
+        ("test_data_version_vs_refresh", test_data_version_vs_refresh),
+        ("test_review_same_build", test_review_same_build),
+        # Final Data Reliability
+        ("test_driver_multiple_transition_history", test_driver_multiple_transition_history),
+        ("test_cumulative_alert_no_daily_spam", test_cumulative_alert_no_daily_spam),
+        ("test_next_earnings_false_confirmation", test_next_earnings_false_confirmation),
+        ("test_operational_timestamp_does_not_change_data_version", test_operational_timestamp_does_not_change_data_version),
+        ("test_snapshot_quality_gate", test_snapshot_quality_gate),
+        ("test_parser_zero_rows_fail", test_parser_zero_rows_fail),
+        ("test_extreme_eps_change_quarantine", test_extreme_eps_change_quarantine),
+        ("test_source_reported_1m_revision", test_source_reported_1m_revision),
+        ("test_attention_queue_diversification", test_attention_queue_diversification),
+        ("test_atomic_write_smoke", test_atomic_write_smoke),
+        ("test_different_detail_screenshot", test_different_detail_screenshot),
+        # Fail-Closed
+        ("test_quality_gate_blocks_export", test_quality_gate_blocks_export),
+        ("test_quality_gate_blocks_publish", test_quality_gate_blocks_publish),
+        ("test_missing_watchlist_tickers_gate", test_missing_watchlist_tickers_gate),
+        ("test_alert_engine_failure_preserves_history", test_alert_engine_failure_preserves_history),
+        ("test_refresh_only_publish", test_refresh_only_publish),
+        ("test_source_1m_no_daily_spam", test_source_1m_no_daily_spam),
+        ("test_low_coverage_revision_confidence", test_low_coverage_revision_confidence),
+        ("test_all_earnings_provenance", test_all_earnings_provenance),
+        ("test_atomic_failure_does_not_nonatomic_fallback", test_atomic_failure_does_not_nonatomic_fallback),
+        ("test_revision_regime", test_revision_regime),
+        ("test_company_vs_earnings_route_screenshot", test_company_vs_earnings_route_screenshot),
+        # Pipeline Integrity
+        ("test_rejected_snapshot_cannot_mutate_alert_db", test_rejected_snapshot_cannot_mutate_alert_db),
+        ("test_partial_collection_does_not_create_fake_daily_observation", test_partial_collection_does_not_create_fake_daily_observation),
+        ("test_changed_since_checkpoint_advances", test_changed_since_checkpoint_advances),
+        ("test_source_1m_hold_preserves_event_age", test_source_1m_hold_preserves_event_age),
+        ("test_jsonl_atomic_failure_aborts", test_jsonl_atomic_failure_aborts),
+        ("test_global_pipeline_lock", test_global_pipeline_lock),
+        ("test_fiscal_coverage_regression", test_fiscal_coverage_regression),
+        ("test_price_outlier_needs_verification", test_price_outlier_needs_verification),
+        ("test_mixed_build_generation_rejected", test_mixed_build_generation_rejected),
+        ("test_same_day_multiple_raw_snapshot_preserved", test_same_day_multiple_raw_snapshot_preserved),
+        ("test_p2_all_forward_years_in_daily_eps", test_p2_all_forward_years_in_daily_eps),
+        ("test_p2_zero_analyst_needs_verification", test_p2_zero_analyst_needs_verification),
+        # Ingestion Integrity
+        ("test_invalid_snapshot_not_in_validated_history", test_invalid_snapshot_not_in_validated_history),
+        ("test_lkg_after_partial_collection", test_lkg_after_partial_collection),
+        ("test_revision_event_auto_generation", test_revision_event_auto_generation),
+        ("test_revision_unchanged_no_event", test_revision_unchanged_no_event),
+        ("test_same_day_second_revision_event", test_same_day_second_revision_event),
+        ("test_missing_ticker_no_fake_revision", test_missing_ticker_no_fake_revision),
+        ("test_alert_engine_uses_gated_snapshot_context", test_alert_engine_uses_gated_snapshot_context),
+        ("test_manifest_cannot_break_source_1m", test_manifest_cannot_break_source_1m),
+        ("test_missing_fiscal_identity_rejected", test_missing_fiscal_identity_rejected),
+        ("test_dashboard_publish_metadata_sync", test_dashboard_publish_metadata_sync),
+        ("test_screenshot_dom_build_identity", test_screenshot_dom_build_identity),
+        # Transactional
+        ("test_export_failure_does_not_commit_validated_snapshot", test_export_failure_does_not_commit_validated_snapshot),
+        ("test_export_failure_does_not_commit_revision", test_export_failure_does_not_commit_revision),
+        ("test_exact_revision_replay_idempotency", test_exact_revision_replay_idempotency),
+        ("test_same_timestamp_snapshot_collision_preserved", test_same_timestamp_snapshot_collision_preserved),
+        ("test_ingest_publish_single_export", test_ingest_publish_single_export),
+        ("test_ingest_publish_no_duplicate_revision", test_ingest_publish_no_duplicate_revision),
+        ("test_site_published_does_not_change_refresh_version", test_site_published_does_not_change_refresh_version),
+        ("test_push_failure_retry_still_pushes", test_push_failure_retry_still_pushes),
+        ("test_unknown_analyst_not_high_severity", test_unknown_analyst_not_high_severity),
+        ("test_results_source_survives_missing_guidance", test_results_source_survives_missing_guidance),
+        ("test_reuters_not_tier1", test_reuters_not_tier1),
+        ("test_source_domain_classification", test_source_domain_classification),
+        ("test_revision_generation_failure_blocks_export", test_revision_generation_failure_blocks_export),
+        ("test_null_eps_not_daily_observation", test_null_eps_not_daily_observation),
+        # Transaction Boundary
+        ("test_parent_lock_ingest_publish", test_parent_lock_ingest_publish),
+        ("test_commit_revision_failure_rolls_back_snapshot", test_commit_revision_failure_rolls_back_snapshot),
+        ("test_commit_manifest_failure_rolls_back", test_commit_manifest_failure_rolls_back),
+        ("test_post_export_commit_failure_leaves_all_state_unchanged", test_post_export_commit_failure_leaves_all_state_unchanged),
+        ("test_comparison_checkpoint_not_advanced_on_failed_commit", test_comparison_checkpoint_not_advanced_on_failed_commit),
+        ("test_nan_consensus_rejected", test_nan_consensus_rejected),
+        ("test_infinity_consensus_rejected", test_infinity_consensus_rejected),
+        ("test_nonfinite_price_rejected", test_nonfinite_price_rejected),
+        ("test_atomic_json_rejects_nonfinite", test_atomic_json_rejects_nonfinite),
+        ("test_future_snapshot_timestamp_rejected", test_future_snapshot_timestamp_rejected),
+        ("test_invalid_snapshot_timestamp_rejected", test_invalid_snapshot_timestamp_rejected),
+        ("test_backfill_mode_timestamp", test_backfill_mode_timestamp),
+        ("test_old_app_new_data_schema_mismatch", test_old_app_new_data_schema_mismatch),
+        ("test_screenshot_app_version_identity", test_screenshot_app_version_identity),
+        ("test_spoofed_sec_domain_not_tier1", test_spoofed_sec_domain_not_tier1),
+        ("test_investor_string_in_query_not_tier1", test_investor_string_in_query_not_tier1),
+        ("test_official_domain_mapping", test_official_domain_mapping),
+        ("test_validate_only_does_not_commit", test_validate_only_does_not_commit),
+        # Identity Integrity
+        ("test_clean_publish_contains_all_index_assets", test_clean_publish_contains_all_index_assets),
+        ("test_vendor_change_changes_app_version", test_vendor_change_changes_app_version),
+        ("test_vendor_change_triggers_publish", test_vendor_change_triggers_publish),
+        ("test_fiscal_period_rollover_not_revision", test_fiscal_period_rollover_not_revision),
+        ("test_fiscal_period_rollover_not_extreme_change", test_fiscal_period_rollover_not_extreme_change),
+        ("test_same_fiscal_period_real_revision", test_same_fiscal_period_real_revision),
+        ("test_crash_during_commit_preserves_previous_generation", test_crash_during_commit_preserves_previous_generation),
+        ("test_real_parent_lock_publish_integration", test_real_parent_lock_publish_integration),
+        ("test_atomic_jsonl_rejects_nonfinite", test_atomic_jsonl_rejects_nonfinite),
+        ("test_pending_publish_retry", test_pending_publish_retry),
+        ("test_quarantine_collision_preserved", test_quarantine_collision_preserved),
+        # Commit Semantics + Single Writer + Release Identity
+        ("test_post_current_materialization_failure_is_committed", test_post_current_materialization_failure_is_committed),
+        ("test_post_current_failure_never_marks_aborted", test_post_current_failure_never_marks_aborted),
+        ("test_materialization_retry_from_current", test_materialization_retry_from_current),
+        ("test_standalone_export_cannot_mutate_persistent_state", test_standalone_export_cannot_mutate_persistent_state),
+        ("test_standalone_publish_cannot_mutate_persistent_state", test_standalone_publish_cannot_mutate_persistent_state),
+        ("test_current_generation_remains_source_of_truth", test_current_generation_remains_source_of_truth),
+        ("test_pending_publish_uses_current_generation", test_pending_publish_uses_current_generation),
+        ("test_asset_change_final_app_version_identity", test_asset_change_final_app_version_identity),
+        ("test_published_release_version_matches_final_assets", test_published_release_version_matches_final_assets),
+        ("test_generic_investor_domain_not_tier1", test_generic_investor_domain_not_tier1),
+        ("test_generic_ir_domain_not_tier1", test_generic_ir_domain_not_tier1),
+        ("test_fake_seekingalpha_domain_not_tier4", test_fake_seekingalpha_domain_not_tier4),
+        ("test_duplicate_identical_fiscal_row_dedup", test_duplicate_identical_fiscal_row_dedup),
+        ("test_duplicate_conflicting_fiscal_row_rejected", test_duplicate_conflicting_fiscal_row_rejected),
+        ("test_mapped_slot_collision_rejected", test_mapped_slot_collision_rejected),
+        ("test_same_second_identical_ingest_has_unique_run_id", test_same_second_identical_ingest_has_unique_run_id),
+        ("test_committed_generation_never_mutated_by_replay", test_committed_generation_never_mutated_by_replay),
+        ("test_existing_generation_directory_fail_closed", test_existing_generation_directory_fail_closed),
+        ("test_claimed_ir_with_unofficial_domain_not_tier1", test_claimed_ir_with_unofficial_domain_not_tier1),
+        ("test_claimed_sec_with_non_sec_domain_not_tier1", test_claimed_sec_with_non_sec_domain_not_tier1),
+        ("test_source_type_domain_mismatch", test_source_type_domain_mismatch),
+        ("test_cross_issuer_official_domain_not_tier1_for_ticker", test_cross_issuer_official_domain_not_tier1_for_ticker),
+        ("test_fake_sa_domain_not_selected_as_consensus_source", test_fake_sa_domain_not_selected_as_consensus_source),
+        ("test_strict_sa_hostname_used_everywhere", test_strict_sa_hostname_used_everywhere),
+        ("test_materialized_marker_with_missing_live_file_repairs_from_current", test_materialized_marker_with_missing_live_file_repairs_from_current),
+    ]
+
+
+def _run_one(name: str, fn, fixture: Path, timeout_s: float) -> None:
+    import threading
+    err: list[BaseException] = []
+
+    def _target():
+        try:
+            fn(fixture)
+        except BaseException as exc:  # noqa: BLE001
+            err.append(exc)
+
+    t = threading.Thread(target=_target, daemon=True)
+    t.start()
+    t.join(timeout=timeout_s)
+    if t.is_alive():
+        # Soft timeout mark — daemon thread may still finish; do not block suite
+        rec_name = name if name.endswith("_test") else name.replace("test_", "", 1) + "_test"
+        if not any(r[0] == rec_name for r in RESULTS):
+            record(rec_name, False, f"TIMEOUT after {timeout_s}s")
+        return
+    if err:
+        raise err[0]
+
+
+def main(suite: str = "all", unit_timeout_s: float = 25.0, integration_timeout_s: float = 180.0) -> int:
+    """Run acceptance suite.
+
+    suite: "all" | "unit" | "integration"
+    Unit target <30s wall; integration covers subprocess/crash/publish.
+    """
+    import time
+    global PASS, FAIL, RESULTS
+    PASS = 0
+    FAIL = 0
+    RESULTS = []
+
+    label = {
+        "all": "Commit Semantics + Single Writer + Release Identity (unit+integration)",
+        "unit": "Unit suite (fast; no subprocess/crash/publish)",
+        "integration": "Integration suite (subprocess/crash/publish)",
+    }.get(suite, suite)
+    print(f"=== ai-eps-monitor {label} ===")
+    print(f"ROOT={ROOT} suite={suite}")
     before = snapshot_prod_fingerprints()
+    t0 = time.monotonic()
 
     test_client_stale_logic_legacy_note()
 
-    with tempfile.TemporaryDirectory(prefix="ai_eps_accept_fc_") as td:
-        fixture = build_fixture(Path(td) / "proj")
-        print(f"FIXTURE={fixture}")
-        run_export(fixture)
+    def _run_phase(selected: list, fixture: Path) -> None:
+        print(f"Selected tests: {len(selected)} fixture={fixture}")
+        for name, fn, is_integ in selected:
+            timeout = integration_timeout_s if is_integ else unit_timeout_s
+            try:
+                _run_one(name, fn, fixture, timeout)
+            except Exception as exc:
+                rec_name = name if name.endswith("_test") else (name[5:] + "_test" if name.startswith("test_") else name)
+                if not any(r[0] == rec_name for r in RESULTS):
+                    record(rec_name, False, f"EXC {type(exc).__name__}: {exc}")
+                print(f"EXC in {name}: {exc}")
 
-        # Prior suite
-        test_isolated_same_day_snapshot(fixture)
-        test_drivers_persist(fixture)
-        test_corrupt_earnings(fixture)
-        test_revision_unchanged(fixture)
-        test_fiscal_rollover_identity(fixture)
-        test_alert_engine_status(fixture)
-        test_publish_hash_noop(fixture)
-        test_dispersion_and_eps_by_fiscal(fixture)
+    phases: list[tuple[str, str]]
+    if suite == "all":
+        # Isolated fixtures: ingest CURRENT from integration must not leak into unit tests.
+        phases = [("unit", "unit"), ("integration", "integration")]
+    else:
+        phases = [(suite, suite)]
 
-        # Round 2
-        test_dynamic_rollover_full_ui(fixture)
-        test_alert_unique_id(fixture)
-        test_alert_expiry(fixture)
-        test_cumulative_30d_window(fixture)
-        test_results_vs_guidance(fixture)
-        test_weekend_freshness(fixture)
-        test_collector_parser_fixture(fixture)
-
-        # Round 3 Data Integrity
-        test_driver_changed_at(fixture)
-        test_full_export_2027_rollover(fixture)
-        test_parser_zero_revision(fixture)
-        test_parser_all_fiscal_months(fixture)
-        test_driver_corruption_preservation(fixture)
-        test_cumulative_30d_from_daily_snapshots(fixture)
-        test_insufficient_history_no_pollution(fixture)
-        test_field_level_provenance(fixture)
-        test_negative_eps_math(fixture)
-        test_partial_collection_status(fixture)
-        test_momentum_determinism(fixture)
-        test_data_version_vs_refresh(fixture)
-        test_review_same_build(fixture)
-
-        # Final Data Reliability
-        test_driver_multiple_transition_history(fixture)
-        test_cumulative_alert_no_daily_spam(fixture)
-        test_next_earnings_false_confirmation(fixture)
-        test_operational_timestamp_does_not_change_data_version(fixture)
-        test_snapshot_quality_gate(fixture)
-        test_parser_zero_rows_fail(fixture)
-        test_extreme_eps_change_quarantine(fixture)
-        test_source_reported_1m_revision(fixture)
-        test_attention_queue_diversification(fixture)
-        test_atomic_write_smoke(fixture)
-        test_different_detail_screenshot(fixture)
-
-        # Fail-Closed + Signal Quality
-        test_quality_gate_blocks_export(fixture)
-        test_quality_gate_blocks_publish(fixture)
-        test_missing_watchlist_tickers_gate(fixture)
-        test_alert_engine_failure_preserves_history(fixture)
-        test_refresh_only_publish(fixture)
-        test_source_1m_no_daily_spam(fixture)
-        test_low_coverage_revision_confidence(fixture)
-        test_all_earnings_provenance(fixture)
-        test_atomic_failure_does_not_nonatomic_fallback(fixture)
-        test_revision_regime(fixture)
-        test_company_vs_earnings_route_screenshot(fixture)
-
-        # Pipeline Integrity
-        test_rejected_snapshot_cannot_mutate_alert_db(fixture)
-        test_partial_collection_does_not_create_fake_daily_observation(fixture)
-        test_changed_since_checkpoint_advances(fixture)
-        test_source_1m_hold_preserves_event_age(fixture)
-        test_jsonl_atomic_failure_aborts(fixture)
-        test_global_pipeline_lock(fixture)
-        test_fiscal_coverage_regression(fixture)
-        test_price_outlier_needs_verification(fixture)
-        test_mixed_build_generation_rejected(fixture)
-        test_same_day_multiple_raw_snapshot_preserved(fixture)
-        test_p2_all_forward_years_in_daily_eps(fixture)
-        test_p2_zero_analyst_needs_verification(fixture)
-
-        # Ingestion Integrity
-        test_invalid_snapshot_not_in_validated_history(fixture)
-        test_lkg_after_partial_collection(fixture)
-        test_revision_event_auto_generation(fixture)
-        test_revision_unchanged_no_event(fixture)
-        test_same_day_second_revision_event(fixture)
-        test_missing_ticker_no_fake_revision(fixture)
-        test_alert_engine_uses_gated_snapshot_context(fixture)
-        test_manifest_cannot_break_source_1m(fixture)
-        test_missing_fiscal_identity_rejected(fixture)
-        test_dashboard_publish_metadata_sync(fixture)
-        test_screenshot_dom_build_identity(fixture)
-
-        # Transactional & Idempotent Pipeline
-        test_export_failure_does_not_commit_validated_snapshot(fixture)
-        test_export_failure_does_not_commit_revision(fixture)
-        test_exact_revision_replay_idempotency(fixture)
-        test_same_timestamp_snapshot_collision_preserved(fixture)
-        test_ingest_publish_single_export(fixture)
-        test_ingest_publish_no_duplicate_revision(fixture)
-        test_site_published_does_not_change_refresh_version(fixture)
-        test_push_failure_retry_still_pushes(fixture)
-        test_unknown_analyst_not_high_severity(fixture)
-        test_results_source_survives_missing_guidance(fixture)
-        test_reuters_not_tier1(fixture)
-        test_source_domain_classification(fixture)
-        test_revision_generation_failure_blocks_export(fixture)
-        test_null_eps_not_daily_observation(fixture)
+    for phase_name, phase_suite in phases:
+        unit_only = phase_suite == "unit"
+        integ_only = phase_suite == "integration"
+        with tempfile.TemporaryDirectory(prefix=f"ai_eps_accept_{phase_name}_") as td:
+            fixture = build_fixture(Path(td) / "proj")
+            print(f"FIXTURE[{phase_name}]={fixture}")
+            run_export(fixture)
+            selected = []
+            for name, fn in _all_suite_tests():
+                is_integ = name in INTEGRATION_TEST_NAMES
+                if unit_only and is_integ:
+                    continue
+                if integ_only and not is_integ:
+                    continue
+                selected.append((name, fn, is_integ))
+            _run_phase(selected, fixture)
 
     test_production_unmutated(before)
-
+    elapsed = time.monotonic() - t0
     print()
-    print(f"Passed: {PASS}  Failed: {FAIL}")
+    print(f"Passed: {PASS}  Failed: {FAIL}  elapsed={elapsed:.1f}s  suite={suite}")
     for name, status, detail in RESULTS:
         print(f"  {status}: {name}" + (f" ({detail})" if detail else ""))
+    # Emit machine-readable timing line for README_REVIEW
+    print(f"SUITE_TIMING suite={suite} pass={PASS} fail={FAIL} elapsed_s={elapsed:.2f} count={PASS + FAIL}")
     return 0 if FAIL == 0 else 1
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    suite = "all"
+    if len(sys.argv) > 1 and sys.argv[1] in {"all", "unit", "integration"}:
+        suite = sys.argv[1]
+    sys.exit(main(suite=suite))

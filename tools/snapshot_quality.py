@@ -14,8 +14,11 @@ Fiscal identity: numeric consensus rows require normalized reportedFiscalPeriodE
 """
 from __future__ import annotations
 
+import hashlib
 import json
+import math
 import re
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -38,17 +41,22 @@ FISCAL_COVERAGE_DROP_MIN = 2
 
 
 def to_num(x):
+    """Parse number; reject non-finite (NaN/Infinity) — math.isfinite only."""
     if x is None:
         return None
+    if isinstance(x, bool):
+        return None
     if isinstance(x, (int, float)):
-        return float(x)
+        v = float(x)
+        return v if math.isfinite(v) else None
     s = str(x).strip().replace(",", "").replace("%", "").replace("$", "")
-    if s.lower() in {"", "n/a", "na", "data unavailable", "null", "none", "—", "-", "unavailable"}:
+    if s.lower() in {"", "n/a", "na", "data unavailable", "null", "none", "—", "-", "unavailable", "nan", "inf", "-inf", "+inf", "infinity", "-infinity"}:
         return None
     try:
-        return float(s)
+        v = float(s)
     except Exception:
         return None
+    return v if math.isfinite(v) else None
 
 
 def is_explicit_unavailable(x) -> bool:
@@ -322,24 +330,57 @@ def validate_ticker_payload(
     return {"ticker": ticker, "status": status, "errors": errors, "warnings": warnings, "rowCount": len(usable)}
 
 
+def _fiscal_label_of_eps_row(row: dict) -> str | None:
+    """Normalized Reported Fiscal Period Ending identity (never mapped slot)."""
+    if not isinstance(row, dict):
+        return None
+    for k in (
+        "reportedFiscalPeriodEnding",
+        "reported_fiscal_label",
+        "reportedFiscalLabel",
+        "fiscalPeriodEnding",
+    ):
+        v = row.get(k)
+        if v and not is_explicit_unavailable(v):
+            return str(v).strip()
+    return None
+
+
 def extreme_eps_change(
     ticker: str,
     new_td: dict,
     prior_td: dict | None,
     threshold_pct: float = EXTREME_EPS_CHANGE_PCT,
 ) -> list[dict]:
-    """Return list of extreme consensus changes (>threshold) vs last-known-good."""
+    """Extreme consensus changes vs LKG by fiscal-period identity ONLY.
+
+    Mapped calendar slots are display-only. Different Reported Fiscal Period Ending
+    → new baseline, NEVER an extreme revision of the prior mapped slot.
+    """
     hits = []
     if not prior_td or not isinstance(prior_td, dict):
         return hits
     new_eps = (new_td or {}).get("eps") or {}
     old_eps = (prior_td or {}).get("eps") or {}
+    prior_by_fiscal: dict[str, tuple] = {}
+    if isinstance(old_eps, dict):
+        for slot, orow in old_eps.items():
+            if not isinstance(orow, dict):
+                continue
+            fiscal = _fiscal_label_of_eps_row(orow)
+            if not fiscal:
+                continue
+            prior_by_fiscal[fiscal] = (orow, slot)
     for slot, nrow in new_eps.items():
         if not isinstance(nrow, dict):
             continue
-        orow = old_eps.get(slot)
-        if not isinstance(orow, dict):
+        fiscal = _fiscal_label_of_eps_row(nrow)
+        if not fiscal:
             continue
+        prev = prior_by_fiscal.get(fiscal)
+        if prev is None:
+            continue  # new fiscal identity → not a revision / not extreme-vs-prior
+        orow, prior_slot = prev
         nc = to_num(nrow.get("consensus"))
         oc = to_num(orow.get("consensus"))
         if nc is None or oc is None or oc == 0:
@@ -348,7 +389,9 @@ def extreme_eps_change(
         if change > threshold_pct:
             hits.append({
                 "ticker": ticker,
-                "slot": slot,
+                "slot": slot,  # display only
+                "priorSlot": prior_slot,
+                "fiscalPeriodEnding": fiscal,
                 "priorConsensus": oc,
                 "newConsensus": nc,
                 "changePct": change,
@@ -501,6 +544,20 @@ def list_validated_snapshots(snap_dir: Path) -> list[Path]:
                 continue
             if qg.get("status") in {"reject", "needs_verification"}:
                 continue
+            utc = (data or {}).get("snapshot_utc") or (data or {}).get("collectedAt")
+            if utc:
+                s = str(utc).strip()
+                try:
+                    if s.endswith("Z"):
+                        dt = datetime.fromisoformat(s.replace("Z", "+00:00"))
+                    else:
+                        dt = datetime.fromisoformat(s)
+                    if dt.tzinfo is None:
+                        continue
+                    if dt > datetime.now(timezone.utc) + timedelta(minutes=10):
+                        continue  # future-dated must not be LKG
+                except Exception:
+                    continue
         except Exception:
             continue
         out.append(p)
@@ -569,6 +626,94 @@ def load_last_known_good_by_ticker(
     return found
 
 
+
+FUTURE_SKEW_MAX = timedelta(minutes=10)
+# Snapshots older than this (without --backfill) → needs_verification
+STALE_SNAPSHOT_MAX_AGE = timedelta(days=14)
+
+
+def parse_aware_iso8601(value) -> datetime | None:
+    """Parse ISO8601 timestamp that MUST be timezone-aware. Returns None if invalid."""
+    if value is None:
+        return None
+    s = str(value).strip()
+    if not s:
+        return None
+    # Accept trailing Z
+    try:
+        if s.endswith("Z"):
+            dt = datetime.fromisoformat(s.replace("Z", "+00:00"))
+        else:
+            dt = datetime.fromisoformat(s)
+    except Exception:
+        return None
+    if dt.tzinfo is None:
+        return None  # naive rejected
+    return dt
+
+
+def validate_snapshot_timestamps(
+    snap: dict,
+    *,
+    now: datetime | None = None,
+    backfill: bool = False,
+) -> dict | None:
+    """Validate collectedAt / sourceDataAsOf / snapshot_utc.
+
+    Returns gate override dict if reject/needs_verification, else None.
+    Live production must not accept future-dated as newest LKG.
+    Historical backfill only via explicit backfill=True.
+    """
+    now = now or datetime.now(timezone.utc)
+    # Prefer collectedAt / sourceDataAsOf; fall back to snapshot_utc
+    candidates = []
+    for key in ("collectedAt", "sourceDataAsOf", "snapshot_utc"):
+        if key in (snap or {}) and snap.get(key) is not None:
+            candidates.append((key, snap.get(key)))
+    if not candidates:
+        # No timestamp fields: skip (unit tests). Ingest always sets snapshot_utc.
+        return None
+    # Validate all present timestamp fields
+    parsed_primary = None
+    primary_key = None
+    for key, raw in candidates:
+        dt = parse_aware_iso8601(raw)
+        if dt is None:
+            return {
+                "status": "reject",
+                "reason": "invalid_snapshot_timestamp",
+                "message": f"{key} must be ISO8601 timezone-aware (got {raw!r})",
+                "publishable": False,
+            }
+        if primary_key is None:
+            primary_key = key
+            parsed_primary = dt
+        # Future skew
+        if dt > now + FUTURE_SKEW_MAX:
+            return {
+                "status": "reject",
+                "reason": "future_snapshot_timestamp",
+                "message": (
+                    f"{key}={raw} is > now+10min skew — live production must not "
+                    "accept future-dated as newest LKG"
+                ),
+                "publishable": False,
+            }
+    assert parsed_primary is not None
+    age = now - parsed_primary
+    if (not backfill) and age > STALE_SNAPSHOT_MAX_AGE:
+        return {
+            "status": "needs_verification",
+            "reason": "stale_snapshot_timestamp",
+            "message": (
+                f"{primary_key} age {age.days}d exceeds {STALE_SNAPSHOT_MAX_AGE.days}d — "
+                "needs_verification (use --backfill for historical)"
+            ),
+            "publishable": False,
+        }
+    return None
+
+
 def gate_snapshot(
     snap: dict,
     prior_snap: dict | None = None,
@@ -578,6 +723,8 @@ def gate_snapshot(
     lkg_by_ticker: dict[str, dict] | None = None,
     fiscal_end_by_ticker: dict[str, int] | None = None,
     root: Path | None = None,
+    backfill: bool = False,
+    now: datetime | None = None,
 ) -> dict:
     """Full snapshot gate. status: ok | partial | needs_verification | reject.
 
@@ -634,6 +781,17 @@ def gate_snapshot(
             ],
             "extremeChanges": [],
             "publishable": False,
+            "normalizedSnapshot": snap,
+            **base_watch,
+        }
+
+    # Snapshot timestamp Quality Gate (after structural rejects)
+    ts_fail = validate_snapshot_timestamps(snap, now=now, backfill=backfill)
+    if ts_fail is not None:
+        return {
+            **ts_fail,
+            "tickerResults": [],
+            "extremeChanges": [],
             "normalizedSnapshot": snap,
             **base_watch,
         }
@@ -769,6 +927,50 @@ def gate_snapshot(
     }
 
 
+
+def immutable_quarantine_path(quarantine_dir: Path, base_name: str, snap: dict) -> Path:
+    """Never overwrite an existing quarantine file for the same snapshot_utc.
+
+    Uses content-hash / sequence suffix on collision.
+    """
+    quarantine_dir = Path(quarantine_dir)
+    quarantine_dir.mkdir(parents=True, exist_ok=True)
+    # Stable content fingerprint (exclude gate stamps)
+    payload = {k: v for k, v in (snap or {}).items() if k not in {"qualityGate", "status", "runId", "runStatus"}}
+    ch = hashlib.sha256(
+        json.dumps(payload, sort_keys=True, separators=(",", ":"), allow_nan=False, default=str).encode("utf-8")
+    ).hexdigest()[:12]
+    base = f"{base_name}.quarantine"
+    qpath = quarantine_dir / base
+    if not qpath.exists():
+        return qpath
+    try:
+        existing = json.loads(qpath.read_text(encoding="utf-8"))
+        ep = {k: v for k, v in (existing or {}).items() if k not in {"qualityGate", "status", "runId", "runStatus"}}
+        ech = hashlib.sha256(
+            json.dumps(ep, sort_keys=True, separators=(",", ":"), allow_nan=False, default=str).encode("utf-8")
+        ).hexdigest()[:12]
+        if ech == ch:
+            return qpath  # identical reject payload
+    except Exception:
+        pass
+    alt = quarantine_dir / f"{base_name}_{ch}.quarantine"
+    n = 0
+    while alt.exists():
+        try:
+            existing = json.loads(alt.read_text(encoding="utf-8"))
+            ep = {k: v for k, v in (existing or {}).items() if k not in {"qualityGate", "status", "runId", "runStatus"}}
+            ech = hashlib.sha256(
+                json.dumps(ep, sort_keys=True, separators=(",", ":"), allow_nan=False, default=str).encode("utf-8")
+            ).hexdigest()[:12]
+            if ech == ch:
+                return alt
+        except Exception:
+            pass
+        n += 1
+        alt = quarantine_dir / f"{base_name}_{ch}_{n}.quarantine"
+    return alt
+
 def persist_snapshot_if_ok(
     path: Path,
     snap: dict,
@@ -815,9 +1017,9 @@ def persist_snapshot_if_ok(
                 quarantine_dir = path.parent / "quarantine"
         if quarantine_dir is not None:
             quarantine_dir.mkdir(parents=True, exist_ok=True)
-            qpath = quarantine_dir / f"{path.name}.quarantine"
+            qpath = immutable_quarantine_path(quarantine_dir, path.name, snap_out)
         else:
-            qpath = path.with_suffix(path.suffix + ".quarantine")
+            qpath = immutable_quarantine_path(path.parent, path.name, snap_out)
         quarantine = dict(snap_out)
         quarantine["qualityGate"] = gate
         quarantine["status"] = gate["status"]

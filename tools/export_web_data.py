@@ -42,6 +42,10 @@ EARNINGS_DIR = ROOT / "data" / "earnings"
 DAILY_SNAP_DIR = ROOT / "data" / "daily_eps_snapshots"
 WEB_DATA = ROOT / "web" / "data"
 DASH = ROOT / "dashboard"
+SCHEMA_VERSION = "1"
+# Pure-build mode (set by CLI / ingest): no formal persistent DB mutation
+NO_PERSISTENT_MUTATION = False
+STAGE_DIR: Path | None = None
 
 TAIPEI = timezone(timedelta(hours=8))
 
@@ -113,21 +117,28 @@ def unavailable(x) -> bool:
 
 
 def to_num(x):
-    """Parse numbers; treat 'Data unavailable' / n/a as None. Keep 0.0."""
+    """Parse numbers; treat 'Data unavailable' / n/a as None. Keep 0.0.
+
+    Reject non-finite (NaN/Infinity) — math.isfinite only.
+    """
     if unavailable(x):
         return None
+    if isinstance(x, bool):
+        return None
     if isinstance(x, (int, float)):
-        return float(x)
+        v = float(x)
+        return v if math.isfinite(v) else None
     s = str(x).strip().replace(",", "").replace("$", "")
     pct = s.endswith("%")
     if pct:
         s = s[:-1].strip()
-    if s.lower() in {"n/a", "na"}:
+    if s.lower() in {"n/a", "na", "nan", "inf", "-inf", "+inf", "infinity", "-infinity"}:
         return None
     try:
-        return float(s)
+        v = float(s)
     except Exception:
         return None
+    return v if math.isfinite(v) else None
 
 
 def to_display_str(x):
@@ -413,9 +424,9 @@ def format_next_earnings_display(
 def _is_company_ir_url(url: str | None) -> bool:
     if not url:
         return False
-    u = str(url).lower()
-    if "seekingalpha.com" in u:
+    if _url_is_seekingalpha(url):
         return False
+    u = str(url).lower()
     return bool(
         re.search(r"investor\.|investors\.|/ir/|investor-relations|newsroom|press-release", u)
         or "company ir" in u
@@ -1057,6 +1068,8 @@ def seed_and_append_daily_snapshots(
     snap: dict,
     snap_path: Path,
     year_keys: list[str] | None = None,
+    *,
+    persist: bool | None = None,
 ) -> list[dict]:
     """Append-only daily consensus store.
 
@@ -1069,6 +1082,8 @@ def seed_and_append_daily_snapshots(
     """
     year_keys = year_keys or display_mapped_years()
     chart_years = chart_years_from(year_keys)
+    if persist is None:
+        persist = not NO_PERSISTENT_MUTATION
     DAILY_SNAP_DIR.mkdir(parents=True, exist_ok=True)
     jsonl_path = DAILY_SNAP_DIR / "daily.jsonl"
 
@@ -1135,8 +1150,14 @@ def seed_and_append_daily_snapshots(
             continue  # no fake fresh observation in JSONL / chart history
         for slot in persist_years:
             e = (c.get("eps") or {}).get(slot) or {}
-            fiscal = e.get("reportedFiscalLabel")
-            identity = fiscal or slot
+            fiscal = (
+                e.get("reportedFiscalLabel")
+                or e.get("reportedFiscalPeriodEnding")
+                or e.get("reported_fiscal_label")
+            )
+            if not fiscal:
+                continue  # fiscal identity required — mapped slot is display only
+            identity = str(fiscal).strip()
             key = (snap_date, t, identity)
             new_eps = e.get("consensus")
             # P2: null/unavailable consensus → do not append historical observation
@@ -1160,12 +1181,6 @@ def seed_and_append_daily_snapshots(
             }
             new_rows.append(row)
             last_consensus[key] = new_eps
-
-    if new_rows:
-        # Fail-closed: atomic JSONL failure aborts (no non-atomic append fallback)
-        from atomic_io import append_jsonl_atomic
-        append_jsonl_atomic(jsonl_path, new_rows)
-        existing.extend(new_rows)
 
     # Dated JSON for the day reflecting latest values (overwrite that day file only).
     # Failed/LKG tickers may keep status=missing + lastKnownGood* without creating chart observations.
@@ -1216,7 +1231,22 @@ def seed_and_append_daily_snapshots(
                     "mappedYear": slot,
                 }
         day_payload["tickers"][t]["_byFiscal"] = by_fiscal
-    write_json(DAILY_SNAP_DIR / f"{snap_date}.json", day_payload)
+    if persist:
+        if new_rows:
+            # Fail-closed: atomic JSONL failure aborts (no non-atomic append fallback)
+            from atomic_io import append_jsonl_atomic
+            append_jsonl_atomic(jsonl_path, new_rows)
+            existing.extend(new_rows)
+        write_json(DAILY_SNAP_DIR / f"{snap_date}.json", day_payload)
+    else:
+        # Pure-build: stage pending mutations for ingest COMMIT
+        if STAGE_DIR is not None:
+            STAGE_DIR.mkdir(parents=True, exist_ok=True)
+            write_json(STAGE_DIR / "pending_daily_rows.json", {"rows": new_rows})
+            day_payload["date"] = snap_date
+            write_json(STAGE_DIR / "pending_day_summary.json", day_payload)
+        # Include new rows in returned series for this export's eps_history
+        existing = list(existing) + list(new_rows)
 
     return existing
 
@@ -1609,6 +1639,8 @@ def run_build_alerts(
     current_snapshot: dict | None = None,
     snapshot_utc: str | None = None,
     display_years: list[str] | None = None,
+    *,
+    persist: bool | None = None,
 ) -> dict:
     """Call deterministic alert engine before writing web/data/alerts.json.
 
@@ -1628,21 +1660,22 @@ def run_build_alerts(
     except Exception:
         prior = {}
 
+    if persist is None:
+        persist = not NO_PERSISTENT_MUTATION
     try:
         payload = ba.evaluate_alerts(
             current_snapshot=current_snapshot,
             snapshot_utc=snapshot_utc,
             display_years=display_years,
         )
-        ba.write_alerts(payload)
-        # Stamp last successful evaluation
         payload = dict(payload)
         payload["alertEngineLastSuccessfulEvaluation"] = payload.get("alertEngineLastEvaluated")
         payload["alertEngineLastAttempt"] = payload.get("alertEngineLastEvaluated")
-        try:
+        if persist:
             ba.write_alerts(payload)
-        except Exception:
-            pass
+        elif STAGE_DIR is not None:
+            STAGE_DIR.mkdir(parents=True, exist_ok=True)
+            write_json(STAGE_DIR / "pending_alerts.json", payload)
         return payload
     except Exception as exc:
         now = now_utc_iso()
@@ -1665,8 +1698,14 @@ def run_build_alerts(
             "lastSuccessfulCollection": prior.get("lastSuccessfulCollection"),
         }
         try:
-            ALERTS_PATH.parent.mkdir(parents=True, exist_ok=True)
-            write_json(ALERTS_PATH, err)
+            if persist is None:
+                persist = not NO_PERSISTENT_MUTATION
+            if persist:
+                ALERTS_PATH.parent.mkdir(parents=True, exist_ok=True)
+                write_json(ALERTS_PATH, err)
+            elif STAGE_DIR is not None:
+                STAGE_DIR.mkdir(parents=True, exist_ok=True)
+                write_json(STAGE_DIR / "pending_alerts.json", err)
         except Exception:
             # Preserve prior file bytes on write failure
             pass
@@ -1810,25 +1849,192 @@ def apply_last_known_good_for_missing(
     return companies
 
 
-def classify_source_tier(url: str | None) -> str | int | None:
-    """Deterministic source classifier.
-
-    Company IR / SEC → Tier1; official transcript → official;
-    Reuters/Bloomberg/WSJ/CNBC → Tier3; Seeking Alpha → Tier4;
-    Unknown → Unknown. Never Tier1 merely because a URL exists.
-    """
+def _hostname_of(url: str | None) -> str | None:
+    """Real hostname via urlparse — never substring match on full URL."""
     if not url:
         return None
-    u = str(url).lower()
-    if "sec.gov" in u or "investor." in u or "investors." in u or "/ir/" in u or "investor-relations" in u:
+    from urllib.parse import urlparse
+    try:
+        host = urlparse(str(url)).hostname
+    except Exception:
+        return None
+    if not host:
+        return None
+    return host.lower().rstrip(".")
+
+
+def load_official_domains_by_ticker(root: Path | None = None) -> dict[str, list[str]]:
+    root = root or ROOT
+    path = Path(root) / "data" / "universe.json"
+    if not path.exists():
+        return {}
+    try:
+        u = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+    raw = u.get("officialDomainsByTicker") or {}
+    out: dict[str, list[str]] = {}
+    for k, v in raw.items():
+        if isinstance(v, list):
+            out[str(k).upper()] = [str(x).lower().rstrip(".") for x in v]
+        elif isinstance(v, str):
+            out[str(k).upper()] = [v.lower().rstrip(".")]
+    return out
+
+
+def _is_seekingalpha_hostname(host: str | None) -> bool:
+    """Strict: host == seekingalpha.com or endswith .seekingalpha.com (not evilseekingalpha.com)."""
+    if not host:
+        return False
+    h = host.lower().rstrip(".")
+    return h == "seekingalpha.com" or h.endswith(".seekingalpha.com")
+
+
+def _url_is_seekingalpha(url: str | None) -> bool:
+    """True only when the parsed hostname is seekingalpha.com or a subdomain."""
+    return _is_seekingalpha_hostname(_hostname_of(url))
+
+
+def _is_sec_hostname(host: str | None) -> bool:
+    """SEC only sec.gov or *.sec.gov — spoofed-sec.gov.evil must NOT match."""
+    if not host:
+        return False
+    h = host.lower().rstrip(".")
+    return h == "sec.gov" or h.endswith(".sec.gov")
+
+
+def _host_matches_registered(host: str | None, domain: str) -> bool:
+    if not host:
+        return False
+    h = host.lower().rstrip(".")
+    d = domain.lower().rstrip(".")
+    return h == d or h.endswith("." + d)
+
+
+_PUBLISHER_DOMAINS = {
+    "reuters": ("reuters.com",),
+    "bloomberg": ("bloomberg.com",),
+    "wsj": ("wsj.com",),
+    "cnbc": ("cnbc.com",),
+    "dowjones": ("dowjones.com", "wsj.com"),
+}
+
+
+def _is_official_ir_hostname(host: str | None, ticker: str | None = None) -> bool:
+    """Tier1 IR only via officialDomainsByTicker — never generic investor.*/ir.*."""
+    if not host:
+        return False
+    h = host.lower().rstrip(".")
+    mapping = load_official_domains_by_ticker()
+    if ticker:
+        domains = mapping.get(str(ticker).upper()) or []
+        for d in domains:
+            if h == d or h.endswith("." + d):
+                return True
+        return False  # ticker known → only its official list (not generic investor.*)
+    # Ticker unknown: still Tier1 if host is listed for ANY ticker
+    for domains in mapping.values():
+        for d in domains:
+            if h == d or h.endswith("." + d):
+                return True
+    return False
+
+
+def _is_generic_ir_hostname(host: str | None) -> bool:
+    """investor.*/investors.*/ir.* host patterns — at most unverified_ir_candidate."""
+    if not host:
+        return False
+    h = host.lower().rstrip(".")
+    if h.startswith("investor.") or h.startswith("investors."):
+        return True
+    if h.startswith("ir.") and not _is_seekingalpha_hostname(h):
+        return True
+    return False
+
+
+def _source_type_consistent_tier(
+    source_type: str,
+    url: str | None,
+    ticker: str | None,
+) -> str | int | None:
+    """Map explicit sourceType to a tier, requiring hostname agreement when URL is present.
+
+    Mismatch → source_mismatch (never Tier 1 / claimed publisher tier).
+    """
+    st = str(source_type).strip().lower()
+    host = _hostname_of(url) if url else None
+    ir_types = {"company_ir", "ir", "earnings_presentation"}
+    sec_types = {"sec", "8-k", "10-k", "10-q"}
+    sa_types = {"seeking_alpha", "seekingalpha", "sa"}
+    transcript_types = {"official_transcript", "transcript"}
+
+    if st in ir_types:
+        if url:
+            return 1 if _is_official_ir_hostname(host, ticker=ticker) else "source_mismatch"
         return 1
-    if "transcript" in u and ("company" in u or "ir." in u or "investor" in u or "sec.gov" in u):
+    if st in sec_types:
+        if url:
+            return 1 if _is_sec_hostname(host) else "source_mismatch"
+        return 1
+    if st in transcript_types:
+        if url:
+            if _is_official_ir_hostname(host, ticker=ticker) or _is_sec_hostname(host):
+                return "official"
+            return "source_mismatch"
         return "official"
-    if any(d in u for d in ("reuters.com", "bloomberg.com", "wsj.com", "cnbc.com", "dowjones.com")):
+    if st in _PUBLISHER_DOMAINS:
+        if url:
+            domains = _PUBLISHER_DOMAINS[st]
+            if host and any(_host_matches_registered(host, d) for d in domains):
+                return 3
+            return "source_mismatch"
         return 3
-    if "seekingalpha.com" in u or "seekingalpha" in u:
+    if st in sa_types:
+        if url:
+            return 4 if _is_seekingalpha_hostname(host) else "source_mismatch"
         return 4
-    # Known press domains without IR → Unknown (not Tier1)
+    return None
+
+
+def classify_source_tier(
+    url: str | None,
+    *,
+    source_type: str | None = None,
+    ticker: str | None = None,
+) -> str | int | None:
+    """Deterministic source classifier by real hostname (urlparse).
+
+    When URL is present, explicit sourceType and hostname must be mutually consistent.
+    Claimed company_ir/ir is Tier1 only if the host is that ticker's allowlisted official
+    domain. SEC types require sec.gov / *.sec.gov. Mismatch → source_mismatch (not Tier1).
+    Official IR (officialDomainsByTicker) / SEC → Tier1; generic investor.*/ir.* → unverified_ir_candidate;
+    official transcript → official;
+    Reuters/Bloomberg/WSJ/CNBC → Tier3; Seeking Alpha → Tier4;
+    Unknown → Unknown. Never Tier1 merely because a URL / query string exists.
+    """
+    if source_type:
+        typed = _source_type_consistent_tier(source_type, url, ticker)
+        if typed is not None:
+            return typed
+    if not url:
+        return None
+    host = _hostname_of(url)
+    u = str(url).lower()
+    if _is_sec_hostname(host):
+        return 1
+    if _is_official_ir_hostname(host, ticker=ticker):
+        return 1
+    # Generic investor.*/ir.* — NOT Tier1 (unverified_ir_candidate at most)
+    if _is_generic_ir_hostname(host):
+        return "unverified_ir_candidate"
+    if host and any(_host_matches_registered(host, d) for d in (
+        "reuters.com", "bloomberg.com", "wsj.com", "cnbc.com", "dowjones.com"
+    )):
+        return 3
+    if _is_seekingalpha_hostname(host):
+        return 4
+    if host and "transcript" in u and _is_official_ir_hostname(host, ticker=ticker):
+        return "official"
     return "Unknown"
 
 
@@ -1844,10 +2050,16 @@ def ensure_earnings_provenance(data: dict) -> dict:
     if not data.get("hasDigest"):
         return data
     out = dict(data)
+    ticker = out.get("ticker") or out.get("Ticker")
+    if ticker:
+        ticker = str(ticker).upper()
+    src_type = None
+    results = out.get("results") if isinstance(out.get("results"), dict) else {}
+    if isinstance(results, dict):
+        src_type = results.get("sourceType") or results.get("source_type")
 
     # --- actuals ---
     actuals = out.get("actuals") if isinstance(out.get("actuals"), dict) else None
-    results = out.get("results") if isinstance(out.get("results"), dict) else {}
     if actuals is None:
         metrics = {}
         for k in ("eps", "revenue", "grossMargin", "operatingMargin", "fcf"):
@@ -1884,12 +2096,12 @@ def ensure_earnings_provenance(data: dict) -> dict:
                     src_url = row.get("sourceUrl")
                     break
         tier = results.get("sourceTier")
-        classified = classify_source_tier(src_url)
+        classified = classify_source_tier(src_url, ticker=ticker, source_type=src_type)
         if classified is not None:
-            # Never retain Tier1 when the URL is clearly not Company IR/SEC
+            # Never retain Tier1 when the URL is clearly not this issuer's IR/SEC
             if tier is None or (tier == 1 and classified != 1):
                 tier = classified
-            elif tier is None:
+            elif classified == "source_mismatch":
                 tier = classified
         elif tier is None and not src_url:
             tier = None
@@ -1917,6 +2129,17 @@ def ensure_earnings_provenance(data: dict) -> dict:
             actuals["sourceUrl"] = results.get("sourceUrl")
         if actuals.get("sourceTier") is None and results.get("sourceTier") is not None:
             actuals["sourceTier"] = results.get("sourceTier")
+        src_url = actuals.get("sourceUrl")
+        classified = classify_source_tier(
+            src_url,
+            ticker=ticker,
+            source_type=actuals.get("sourceType") or src_type,
+        )
+        if classified is not None and src_url:
+            if actuals.get("sourceTier") == 1 and classified != 1:
+                actuals["sourceTier"] = classified
+            elif actuals.get("sourceTier") is None:
+                actuals["sourceTier"] = classified
         out["actuals"] = actuals
 
     # --- consensusComparison ---
@@ -1926,19 +2149,26 @@ def ensure_earnings_provenance(data: dict) -> dict:
         vs = cc.get("vsConsensus") or cc.get("beatMiss") or cc.get("comparison")
     if vs is None:
         vs = out.get("comparison") or results.get("vsConsensus") or out.get("guidanceVsConsensus")
-    # Find SA (non-IR) source for beat/miss
+    # Find SA (non-IR) source for beat/miss — hostname-strict, never substring.
     sa_url = None
     sa_tier = 4
-    if cc and cc.get("sourceUrl"):
+    if cc and cc.get("sourceUrl") and _url_is_seekingalpha(cc.get("sourceUrl")):
         sa_url = cc.get("sourceUrl")
         if cc.get("sourceTier") is not None:
             sa_tier = cc.get("sourceTier")
+    elif cc and cc.get("sourceUrl") and not _url_is_seekingalpha(cc.get("sourceUrl")):
+        # Keep a non-SA existing consensus URL only when it is not a SA-host spoof
+        host_cc = _hostname_of(cc.get("sourceUrl"))
+        if not (host_cc and "seekingalpha" in host_cc):
+            sa_url = cc.get("sourceUrl")
+            if cc.get("sourceTier") is not None:
+                sa_tier = cc.get("sourceTier")
     if not sa_url:
         for s in out.get("sources") or []:
             if not isinstance(s, dict):
                 continue
-            u = str(s.get("url") or "")
-            if "seekingalpha.com" in u.lower():
+            u = s.get("url") or s.get("sourceUrl")
+            if _url_is_seekingalpha(u):
                 sa_url = u
                 sa_tier = s.get("sourceTier") if s.get("sourceTier") is not None else 4
                 break
@@ -1949,7 +2179,7 @@ def ensure_earnings_provenance(data: dict) -> dict:
                 if not isinstance(item, dict):
                     continue
                 u = item.get("supplementalUrl") or item.get("url")
-                if u and "seekingalpha.com" in str(u).lower():
+                if _url_is_seekingalpha(u):
                     sa_url = u
                     sa_tier = 4
                     break
@@ -1959,7 +2189,7 @@ def ensure_earnings_provenance(data: dict) -> dict:
     ir_url = (out.get("actuals") or {}).get("sourceUrl") if isinstance(out.get("actuals"), dict) else None
     if sa_url and ir_url and sa_url == ir_url:
         # Prefer to keep IR only on actuals; clear SA claim
-        if "seekingalpha.com" not in str(sa_url).lower():
+        if not _url_is_seekingalpha(sa_url):
             sa_url = None
 
     # Always materialize consensusComparison for hasDigest
@@ -1973,7 +2203,7 @@ def ensure_earnings_provenance(data: dict) -> dict:
             "note": (
                 "Beat/miss vs consensus attributed to Seeking Alpha / secondary summary "
                 "(not Company IR actuals Tier 1)"
-                if sa_url and "seekingalpha.com" in str(sa_url).lower()
+                if _url_is_seekingalpha(sa_url)
                 else "Beat/miss attribution; actuals remain on Company IR when Tier 1"
             ),
         }
@@ -1982,13 +2212,24 @@ def ensure_earnings_provenance(data: dict) -> dict:
             for k, v in cc.items():
                 if k not in new_cc or new_cc[k] is None:
                     new_cc[k] = v
-            # Force: if sourceUrl is IR-looking and claims consensus, demote
-            u = str(new_cc.get("sourceUrl") or "").lower()
-            if new_cc.get("sourceTier") == 1 and "seekingalpha.com" not in u and (
-                "investor." in u or "investors." in u or "sec.gov" in u
+            # Drop SA-host spoofs that survived merge
+            if new_cc.get("sourceUrl") and not _url_is_seekingalpha(new_cc.get("sourceUrl")):
+                host_merged = _hostname_of(new_cc.get("sourceUrl"))
+                if host_merged and "seekingalpha" in host_merged:
+                    if sa_url and _url_is_seekingalpha(sa_url):
+                        new_cc["sourceUrl"] = sa_url
+                        new_cc["sourceTier"] = sa_tier
+                    else:
+                        new_cc["sourceUrl"] = None
+                        new_cc["sourceTier"] = None
+            cc_host = _hostname_of(new_cc.get("sourceUrl"))
+            if new_cc.get("sourceTier") == 1 and not _url_is_seekingalpha(new_cc.get("sourceUrl")) and (
+                _is_official_ir_hostname(cc_host, ticker=ticker)
+                or _is_generic_ir_hostname(cc_host)
+                or _is_sec_hostname(cc_host)
             ):
                 # IR URL must not be the consensusComparison claim as Tier 1 beat/miss
-                if sa_url:
+                if sa_url and _url_is_seekingalpha(sa_url):
                     new_cc["sourceUrl"] = sa_url
                     new_cc["sourceTier"] = sa_tier
                 else:
@@ -2080,7 +2321,11 @@ def quarantine_snapshot(snap_path: Path, snap: dict, gate: dict) -> Path:
     qdir = ROOT / "data" / "snapshots" / "quarantine"
     qdir.mkdir(parents=True, exist_ok=True)
     name = snap_path.name if snap_path else "unknown.json"
-    qpath = qdir / f"{name}.quarantine"
+    try:
+        import snapshot_quality as _sq_q
+        qpath = _sq_q.immutable_quarantine_path(qdir, name, snap if isinstance(snap, dict) else {"raw": snap})
+    except Exception:
+        qpath = qdir / f"{name}.quarantine"
     payload = dict(snap) if isinstance(snap, dict) else {"raw": snap}
     payload["qualityGate"] = gate
     payload["status"] = gate.get("status")
@@ -2088,8 +2333,71 @@ def quarantine_snapshot(snap_path: Path, snap: dict, gate: dict) -> Path:
     return qpath
 
 
-def main() -> int:
-    """Export web data. Fail-closed when qualityGate.publishable != true."""
+def main(argv: list[str] | None = None) -> int:
+    """Export web data. Fail-closed when qualityGate.publishable != true.
+
+    DEFAULT: read-only pure exporter — does NOT mutate daily/revision/alert/
+    checkpoint persistent financial state. ingest_snapshot.py is the sole writer.
+    Legacy mutation only via explicit --legacy-mutate (production/scheduler must not use it).
+    Pure-build (--no-persistent-mutation / default): write staged or web JSON only.
+    """
+    import argparse
+    global WEB_DATA, NO_PERSISTENT_MUTATION, STAGE_DIR, ROOT
+    global SNAP_DIR, REV_PATH, ALERTS_PATH, DAILY_SNAP_DIR, COMPARISON_CHECKPOINT_PATH
+
+    ap = argparse.ArgumentParser(description="Export web JSON (read-only by default; sole writer is ingest)")
+    ap.add_argument("--input-root", help="Optional alternate project root for reads")
+    ap.add_argument("--output-root", help="Write web output under this root (…/data)")
+    ap.add_argument(
+        "--no-persistent-mutation",
+        action="store_true",
+        help="Pure-build: do not mutate daily/alerts/checkpoint (DEFAULT behavior)",
+    )
+    ap.add_argument(
+        "--legacy-mutate",
+        action="store_true",
+        help="LEGACY ONLY: allow mutating daily/revision/alert/checkpoint (not for production/scheduler)",
+    )
+    ap.add_argument("--stage-dir", help="Staging dir for pending_* commit payloads")
+    ap.add_argument("--backfill", action="store_true", help="Allow old snapshot timestamps")
+    args, _unknown = ap.parse_known_args(argv)
+
+    # Default = read-only (no persistent financial mutation). --legacy-mutate opts in.
+    if args.legacy_mutate or os.environ.get("LEGACY_MUTATE") == "1":
+        NO_PERSISTENT_MUTATION = False
+    else:
+        NO_PERSISTENT_MUTATION = True
+    if args.no_persistent_mutation or os.environ.get("NO_PERSISTENT_MUTATION") == "1":
+        NO_PERSISTENT_MUTATION = True
+    if args.stage_dir:
+        STAGE_DIR = Path(args.stage_dir)
+    elif os.environ.get("INGEST_STAGE_DIR"):
+        STAGE_DIR = Path(os.environ["INGEST_STAGE_DIR"])
+    else:
+        STAGE_DIR = None
+
+    if args.input_root:
+        ROOT = Path(args.input_root)
+        SNAP_DIR = ROOT / "data" / "snapshots"
+        REV_PATH = ROOT / "data" / "revisions" / "history.jsonl"
+        ALERTS_PATH = ROOT / "data" / "alerts" / "index.json"
+        DAILY_SNAP_DIR = ROOT / "data" / "daily_eps_snapshots"
+        COMPARISON_CHECKPOINT_PATH = ROOT / "data" / "comparison_checkpoint.json"
+
+    if args.output_root:
+        out = Path(args.output_root)
+        WEB_DATA = out / "data" if out.name != "data" else out
+    elif NO_PERSISTENT_MUTATION and STAGE_DIR is not None:
+        WEB_DATA = STAGE_DIR / "web" / "data"
+
+    if NO_PERSISTENT_MUTATION:
+        os.environ["INGEST_DEFER_HISTORY"] = os.environ.get("INGEST_DEFER_HISTORY", "0")
+        # Daily handled via persist=False path; keep DEFER off so we compute pending rows
+        os.environ.pop("INGEST_DEFER_HISTORY", None)
+
+    # stash backfill for gate
+    os.environ["EXPORT_BACKFILL"] = "1" if args.backfill else os.environ.get("EXPORT_BACKFILL", "0")
+
     # Global pipeline lock: Quality Gate → persist → alerts → export
     # Skip if parent publish script already holds data/.pipeline.lock
     _lock_cm = None
@@ -2123,6 +2431,13 @@ def _main_locked() -> int:
             code = 9
         print(f"FAULT_INJECT_EXPORT_EXIT={code}", flush=True)
         return code
+    # Readers reconcile CURRENT → live cache before using live paths
+    try:
+        import ingest_snapshot as _ing_live
+        _ing_live.rebind_paths(ROOT)
+        _ing_live.ensure_live_matches_current()
+    except Exception as _live_exc:
+        print(f"WARNING: ensure_live_matches_current: {_live_exc}")
     snap_path, snap = load_latest_snapshot()
     tickers = load_watchlist()
     prior_snap = None
@@ -2165,6 +2480,7 @@ def _main_locked() -> int:
             expected_tickers=tickers,
             lkg_by_ticker=lkg_by_ticker,
             root=ROOT,
+            backfill=os.environ.get("EXPORT_BACKFILL") == "1",
         )
         if gate.get("normalizedSnapshot"):
             snap = gate["normalizedSnapshot"]
@@ -2233,44 +2549,41 @@ def _main_locked() -> int:
     history_raw = load_history()
     revisions = [map_history_row(r) for r in history_raw]
 
-    # Only append daily snapshots when publishable (already gated).
-    # When ingest owns commit (INGEST_DEFER_HISTORY=1), skip mutating daily here.
-    if os.environ.get("INGEST_DEFER_HISTORY") == "1":
-        daily_rows = []
-        jsonl_path = DAILY_SNAP_DIR / "daily.jsonl"
-        if jsonl_path.exists():
-            for line in jsonl_path.read_text(encoding="utf-8").splitlines():
-                line = line.strip()
-                if line:
-                    try:
-                        daily_rows.append(json.loads(line))
-                    except Exception:
-                        pass
-        print("INGEST_DEFER_HISTORY=1 — skip daily append (ingest will commit)")
-    else:
-        daily_rows = seed_and_append_daily_snapshots(
-            companies, tickers, snap, snap_path, year_keys=year_keys
-        )
+    # Daily snapshots: mutate only when NOT pure-build; else stage pending_* for COMMIT
+    daily_rows = seed_and_append_daily_snapshots(
+        companies,
+        tickers,
+        snap,
+        snap_path,
+        year_keys=year_keys,
+        persist=not NO_PERSISTENT_MUTATION,
+    )
+    if NO_PERSISTENT_MUTATION:
+        print("NO_PERSISTENT_MUTATION — daily/alerts/checkpoint staged for ingest COMMIT")
     eps_history = build_eps_history_from_daily(daily_rows)
 
     earnings = load_or_init_earnings(companies, tickers)
 
     # Auto-generate revision events BEFORE Alert Engine when not already done by ingest.
     # Identity: ticker + reportedFiscalPeriodEnding. Must complete so single_revision_gt_2pct works.
+    # Read-only default: NEVER append to revision history (ingest is sole writer).
     if os.environ.get("INGEST_REVISIONS_DONE") != "1":
-        try:
-            import ingest_snapshot as ing
-            hist_for_rev = ing.load_revision_history(REV_PATH)
-            events = ing.generate_revision_events(
-                snap, lkg_by_ticker, existing_history=hist_for_rev
-            )
-            n_rev = ing.append_revision_events(events)
-            if n_rev:
-                print(f"revision events appended: +{n_rev}")
-        except Exception as exc:
-            # Fail-closed: do not continue COMPLETE with stale revision history
-            print(f"ERROR: revision event generation failed — aborting export: {exc}")
-            return 1
+        if NO_PERSISTENT_MUTATION:
+            print("read-only exporter — skip revision history mutation (ingest is sole writer)")
+        else:
+            try:
+                import ingest_snapshot as ing
+                hist_for_rev = ing.load_revision_history(REV_PATH)
+                events = ing.generate_revision_events(
+                    snap, lkg_by_ticker, existing_history=hist_for_rev
+                )
+                n_rev = ing.append_revision_events(events)
+                if n_rev:
+                    print(f"revision events appended: +{n_rev}")
+            except Exception as exc:
+                # Fail-closed: do not continue COMPLETE with stale revision history
+                print(f"ERROR: revision event generation failed — aborting export: {exc}")
+                return 1
 
     alerts_payload = run_build_alerts(
         current_snapshot=snap,
@@ -2389,7 +2702,35 @@ def _main_locked() -> int:
         "collectionStatusLabel": coll["collectionStatusLabel"],
         "driverExportErrors": driver_errors or None,
         "qualityGate": snap.get("qualityGate"),
+        "schemaVersion": SCHEMA_VERSION,
     }
+    # Release identity: full static deps (incl. vendor) + schema + data + refresh
+    # Prefer production web shell even when output-root is staging
+    try:
+        import ingest_snapshot as _ing_ver
+        app_version = _ing_ver.compute_app_version(ROOT / "web")
+    except Exception:
+        h = hashlib.sha256()
+        web_shell = ROOT / "web"
+        for name in ("index.html", "app.js", "styles.css"):
+            wp = web_shell / name
+            if wp.exists():
+                h.update(wp.read_bytes())
+            h.update(b"|")
+        vendor = web_shell / "vendor"
+        if vendor.is_dir():
+            for vp in sorted(vendor.rglob("*")):
+                if vp.is_file():
+                    h.update(str(vp.relative_to(web_shell)).encode("utf-8"))
+                    h.update(vp.read_bytes())
+                    h.update(b"|")
+        app_version = h.hexdigest()
+    release_version = hashlib.sha256(
+        f"{app_version}|{SCHEMA_VERSION}|{data_version}|{refresh_version}".encode("utf-8")
+    ).hexdigest()
+    meta["appVersion"] = app_version
+    meta["releaseVersion"] = release_version
+    meta["schemaVersion"] = SCHEMA_VERSION
 
     WEB_DATA.mkdir(parents=True, exist_ok=True)
     # Stamp buildId on every public JSON so frontend can reject mixed generations
@@ -2425,10 +2766,21 @@ def _main_locked() -> int:
     }
     write_json(WEB_DATA / "dashboard.json", dashboard)
 
-    # Advance What-Changed checkpoint AFTER successful collection/export (atomic)
+    # Comparison checkpoint: only advance on persistent commit (not pure-build)
     try:
-        cp = advance_comparison_checkpoint(snap_utc)
-        print(f"  comparisonCheckpoint → {cp.get('snapUtc')}")
+        if NO_PERSISTENT_MUTATION:
+            cp = {
+                "snapUtc": snap_utc,
+                "comparisonCheckpoint": snap_utc,
+                "advancedAt": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+            }
+            if STAGE_DIR is not None:
+                STAGE_DIR.mkdir(parents=True, exist_ok=True)
+                write_json(STAGE_DIR / "pending_comparison_checkpoint.json", cp)
+            print(f"  comparisonCheckpoint staged → {cp.get('snapUtc')}")
+        else:
+            cp = advance_comparison_checkpoint(snap_utc)
+            print(f"  comparisonCheckpoint → {cp.get('snapUtc')}")
     except Exception as cp_exc:
         print(f"ERROR: failed to advance comparisonCheckpoint: {cp_exc}")
         raise
