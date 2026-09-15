@@ -692,7 +692,7 @@
       const e27 = (c.eps && c.eps[y1]) || {};
       const e28 = (c.eps && c.eps[y2]) || {};
       const px = companyPrice(c);
-      const pe27 = pe(px, e27.consensus);
+      const peY1 = pe(px, e27.consensus);
       const stale = companyIsStale(c);
       const tr = el("tr", { className: stale ? "ticker-stale" : "" });
 
@@ -724,7 +724,7 @@
       tr.appendChild(epsTd(e28));
 
       const tdPe = el("td");
-      tdPe.appendChild(numCell(pe27, 2));
+      tdPe.appendChild(numCell(peY1, 2));
       tr.appendChild(tdPe);
 
       const tdRev = el("td");
@@ -1514,8 +1514,8 @@
     });
     const y1 = years[1] || "";
     const y2 = years[2] || "";
-    const pe27 = pe(px, ((c.eps || {})[y1] || {}).consensus);
-    kv(y1 + " PE (Last Close)", pe27 == null ? null : fmtNum(pe27, 2));
+    const peY1 = pe(px, ((c.eps || {})[y1] || {}).consensus);
+    kv(y1 + " PE (Last Close)", peY1 == null ? null : fmtNum(peY1, 2));
     [y1, y2].forEach((y) => {
       const e = (c.eps && c.eps[y]) || {};
       kv(y + " Analyst Count", isMissing(e.analysts) ? null : fmtNum(e.analysts, 0));
