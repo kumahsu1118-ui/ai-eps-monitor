@@ -26,10 +26,14 @@ Repo: https://github.com/kumahsu1118-ui/ai-eps-monitor
 
 **On failure for one ticker:** Write `Data unavailable` / null for that name; continue others; list gaps.
 
-### 4. Persist private database (append-only)
-- Append dated file under `data/snapshots/` (never overwrite prior dates).
-- **Daily EPS snapshots:** append/update `data/daily_eps_snapshots/` for the calendar day **even if EPS unchanged**.
-- **Revision events:** append to `data/revisions/history.jsonl` **only if** consensus EPS actually changed vs prior snapshot. No empty revision rows.
+### 4. Persist private database (transactional staged/commit)
+- Incoming collection lands in `data/incoming/`. Quality gate → STAGE (`data/staging/`).
+- **Commit** validated `data/snapshots/` + `data/revisions/history.jsonl` **only after export succeeds**.
+- Export failure aborts: no LKG/validated snapshot commit, no revision commit.
+- Revision `eventId` is idempotent (exact replay is a no-op). Same `snapshot_utc` does not overwrite an existing validated snapshot.
+- **Daily EPS snapshots:** append/update `data/daily_eps_snapshots/` for the calendar day **even if EPS unchanged**, but **null EPS is not a daily observation**.
+- **Revision events:** single owner `tools/revision_events.py` (ingest commit). Export never persists `history.jsonl`.
+- `publish_prebuilt_site` copies already-exported `web/` — no second export. `.data-version` is written **only after a successful push**.
 
 **On failure mid-write:** Prefer leave prior files intact; do not delete `history.jsonl` or earnings digests.
 

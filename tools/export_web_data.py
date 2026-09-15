@@ -5,6 +5,7 @@ Never invents EPS. Missing numerics become null (frontend shows "—").
 Preserves all history.jsonl rows including baselines.
 Earnings digests persist under data/earnings/{T}.json across exports.
 Daily consensus snapshots are append-only under data/daily_eps_snapshots/.
+history.jsonl is owned solely by revision_events.py (ingest commit); export never persists revision rows.
 """
 from __future__ import annotations
 
@@ -33,6 +34,20 @@ import sys as _sys
 if str(_here) not in _sys.path:
     _sys.path.insert(0, str(_here))
 
+try:
+    from snapshot_quality import list_validated_snapshot_paths, load_latest_validated_snapshot
+    from revision_events import generate_revision_events
+    from publish_metadata import build_dashboard_payload, write_meta_and_dashboard
+    from atomic_io import atomic_append_jsonl, atomic_write_json
+except ImportError:
+    list_validated_snapshot_paths = None
+    load_latest_validated_snapshot = None
+    generate_revision_events = None
+    build_dashboard_payload = None
+    write_meta_and_dashboard = None
+    atomic_append_jsonl = None
+    atomic_write_json = None
+
 SNAP_DIR = ROOT / "data" / "snapshots"
 REV_PATH = ROOT / "data" / "revisions" / "history.jsonl"
 DRIVERS_DIR = ROOT / "data" / "drivers"
@@ -42,6 +57,24 @@ EARNINGS_DIR = ROOT / "data" / "earnings"
 DAILY_SNAP_DIR = ROOT / "data" / "daily_eps_snapshots"
 WEB_DATA = ROOT / "web" / "data"
 DASH = ROOT / "dashboard"
+
+
+def configure_root(root: Path | str | None = None) -> Path:
+    """Rebind module paths so ingest can export a fixture tree in-process."""
+    global ROOT, SNAP_DIR, REV_PATH, DRIVERS_DIR, ALERTS_PATH, UNIVERSE_PATH
+    global EARNINGS_DIR, DAILY_SNAP_DIR, WEB_DATA, DASH
+    if root is not None:
+        ROOT = Path(root)
+    SNAP_DIR = ROOT / "data" / "snapshots"
+    REV_PATH = ROOT / "data" / "revisions" / "history.jsonl"
+    DRIVERS_DIR = ROOT / "data" / "drivers"
+    ALERTS_PATH = ROOT / "data" / "alerts" / "index.json"
+    UNIVERSE_PATH = ROOT / "data" / "universe.json"
+    EARNINGS_DIR = ROOT / "data" / "earnings"
+    DAILY_SNAP_DIR = ROOT / "data" / "daily_eps_snapshots"
+    WEB_DATA = ROOT / "web" / "data"
+    DASH = ROOT / "dashboard"
+    return ROOT
 
 TAIPEI = timezone(timedelta(hours=8))
 
@@ -138,6 +171,12 @@ def to_display_str(x):
 
 
 def load_latest_snapshot():
+    """Latest VALIDATED snapshot only (data/snapshots/). Never incoming/ or quarantine/."""
+    if load_latest_validated_snapshot is not None:
+        path, snap = load_latest_validated_snapshot(SNAP_DIR)
+        if path is None or snap is None:
+            raise SystemExit(f"No validated snapshot found in {SNAP_DIR}")
+        return path, snap
     dated = sorted(
         p
         for p in SNAP_DIR.glob("20*.json")
@@ -476,6 +515,7 @@ def compute_freshness(last_success_iso: str | None, now: datetime | None = None,
 
     if last_tp is None:
         return {
+            "isStale": True,  # renamed from dataStale; alias kept below
             "dataStale": True,
             "nextExpected": next_expected,
             "staleAfter": stale_after,
@@ -488,6 +528,7 @@ def compute_freshness(last_success_iso: str | None, now: datetime | None = None,
     else:
         stale = last_tp < due
     return {
+        "isStale": stale,  # renamed from dataStale; alias kept below
         "dataStale": stale,
         "nextExpected": next_expected,
         "staleAfter": stale_after,
@@ -498,7 +539,8 @@ def compute_freshness(last_success_iso: str | None, now: datetime | None = None,
 
 
 def is_schedule_stale(last_success_iso: str | None, now: datetime | None = None, grace_hours: int = COLLECTION_GRACE_HOURS) -> bool:
-    return bool(compute_freshness(last_success_iso, now=now, grace_hours=grace_hours).get("dataStale"))
+    fresh = compute_freshness(last_success_iso, now=now, grace_hours=grace_hours)
+    return bool(fresh.get("isStale") if fresh.get("isStale") is not None else fresh.get("dataStale"))
 
 
 def parse_price_fields(price_raw, price_as_of) -> tuple:
@@ -531,11 +573,14 @@ def pack_eps_year(raw_year: dict | None, mapped_year: str | None = None) -> dict
     reported = to_display_str(raw_year.get("reported_fiscal_label"))
     # True CY EPS only if built from Q1+Q2+Q3+Q4 with all four present — not in snapshots.
     true_cy = None
+    analysts = to_num(
+        raw_year.get("analysts") if raw_year.get("analysts") is not None else raw_year.get("analystCount")
+    )
     out = {
         "consensus": cons,
         "high": high,
         "low": low,
-        "analysts": to_num(raw_year.get("analysts")),
+        "analysts": analysts,
         "dispersion": compute_dispersion(high, low, cons),
         "rev1M": to_num(raw_year.get("rev_1M_pct")),
         "rev3M": to_num(raw_year.get("rev_3M_pct")),
@@ -546,6 +591,19 @@ def pack_eps_year(raw_year: dict | None, mapped_year: str | None = None) -> dict
         "trueCalendarYearEps": true_cy,
         "slotMappingOnly": True,
     }
+    out["analystCount"] = analysts
+    # Unknown coverage is never High — Medium at most (Coverage UI).
+    if analysts is None:
+        out["coverageStatus"] = "unknown"
+        out["coverageSeverity"] = "medium"
+        out["coverageWarning"] = "analystCount unknown"
+    elif analysts == 0:
+        out["coverageStatus"] = "warning"
+        out["coverageSeverity"] = "medium"
+        out["coverageWarning"] = "analystCount=0"
+    else:
+        out["coverageStatus"] = "ok"
+        out["coverageSeverity"] = "low"
     fec = fiscal_equals_calendar(reported)
     if fec is True:
         out["fiscalEqualsCalendar"] = True
@@ -817,6 +875,23 @@ def _slot_from_alignment(align: str | None) -> str | None:
     return None
 
 
+def ticker_blocks_daily_observation(ticker: str, companies: dict, snap: dict) -> bool:
+    """LKG / collection-failed tickers must not append a fake daily EPS observation."""
+    c = companies.get(ticker) or {}
+    d = ((snap.get("tickers") or {}).get(ticker) or {}) if isinstance(snap, dict) else {}
+    if c.get("collectionFailed") or d.get("collection_failed"):
+        return True
+    flags = (
+        c.get("usedLastKnownGood"),
+        d.get("lkgFill"),
+        d.get("used_last_known_good"),
+        d.get("from_lkg"),
+    )
+    if any(bool(x) for x in flags):
+        return True
+    return False
+
+
 def seed_and_append_daily_snapshots(
     companies: dict,
     tickers: list[str],
@@ -874,6 +949,8 @@ def seed_and_append_daily_snapshots(
         if key in last_consensus:
             continue
         eps = to_num(raw.get("Current EPS"))
+        if eps is None:
+            continue  # null EPS is not a daily observation
         row = {
             "date": date,
             "ticker": ticker,
@@ -893,6 +970,8 @@ def seed_and_append_daily_snapshots(
     snap_date = (snap.get("snapshot_utc") or snap_path.name)[:10]
     snap_utc = snap.get("snapshot_utc")
     for t in tickers:
+        if ticker_blocks_daily_observation(t, companies, snap):
+            continue
         c = companies.get(t) or {}
         for slot in chart_years:
             e = (c.get("eps") or {}).get(slot) or {}
@@ -900,9 +979,13 @@ def seed_and_append_daily_snapshots(
             identity = fiscal or slot
             key = (snap_date, t, identity)
             new_eps = e.get("consensus")
+            if new_eps is None:
+                continue  # null EPS is not a daily observation
             if key in last_consensus:
                 if eps_same(last_consensus[key], new_eps):
                     continue  # unchanged → do not append
+            analysts = e.get("analystCount") if e.get("analystCount") is not None else e.get("analysts")
+            coverage = e.get("coverageStatus")
             row = {
                 "date": snap_date,
                 "ticker": t,
@@ -912,6 +995,9 @@ def seed_and_append_daily_snapshots(
                 "consensus": new_eps,
                 "reportedFiscalLabel": fiscal,
                 "calendarAlignment": e.get("calendarAlignment"),
+                "analystCount": analysts,
+                "coverageStatus": coverage,
+                "coverageSeverity": e.get("coverageSeverity"),
                 "source": "daily_export",
                 "updateTime": snap_utc,
             }
@@ -919,10 +1005,13 @@ def seed_and_append_daily_snapshots(
             last_consensus[key] = new_eps
 
     if new_rows:
-        with jsonl_path.open("a", encoding="utf-8") as f:
-            for row in new_rows:
-                f.write(json.dumps(row, ensure_ascii=False) + "\n")
-                existing.append(row)
+        if atomic_append_jsonl is not None:
+            atomic_append_jsonl(jsonl_path, new_rows)
+        else:
+            existing_text = jsonl_path.read_text(encoding="utf-8") if jsonl_path.exists() else ""
+            add = "".join(json.dumps(row, ensure_ascii=False) + "\n" for row in new_rows)
+            jsonl_path.write_text(existing_text + add, encoding="utf-8")
+        existing.extend(new_rows)
 
     # Dated JSON for the day reflecting latest values (overwrite that day file only)
     day_payload = {
@@ -1333,15 +1422,20 @@ def regenerate_markdown_backups(companies: dict, valuation: list, snap: dict, ti
 
 def write_json(path: Path, obj):
     path.parent.mkdir(parents=True, exist_ok=True)
+    if atomic_write_json is not None:
+        atomic_write_json(path, obj)
+        return
     path.write_text(json.dumps(obj, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
 
 
-def run_build_alerts() -> dict:
+def run_build_alerts(gated_snapshot: dict | None = None, history: list | None = None) -> dict:
     """Call deterministic alert engine before writing web/data/alerts.json."""
     try:
         import build_alerts as ba
 
-        payload = ba.evaluate_alerts()
+        if hasattr(ba, "configure_root"):
+            ba.configure_root(ROOT)
+        payload = ba.evaluate_alerts(gated_snapshot=gated_snapshot, history=history)
         ba.write_alerts(payload)
         return payload
     except Exception as exc:
@@ -1374,6 +1468,26 @@ def compute_data_version(payload_parts: dict) -> str:
         h.update(canonical_json_bytes(payload_parts[key]))
         h.update(b"\0")
     return h.hexdigest()
+
+
+def compute_refresh_version(
+    *,
+    last_successful_collection: str | None,
+    alert_engine_last_evaluated: str | None,
+    collection_status: str | None,
+    site_published: str | None = None,
+) -> str:
+    """Operational hash. sitePublished is ignored (publish stamp must not tick this)."""
+    _ = site_published  # explicitly excluded from refreshVersion
+    return hashlib.sha256(
+        canonical_json_bytes(
+            {
+                "lastSuccessfulCollection": last_successful_collection,
+                "alertEngineLastEvaluated": alert_engine_last_evaluated,
+                "collectionStatus": collection_status,
+            }
+        )
+    ).hexdigest()
 
 
 def load_prior_meta() -> dict:
@@ -1430,8 +1544,24 @@ def collection_completeness(companies: dict, tickers: list[str]) -> dict:
 
 
 
-def main():
-    snap_path, snap = load_latest_snapshot()
+def main(
+    snapshot: dict | None = None,
+    snap_path: Path | str | None = None,
+    extra_history: list | None = None,
+    persist_revisions: bool = False,
+    root: Path | str | None = None,
+):
+    if root is not None:
+        configure_root(root)
+    if snapshot is not None:
+        snap = snapshot
+        if snap_path is not None:
+            snap_path = Path(snap_path)
+        else:
+            snap_utc_name = str(snap.get("snapshot_utc") or "snapshot")[:10]
+            snap_path = SNAP_DIR / f"{snap_utc_name}.json"
+    else:
+        snap_path, snap = load_latest_snapshot()
     tickers = load_watchlist()
     driver_errors = ensure_driver_files(tickers)
     snap_utc = snap.get("snapshot_utc") or ""
@@ -1445,7 +1575,23 @@ def main():
 
     companies = build_companies(snap, tickers, year_keys=year_keys)
     valuation = build_valuation(companies, tickers, snap_utc, year_keys=year_keys)
+
+    # generate_revision_events BEFORE run_build_alerts.
+    # Single owner of history.jsonl is revision_events (ingest commit). Export never persists.
+    if persist_revisions and generate_revision_events is not None:
+        prior_snap = None
+        if list_validated_snapshot_paths is not None:
+            validated = [p for p in list_validated_snapshot_paths(SNAP_DIR) if p.resolve() != Path(snap_path).resolve()]
+            if validated:
+                try:
+                    prior_snap = json.loads(validated[-1].read_text(encoding="utf-8"))
+                except Exception:
+                    prior_snap = None
+        generate_revision_events(prior_snap, snap, REV_PATH, persist=True)
+
     history_raw = load_history()
+    if extra_history:
+        history_raw = list(history_raw) + list(extra_history)
     revisions = [map_history_row(r) for r in history_raw]
 
     daily_rows = seed_and_append_daily_snapshots(
@@ -1455,8 +1601,8 @@ def main():
 
     earnings = load_or_init_earnings(companies, tickers)
 
-    # Deterministic alert engine — must run before writing alerts.json
-    alerts_payload = run_build_alerts()
+    # Deterministic alert engine — must run after generate_revision_events, with gated snapshot
+    alerts_payload = run_build_alerts(gated_snapshot=snap, history=history_raw)
     active = alerts_payload.get("activeAlerts") or alerts_payload.get("alerts") or []
     history_alerts = alerts_payload.get("alertHistory") or active
     alerts = {
@@ -1472,7 +1618,7 @@ def main():
 
     # Schedule-aware freshness (weekday 08:00 Taipei + grace) — replaces naive 48h
     freshness = compute_freshness(snap_utc)
-    data_stale = bool(freshness.get("dataStale"))
+    data_stale = bool(freshness.get("isStale") if freshness.get("isStale") is not None else freshness.get("dataStale"))
 
     # Preserve prior sitePublished until publish actually ships a new payload
     site_published = prior_meta.get("sitePublished")
@@ -1485,18 +1631,15 @@ def main():
 
     # dataVersion = substantive EPS/price/earnings/active-alert payload.
     # refreshVersion / lastSuccessfulCollection = operational (may tick without data change).
+    # sitePublished is a publish stamp and MUST NOT change refreshVersion.
     # ageDays must NOT change dataVersion — strip before hashing; UI ages from eventAt.
     coll = collection_completeness(companies, tickers)
-    refresh_version = hashlib.sha256(
-        canonical_json_bytes(
-            {
-                "lastSuccessfulCollection": snap_utc,
-                "alertEngineLastEvaluated": alerts.get("alertEngineLastEvaluated"),
-                "sitePublished": site_published,
-                "collectionStatus": coll.get("collectionStatus"),
-            }
-        )
-    ).hexdigest()
+    refresh_version = compute_refresh_version(
+        last_successful_collection=snap_utc,
+        alert_engine_last_evaluated=alerts.get("alertEngineLastEvaluated"),
+        collection_status=coll.get("collectionStatus"),
+        site_published=site_published,
+    )
 
     payload_parts = {
         "companies": companies,
@@ -1530,6 +1673,7 @@ def main():
         "sitePublished": site_published,
         "sitePublishedDisplay": site_published_display,
         "dataStale": data_stale,
+        "isStale": data_stale,
         "nextExpected": freshness.get("nextExpected"),
         "staleAfter": freshness.get("staleAfter"),
         "freshnessRule": freshness.get("freshnessRule"),
@@ -1553,14 +1697,35 @@ def main():
     }
 
     WEB_DATA.mkdir(parents=True, exist_ok=True)
-    write_json(WEB_DATA / "watchlist.json", {"tickers": tickers})
-    write_json(WEB_DATA / "meta.json", meta)
+    watchlist_obj = {"tickers": tickers}
+    valuation_obj = {"rows": valuation}
+    revisions_obj = {"revisions": revisions}
+    write_json(WEB_DATA / "watchlist.json", watchlist_obj)
     write_json(WEB_DATA / "companies.json", companies)
-    write_json(WEB_DATA / "valuation.json", {"rows": valuation})
-    write_json(WEB_DATA / "revisions.json", {"revisions": revisions})
+    write_json(WEB_DATA / "valuation.json", valuation_obj)
+    write_json(WEB_DATA / "revisions.json", revisions_obj)
     write_json(WEB_DATA / "eps_history.json", eps_history)
     write_json(WEB_DATA / "earnings.json", earnings)
     write_json(WEB_DATA / "alerts.json", alerts)
+
+    dashboard = None
+    if build_dashboard_payload is not None:
+        dashboard = build_dashboard_payload(
+            meta=meta,
+            companies=companies,
+            valuation=valuation_obj,
+            revisions=revisions_obj,
+            eps_history=eps_history,
+            earnings=earnings,
+            alerts=alerts,
+            watchlist=watchlist_obj,
+        )
+    if write_meta_and_dashboard is not None and dashboard is not None:
+        write_meta_and_dashboard(WEB_DATA, meta, dashboard)
+    else:
+        write_json(WEB_DATA / "meta.json", meta)
+        if dashboard is not None:
+            write_json(WEB_DATA / "dashboard.json", dashboard)
 
     regenerate_markdown_backups(companies, valuation, snap, tickers, year_keys=year_keys)
 

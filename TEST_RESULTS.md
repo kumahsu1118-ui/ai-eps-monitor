@@ -1,5 +1,7 @@
 # Long-term Reliability — TEST_RESULTS (Round 2 + Round 3 Data Integrity)
 
+**Transactional pipeline:** see `TEST_RESULTS_TRANSACTIONAL.md` — **55 / 55 PASS** on 2026-09-15 (`python3 tools/run_acceptance_tests.py`).
+
 **Date:** 2026-09-15  
 **Command:** `python3 tools/run_acceptance_tests.py`  
 **Result:** **30 / 30 PASS** (isolated tempfile; production ROOT untouched)

@@ -57,6 +57,25 @@ TICKERS_DEFAULT = ["NVDA", "AVGO", "TSM", "MSFT", "BE", "KEYS"]
 # One-shot homepage window (within 14–30 days). Documented choice: 21 days.
 ONE_SHOT_ACTIVE_DAYS = 21
 CUMULATIVE_LOOKBACK_DAYS = 30
+SA_1M_ALERT_PCT = 5.0
+
+try:
+    from source_tier import classify_source_tier
+except ImportError:
+    classify_source_tier = None
+
+
+def configure_root(root: Path | str | None = None) -> Path:
+    global ROOT, REV_PATH, EARNINGS_DIR, DRIVERS_DIR, ALERTS_PATH, UNIVERSE_PATH, DAILY_JSONL
+    if root is not None:
+        ROOT = Path(root)
+    REV_PATH = ROOT / "data" / "revisions" / "history.jsonl"
+    EARNINGS_DIR = ROOT / "data" / "earnings"
+    DRIVERS_DIR = ROOT / "data" / "drivers"
+    ALERTS_PATH = ROOT / "data" / "alerts" / "index.json"
+    UNIVERSE_PATH = ROOT / "data" / "universe.json"
+    DAILY_JSONL = ROOT / "data" / "daily_eps_snapshots" / "daily.jsonl"
+    return ROOT
 
 
 def now_utc_iso() -> str:
@@ -469,18 +488,35 @@ def _norm_vs(val) -> str | None:
 
 
 
+def _apply_domain_tier(url: str | None, tier, attribution: str | None = None):
+    if classify_source_tier is None:
+        return url, tier
+    classified = classify_source_tier(url, attribution=attribution, explicit_tier=tier)
+    return url, classified if classified is not None else tier
+
+
 def _consensus_comparison_source(dig: dict) -> tuple[str | None, int | None]:
     """Field-level provenance for results-vs-consensus.
 
-    Prefer consensusComparison.sourceUrl/sourceTier (e.g. SA Tier 4),
-    NOT actuals / results IR release URLs.
+    Precedence (guidanceDetail is NOT required):
+      1. consensusComparison.sourceUrl/sourceTier
+      2. results.sourceUrl/sourceTier (survives missing guidance)
+      3. Seeking Alpha heuristic in digest.sources
+    Reuters is never classified Tier 1.
     """
     cc = dig.get("consensusComparison")
     if isinstance(cc, dict):
         url = cc.get("sourceUrl") or cc.get("url")
         tier = cc.get("sourceTier") if cc.get("sourceTier") is not None else cc.get("tier")
         if url or tier is not None:
-            return url, tier
+            return _apply_domain_tier(url, tier, cc.get("attribution"))
+    results = dig.get("results") if isinstance(dig.get("results"), dict) else {}
+    if results.get("sourceUrl") or results.get("sourceTier") is not None:
+        return _apply_domain_tier(
+            results.get("sourceUrl") or results.get("url"),
+            results.get("sourceTier") if results.get("sourceTier") is not None else results.get("tier"),
+            results.get("attribution"),
+        )
     # Heuristic: Seeking Alpha sources in digest.sources list
     for s in dig.get("sources") or []:
         if not isinstance(s, dict):
@@ -489,14 +525,12 @@ def _consensus_comparison_source(dig: dict) -> tuple[str | None, int | None]:
         attr = str(s.get("attribution") or s.get("title") or "").lower()
         url = s.get("url") or s.get("sourceUrl")
         if tier == 4 or "seeking alpha" in attr or (url and "seekingalpha.com" in str(url).lower()):
-            return url, tier if tier is not None else 4
-    # results.notes often cite SA beat/miss — still do not use results.sourceUrl (IR)
-    notes = str(((dig.get("results") or {}) if isinstance(dig.get("results"), dict) else {}).get("notes") or "")
+            return _apply_domain_tier(url, tier if tier is not None else 4, attr)
+    notes = str((results or {}).get("notes") or "")
     if "seeking alpha" in notes.lower() or "sa earnings" in notes.lower():
-        # Find any SA URL in sources; else leave url None but tier 4
         for s in dig.get("sources") or []:
             if isinstance(s, dict) and s.get("url") and "seekingalpha.com" in str(s.get("url")).lower():
-                return s.get("url"), 4
+                return _apply_domain_tier(s.get("url"), 4, s.get("attribution"))
         return None, 4
     return None, None
 
@@ -794,6 +828,60 @@ def rule5_driver_or_digest_flags(tickers: list[str]) -> list[dict]:
     return out
 
 
+def sa_1m_stable_id(ticker: str, fiscal: str) -> str:
+    return make_alert_id("source_reported_1m_revision", ticker, fiscal, "sa1m", "sa_1m")
+
+
+def rule6_source_reported_1m(tickers: list[str], gated_snapshot: dict | None = None) -> list[dict]:
+    """Seeking Alpha source-reported |1M| >= 5% from the GATED snapshot.
+
+    Never globs snapshots or manifests for "current". A missing/broken
+    source manifest cannot suppress these alerts. Labeled Seeking Alpha 1M
+    (not Internal 30D).
+    """
+    snap = gated_snapshot
+    if not isinstance(snap, dict):
+        return []
+    tickers_blob = snap.get("tickers") if isinstance(snap.get("tickers"), dict) else {}
+    out = []
+    for t in tickers:
+        td = tickers_blob.get(t) or tickers_blob.get(str(t).upper()) or {}
+        eps = td.get("eps") or {}
+        if not isinstance(eps, dict):
+            continue
+        for slot, year in eps.items():
+            if not isinstance(year, dict):
+                continue
+            rev = to_num(year.get("rev_1M_pct") if "rev_1M_pct" in year else year.get("rev1M"))
+            if rev is None or abs(rev) < SA_1M_ALERT_PCT:
+                continue
+            fiscal = year.get("reported_fiscal_label") or year.get("reportedFiscalLabel") or slot
+            direction = "upgrade" if rev > 0 else "downgrade"
+            a = alert(
+                "source_reported_1m_revision",
+                "high",
+                t,
+                f"{t} {fiscal}: Seeking Alpha 1M {direction} {rev:+.2f}% (≥5%)",
+                period=fiscal,
+                event_date="sa1m",
+                event_key="sa_1m",
+                event_at=snap.get("snapshot_utc"),
+                revisionPct=rev,
+                source="Seeking Alpha 1M",
+                sourceLabel="Seeking Alpha 1M",
+                sourceWindow="1M",
+                notInternal30d=True,
+                oneshot=False,
+                lifecycleState="open",
+                slot=slot,
+            )
+            a["id"] = sa_1m_stable_id(t, str(fiscal))
+            a["expiresAt"] = None
+            a["activeUntil"] = None
+            out.append(a)
+    return out
+
+
 # Material rules shown on homepage (exclude informational insufficient-history)
 HOMEPAGE_RULES = {
     "single_revision_gt_2pct",
@@ -803,6 +891,7 @@ HOMEPAGE_RULES = {
     "gross_margin_pressure",
     "gross_margin_guidance_revision",
     "driver_status_change",
+    "source_reported_1m_revision",
     # legacy name kept if any residual
     "gm_guidance_change_gt_200bps",
 }
@@ -811,11 +900,25 @@ SEVERITY_RANK = {"high": 0, "medium": 1, "low": 2, "info": 3}
 
 
 
-def evaluate_alerts(now: datetime | None = None) -> dict:
+def evaluate_alerts(
+    now: datetime | None = None,
+    gated_snapshot: dict | None = None,
+    *,
+    snapshot: dict | None = None,
+    history: list | None = None,
+    tickers: list | None = None,
+    daily_rows: list | None = None,
+) -> dict:
+    """Evaluate alerts against the gated/validated snapshot context.
+
+    `gated_snapshot` is the current collection after the quality gate.
+    SA 1M uses that object only — this function does not glob for current.
+    """
     now = now or datetime.now(timezone.utc)
-    tickers = load_tickers()
-    history = load_history()
-    daily_rows = load_daily_jsonl()
+    tickers = list(tickers) if tickers is not None else load_tickers()
+    history = list(history) if history is not None else load_history()
+    daily_rows = daily_rows if daily_rows is not None else load_daily_jsonl()
+    gated = gated_snapshot if gated_snapshot is not None else snapshot
     generated: list[dict] = []
     diagnostics: list[dict] = []
     generated.extend(rule1_single_revision(history))
@@ -825,6 +928,7 @@ def evaluate_alerts(now: datetime | None = None) -> dict:
     generated.extend(rule3_results_and_guidance(tickers))
     generated.extend(rule4_gm(tickers))
     generated.extend(rule5_driver_or_digest_flags(tickers))
+    generated.extend(rule6_source_reported_1m(tickers, gated_snapshot=gated))
 
     # Deduplicate by id (keep first)
     seen = set()
@@ -942,6 +1046,7 @@ def evaluate_alerts(now: datetime | None = None) -> dict:
             "results_vs_consensus / guidance_vs_consensus: split; guidance only if above/below; results uses consensusComparison provenance",
             "gross_margin_pressure / gross_margin_guidance_revision (prev+current guidance)",
             "driver_status_change: improving/deteriorating with reason (unique per driver); eventAt from changedAt priority",
+            "source_reported_1m_revision: SA |1M|≥5% from gated snapshot (Seeking Alpha 1M, not Internal 30D); no glob for current",
             f"lifecycle: one-shot active {ONE_SHOT_ACTIVE_DAYS}d; history retained; diagnostics excluded from history",
         ],
     }
@@ -955,7 +1060,7 @@ def write_alerts(payload: dict) -> Path:
 
 def main() -> int:
     try:
-        payload = evaluate_alerts()
+        payload = evaluate_alerts(gated_snapshot=None)
         write_alerts(payload)
         print(
             f"Wrote {ALERTS_PATH}: active={len(payload['activeAlerts'])} "

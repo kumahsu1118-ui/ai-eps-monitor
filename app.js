@@ -204,14 +204,10 @@
     const status = src.nextEarningsStatus || (c && c.nextEarningsStatus) || null;
     const display = src.nextEarnings || (c && c.nextEarnings) || null;
     if (isMissing(display)) return null;
-    // Already formatted by exporter as "Mon D, YYYY · Post-Market · Estimated"
+    // Already formatted by exporter as "Mon D, YYYY · Estimated|Confirmed"
     if (String(display).indexOf(" · ") >= 0) return String(display);
-    const session = src.nextEarningsSession || (c && c.nextEarningsSession) || null;
     const label = status === "confirmed" ? "Confirmed" : "Estimated";
-    const bits = [String(display)];
-    if (session) bits.push(session);
-    bits.push(label);
-    return bits.join(" · ");
+    return String(display) + " · " + label;
   }
 
   function naCell(display) {
@@ -261,20 +257,9 @@
     return "mom-neutral";
   }
 
-  function momentumCell(m, regime) {
-    if (isMissing(m) && isMissing(regime)) return naCell();
-    const wrap = el("span", { className: "mom-wrap" });
-    if (!isMissing(m)) {
-      wrap.appendChild(el("span", { className: momentumClass(m), text: String(m) }));
-    }
-    if (!isMissing(regime) && String(regime) !== String(m)) {
-      wrap.appendChild(el("span", {
-        className: "revision-regime",
-        text: String(regime),
-        title: "Revision regime (near-term Y+1 vs long-term Y+2 SA 1M)",
-      }));
-    }
-    return wrap;
+  function momentumCell(m) {
+    if (isMissing(m)) return naCell();
+    return el("span", { className: momentumClass(m), text: String(m) });
   }
 
   function companyPrice(c) {
@@ -332,14 +317,9 @@
     return res.json();
   }
 
-  function extractBuildId(obj) {
-    if (!obj || typeof obj !== "object") return null;
-    return obj.buildId || obj._buildId || null;
-  }
-
   async function loadAll(retryCount) {
     retryCount = retryCount || 0;
-    /* Prefer single atomic dashboard.json; fall back to multi-file with buildId consistency */
+    /* Prefer single atomic dashboard.json so sitePublished cannot drift from meta.json */
     let dash = null;
     try {
       dash = await loadJSON("dashboard.json");
@@ -379,39 +359,6 @@
         loadJSON("earnings.json"),
         loadJSON("alerts.json"),
       ]);
-      /* Reject silent mixed-generation display */
-      const ids = [
-        extractBuildId(meta),
-        extractBuildId(watchlist),
-        extractBuildId(valuation),
-        extractBuildId(revisions),
-        extractBuildId(alerts),
-        extractBuildId(companies),
-        extractBuildId(earnings),
-        extractBuildId(epsHistory),
-      ].filter(Boolean);
-      const uniq = Array.from(new Set(ids));
-      if (uniq.length > 1) {
-        if (retryCount < 3) {
-          await new Promise((r) => setTimeout(r, 250 + retryCount * 200));
-          return loadAll(retryCount + 1);
-        }
-        throw new Error("mixed build generation rejected: " + uniq.join(" vs "));
-      }
-    }
-
-    /* Strip _buildId from ticker maps */
-    if (companies && companies._buildId) {
-      companies = Object.assign({}, companies);
-      delete companies._buildId;
-    }
-    if (earnings && earnings._buildId) {
-      earnings = Object.assign({}, earnings);
-      delete earnings._buildId;
-    }
-    if (epsHistory && epsHistory._buildId) {
-      epsHistory = Object.assign({}, epsHistory);
-      delete epsHistory._buildId;
     }
 
     state.watchlist = (watchlist && watchlist.tickers) || Object.keys(companies || {});
@@ -423,8 +370,6 @@
     state.earnings = earnings || {};
     state.alerts = (alerts && (alerts.activeAlerts || alerts.alerts)) || [];
     state.alertHistory = (alerts && alerts.alertHistory) || state.alerts;
-    state.homepageAttentionQueue = (alerts && alerts.homepageAttentionQueue) || [];
-    state.changedSinceLastCollection = (alerts && alerts.changedSinceLastCollection) || [];
     state.alertEngineStatus = (alerts && alerts.alertEngineStatus) || (meta && meta.alertEngineStatus) || null;
     state.alertEngineError = (alerts && alerts.alertEngineError) || (meta && meta.alertEngineError) || null;
     state.ready = true;
@@ -474,7 +419,6 @@
     if (!parts.length) return { name: "overview" };
     if (parts[0] === "valuation") return { name: "valuation" };
     if (parts[0] === "revisions") return { name: "revisions" };
-    if (parts[0] === "earnings" && parts[1]) return { name: "earningsDetail", ticker: parts[1].toUpperCase() };
     if (parts[0] === "earnings") return { name: "earnings" };
     if (parts[0] === "companies") return { name: "companies" };
     if (parts[0] === "company" && parts[1]) return { name: "company", ticker: parts[1].toUpperCase() };
@@ -488,7 +432,7 @@
       if (route.name === "overview" && r === "overview") active = true;
       if (route.name === "valuation" && r === "valuation") active = true;
       if (route.name === "revisions" && r === "revisions") active = true;
-      if ((route.name === "earnings" || route.name === "earningsDetail") && r === "earnings") active = true;
+      if (route.name === "earnings" && r === "earnings") active = true;
       if ((route.name === "companies" || route.name === "company") && r === "companies") active = true;
       a.classList.toggle("active", active);
     });
@@ -513,13 +457,21 @@
     set("#meta-published", m.sitePublishedDisplay || m.sitePublished);
     set("#meta-source", m.primarySource);
     const collEl = $("#meta-collection-status");
+    const collRow = $("#meta-collection-status-row");
+    const collStatus = String(m.collectionStatus || "").toLowerCase();
+    const showCollectionRow = collStatus === "partial" || collStatus === "failed";
+    if (collRow) {
+      if (showCollectionRow) {
+        collRow.removeAttribute("hidden");
+        collRow.style.display = "";
+      } else {
+        collRow.setAttribute("hidden", "");
+        collRow.style.display = "none";
+      }
+    }
     if (collEl) {
       const label = m.collectionStatusLabel || m.collectionStatus;
-      if (label && String(m.collectionStatus || "").toLowerCase() === "partial") {
-        collEl.textContent = String(label);
-        collEl.removeAttribute("hidden");
-        collEl.style.display = "";
-      } else if (label && String(m.collectionStatus || "").toLowerCase() === "failed") {
+      if (showCollectionRow && label) {
         collEl.textContent = String(label);
         collEl.removeAttribute("hidden");
         collEl.style.display = "";
@@ -531,7 +483,7 @@
     }
     const staleRow = $("#meta-stale-row");
     if (staleRow) {
-      const serverStale = m.dataStale === true || m.dataStale === "true";
+      const serverStale = m.isStale === true || m.isStale === "true" || m.dataStale === true || m.dataStale === "true";
       const clientStale = isClientStale(m.consensusDataAsOf || m.lastUpdated);
       const stale = serverStale || clientStale;
       if (stale) {
@@ -684,12 +636,9 @@
   /* ---------- alerts ---------- */
   function alertAgeLabel(a) {
     let days = a && a.ageDays;
-    if (days == null && a) {
-      const src = a.lastMaterialChangeAt || a.openedAt || a.eventAt || a.eventDate || a.createdAt;
-      if (src) {
-        const t = Date.parse(src);
-        if (!Number.isNaN(t)) days = Math.max(0, Math.floor((Date.now() - t) / 86400000));
-      }
+    if (days == null && a && (a.eventAt || a.eventDate || a.createdAt)) {
+      const t = Date.parse(a.eventAt || a.eventDate || a.createdAt);
+      if (!Number.isNaN(t)) days = Math.max(0, Math.floor((Date.now() - t) / 86400000));
     }
     if (days == null || Number.isNaN(Number(days))) return "";
     const n = Number(days);
@@ -703,8 +652,6 @@
     titleRow.appendChild(el("h2", { className: "section-title", text: "Important Alerts", style: "margin:0" }));
     box.appendChild(titleRow);
     const status = state.alertEngineStatus || (state.meta && state.meta.alertEngineStatus);
-    const attention = state.homepageAttentionQueue || [];
-    const allActive = state.alerts || [];
     if (status !== "ok") {
       box.appendChild(
         el("div", {
@@ -720,33 +667,24 @@
           })
         );
       }
-    } else if (!allActive.length && !attention.length) {
+    } else if (!state.alerts || !state.alerts.length) {
       box.appendChild(el("div", { className: "alerts-empty", text: "No material alerts" }));
     } else {
-      /* Attention Queue: ranked Important (max 5, max 2/ticker) — NOT first-N of active */
-      const top = attention.length ? attention.slice(0, 5) : allActive.slice(0, 5);
-      const topIds = {};
-      top.forEach((a) => { if (a && a.id) topIds[a.id] = true; });
-      const rest = allActive.filter((a) => !(a && a.id && topIds[a.id]));
+      const TOP_N = 5;
+      const top = state.alerts.slice(0, TOP_N);
+      const rest = state.alerts.slice(TOP_N);
       top.forEach((a) => {
         const msg = typeof a === "string" ? a : a.message || a.title || JSON.stringify(a);
         const item = el("div", { className: "alert-item" });
         const age = typeof a === "object" ? alertAgeLabel(a) : "";
         item.appendChild(el("span", { className: "alert-msg", text: msg }));
-        if (typeof a === "object" && a.confidence) {
-          item.appendChild(el("span", {
-            className: "alert-confidence",
-            text: "Confidence: " + a.confidence + (a.analystCount != null ? " (" + a.analystCount + " analysts)" : ""),
-            title: "Analyst coverage confidence",
-          }));
-        }
         if (age) item.appendChild(el("span", { className: "alert-age", text: age }));
         box.appendChild(item);
       });
       if (rest.length) {
         const details = el("details", { className: "alerts-view-all" });
         details.appendChild(
-          el("summary", { text: "View All (" + allActive.length + " active)" })
+          el("summary", { text: "View All (" + state.alerts.length + " active)" })
         );
         rest.forEach((a) => {
           const msg = typeof a === "string" ? a : a.message || a.title || JSON.stringify(a);
@@ -758,17 +696,6 @@
         });
         box.appendChild(details);
       }
-    }
-    /* WHAT CHANGED SINCE LAST COLLECTION */
-    const changed = state.changedSinceLastCollection || [];
-    if (changed.length) {
-      const ch = el("div", { className: "changed-since section-note" });
-      ch.appendChild(el("div", { className: "section-title", text: "What Changed Since Last Collection", style: "font-size:14px;margin:12px 0 6px" }));
-      changed.slice(0, 8).forEach((a) => {
-        const msg = typeof a === "string" ? a : a.message || a.title || JSON.stringify(a);
-        ch.appendChild(el("div", { className: "alert-item", text: msg }));
-      });
-      box.appendChild(ch);
     }
     parent.appendChild(box);
   }
@@ -824,10 +751,8 @@
 
       const tdT = el("td", { className: "ticker left" });
       tdT.appendChild(el("a", { href: "#/company/" + t, text: t }));
-      if (c.collectionFailed === true || c.dataFreshnessBadge === "FAILED") {
-        tdT.appendChild(el("span", { className: "stale-ticker-badge failed-ticker-badge", text: "FAILED", title: "Collection failed or missing from snapshot — last-known-good shown when available" }));
-      } else if (stale || c.dataFreshnessBadge === "STALE") {
-        tdT.appendChild(el("span", { className: "stale-ticker-badge", text: "STALE", title: "Per-ticker past weekday 08:00 Taipei collection+grace without success, or using last-known-good" }));
+      if (stale) {
+        tdT.appendChild(el("span", { className: "stale-ticker-badge", text: "STALE", title: "Per-ticker past weekday 08:00 Taipei collection+grace without success, or collection failed" }));
       }
       tr.appendChild(tdT);
 
@@ -860,7 +785,7 @@
       tr.appendChild(tdRev);
 
       const tdMom = el("td");
-      tdMom.appendChild(momentumCell(c.momentum, c.revisionRegime));
+      tdMom.appendChild(momentumCell(c.momentum));
       tr.appendChild(tdMom);
 
       const tdLast = el("td", { className: "left" });
@@ -1040,7 +965,7 @@
         } else if (c.field === "growthFromPrior" || c.key === "cagrY0Y2") {
           td.appendChild(c.key === "cagrY0Y2" ? cagrCell(v) : growthCell(v));
         } else if (c.key === "momentum") {
-          td.appendChild(momentumCell(v, r.revisionRegime));
+          td.appendChild(momentumCell(v));
         } else if (c.key === "lastClose" || c.key === "price") {
           const px = r.lastClose != null ? r.lastClose : r.price;
           td.appendChild(numCell(px, 2));
@@ -1445,7 +1370,7 @@
       const c = state.companies[t] || {};
       const tr = el("tr");
       const tdT = el("td", { className: "left" });
-      tdT.appendChild(el("a", { href: "#/earnings/" + t, text: t, title: "Earnings Detail" }));
+      tdT.appendChild(el("a", { href: "#/company/" + t, text: t }));
       tr.appendChild(tdT);
 
       const tdLast = el("td", { className: "left" });
@@ -1482,126 +1407,6 @@
     table.appendChild(tbody);
     tableWrap.appendChild(table);
     root.appendChild(tableWrap);
-    return root;
-  }
-
-  /* ---------- earnings detail (distinct from company page) ---------- */
-  function renderEarningsDetail(ticker) {
-    const c = state.companies[ticker] || {};
-    const earn = state.earnings[ticker] || {};
-    const root = el("div", { className: "section earnings-detail" });
-    root.appendChild(el("h2", { className: "section-title", text: "Earnings Detail — " + ticker }));
-    root.appendChild(
-      el("p", {
-        className: "section-note",
-        text: "Dedicated earnings digest view (route #/earnings/" + ticker + "). Not the company snapshot page.",
-      })
-    );
-    root.appendChild(
-      el("p", null, [
-        el("a", { href: "#/earnings", text: "← Earnings" }),
-        document.createTextNode(" · "),
-        el("a", { href: "#/company/" + ticker, text: "Company page" }),
-      ])
-    );
-
-    const panel = el("div", { className: "panel section" });
-    panel.appendChild(el("h3", { text: "Report" }));
-    const dl = el("dl", { className: "kv" });
-    function kv(label, val) {
-      dl.appendChild(el("dt", { text: label }));
-      const dd = el("dd");
-      if (val == null || val === "") dd.appendChild(naCell());
-      else dd.textContent = String(val);
-      dl.appendChild(dd);
-    }
-    kv("Period", earn.periodLabel || "—");
-    kv("Report date", earn.reportDate || "—");
-    kv("Last earnings", earn.lastEarnings || c.lastEarnings || "—");
-    kv("Next earnings", nextEarningsLabel(c, earn) || "—");
-    panel.appendChild(dl);
-
-    /* Provenance */
-    const prov = el("div", { className: "panel section" });
-    prov.appendChild(el("h3", { text: "Earnings Provenance" }));
-    const act = earn.actuals || {};
-    const cc = earn.consensusComparison || {};
-    prov.appendChild(el("div", { className: "stub-note", text: "Actuals (Company IR)" }));
-    if (act.sourceUrl) {
-      prov.appendChild(
-        el("div", null, [
-          el("a", {
-            className: "source-link",
-            href: act.sourceUrl,
-            target: "_blank",
-            rel: "noopener",
-            text: "Tier " + (act.sourceTier != null ? act.sourceTier : "?") + " · " + act.sourceUrl,
-          }),
-        ])
-      );
-    } else {
-      prov.appendChild(el("p", { className: "section-note", text: "No actuals.sourceUrl" }));
-    }
-    if (act.metrics || act.eps || act.revenue) {
-      const m = act.metrics || act;
-      prov.appendChild(
-        el("p", {
-          className: "section-note",
-          text:
-            "EPS " + (m.eps || act.eps || "—") +
-            " · Revenue " + (m.revenue || act.revenue || "—") +
-            " · GM " + (m.grossMargin || act.grossMargin || "—"),
-        })
-      );
-    }
-    prov.appendChild(el("div", { className: "stub-note", text: "Consensus comparison (beat/miss)" }));
-    const vs = cc.vsConsensus || cc.beatMiss || earn.comparison || (earn.results && earn.results.vsConsensus);
-    prov.appendChild(el("p", { className: "section-note", text: "Vs consensus: " + (vs || "—") }));
-    if (cc.sourceUrl) {
-      prov.appendChild(
-        el("div", null, [
-          el("a", {
-            className: "source-link",
-            href: cc.sourceUrl,
-            target: "_blank",
-            rel: "noopener",
-            text: "Tier " + (cc.sourceTier != null ? cc.sourceTier : "?") + " · " + cc.sourceUrl,
-          }),
-        ])
-      );
-    }
-    if (cc.note) {
-      prov.appendChild(el("p", { className: "section-note", text: String(cc.note) }));
-    }
-    root.appendChild(panel);
-    root.appendChild(prov);
-
-    ["positives", "negatives", "uncertainties"].forEach((key) => {
-      const title = key.charAt(0).toUpperCase() + key.slice(1);
-      root.appendChild(el("div", { className: "stub-note", text: title }));
-      const list = el("ul", { className: "earn-section-list" + (!(earn[key] || []).length ? " empty" : "") });
-      appendEarnItems(list, earn[key] || []);
-      root.appendChild(list);
-    });
-    if (earn.guidance) {
-      root.appendChild(el("div", { className: "stub-note", text: "Guidance" }));
-      root.appendChild(el("p", { className: "section-note", text: String(earn.guidance) }));
-    }
-    if (earn.qa && earn.qa.length) {
-      root.appendChild(el("div", { className: "stub-note", text: "Important Q&A" }));
-      const qlist = el("ul", { className: "earn-section-list" });
-      earn.qa.forEach((q) => {
-        const li = el("li");
-        li.textContent =
-          (q.question || "") +
-          " → " +
-          (q.answer || "") +
-          (q.whyMattersForEps ? " (" + q.whyMattersForEps + ")" : "");
-        qlist.appendChild(li);
-      });
-      root.appendChild(qlist);
-    }
-    document.title = "Earnings Detail — " + ticker + " · AI EPS Monitor";
     return root;
   }
 
@@ -1712,7 +1517,7 @@
     }
     header.appendChild(priceEl);
     const bits = el("div", { className: "meta-bits" });
-    bits.appendChild(momentumCell(c.momentum, c.revisionRegime));
+    bits.appendChild(momentumCell(c.momentum));
     bits.appendChild(document.createTextNode("  ·  "));
     bits.appendChild(document.createTextNode(c.priceAsOf || ""));
     header.appendChild(bits);
@@ -1759,6 +1564,17 @@
         kv(y + " note", "fiscalEqualsCalendar: true");
       }
       kv(y + " 1M Rev", revCell(e.rev1M));
+      {
+        const n = e.analystCount != null ? e.analystCount : e.analysts;
+        const status = e.coverageStatus || (n == null ? "unknown" : n === 0 ? "warning" : "ok");
+        const sev = e.coverageSeverity || (status === "ok" ? "low" : "medium");
+        let cov = "Coverage unknown";
+        if (status === "ok" && n != null) cov = n + " analysts";
+        else if (status === "warning") cov = "Coverage warning · " + (n != null ? n : 0) + " analysts";
+        else cov = "Coverage unknown";
+        if (status !== "ok") cov += " (≤ Medium)";
+        kv(y + " Coverage", cov);
+      }
     });
     const y1 = years[1] || "";
     const y2 = years[2] || "";
@@ -1991,9 +1807,6 @@
     const r = getRoute();
     setActiveTab(r);
     updateHeaderMeta();
-    if (r.name !== "earningsDetail") {
-      document.title = "AI Investment EPS & Earnings Monitor";
-    }
     const app = $("#app");
     if (!app) return;
     app.innerHTML = "";
@@ -2006,7 +1819,6 @@
         view = renderValuation();
       } else if (r.name === "revisions") view = renderRevisions();
       else if (r.name === "earnings") view = renderEarnings();
-      else if (r.name === "earningsDetail") view = renderEarningsDetail(r.ticker);
       else if (r.name === "companies") view = renderCompanies();
       else if (r.name === "company") view = renderCompany(r.ticker);
       else view = renderOverview();
