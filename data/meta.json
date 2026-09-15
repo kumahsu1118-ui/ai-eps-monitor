@@ -12,8 +12,8 @@
   "consensusDataAsOfDisplay": "Sep 15, 2026 09:36 Taipei Time",
   "lastSuccessfulCollection": "2026-09-15T01:36:00Z",
   "lastSuccessfulCollectionDisplay": "Sep 15, 2026 09:36 Taipei Time",
-  "sitePublished": "2026-09-15T06:45:22Z",
-  "sitePublishedDisplay": "Sep 15, 2026 14:45 Taipei Time",
+  "sitePublished": "2026-09-15T07:13:37Z",
+  "sitePublishedDisplay": "Sep 15, 2026 15:13 Taipei Time",
   "dataStale": false,
   "nextExpected": "2026-09-16T00:00:00Z",
   "staleAfter": "2026-09-15T06:00:00Z",
@@ -30,10 +30,10 @@
     "2027E",
     "2028E"
   ],
-  "dataVersion": "edba8a46c252bfcd8e21e5decbe2b246d7f6050e4440aa0e032aabf803562862",
-  "refreshVersion": "4f86d24d2cd0d467c10f4f474bee017e54b6762738c7ba2ba2e39a3863a1addd",
-  "buildId": "edba8a46c252bfcd8e21e5decbe2b246d7f6050e4440aa0e032aabf803562862",
-  "alertEngineLastEvaluated": "2026-09-15T06:45:22Z",
+  "dataVersion": "7cda5bb6c70cdefe41a0b60b62c41c65c6f9817d685754174fce45cbb9cfe29c",
+  "refreshVersion": "31eff54c1d69717d6d4859b3bd3068f3da07b43612271deb1ab4049a4316f7f4",
+  "buildId": "7cda5bb6c70cdefe41a0b60b62c41c65c6f9817d685754174fce45cbb9cfe29c",
+  "alertEngineLastEvaluated": "2026-09-15T07:13:36Z",
   "alertEngineStatus": "ok",
   "alertEngineError": null,
   "oneShotActiveDays": 21,
@@ -50,5 +50,11 @@
   "successfulCount": 6,
   "totalCount": 6,
   "collectionStatusLabel": "COMPLETE",
-  "driverExportErrors": null
+  "driverExportErrors": null,
+  "qualityGate": {
+    "status": "reject",
+    "reason": "validation_failed",
+    "publishable": false,
+    "extremeChanges": []
+  }
 }

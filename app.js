@@ -204,10 +204,14 @@
     const status = src.nextEarningsStatus || (c && c.nextEarningsStatus) || null;
     const display = src.nextEarnings || (c && c.nextEarnings) || null;
     if (isMissing(display)) return null;
-    // Already formatted by exporter as "Mon D, YYYY · Estimated|Confirmed"
+    // Already formatted by exporter as "Mon D, YYYY · Post-Market · Estimated"
     if (String(display).indexOf(" · ") >= 0) return String(display);
+    const session = src.nextEarningsSession || (c && c.nextEarningsSession) || null;
     const label = status === "confirmed" ? "Confirmed" : "Estimated";
-    return String(display) + " · " + label;
+    const bits = [String(display)];
+    if (session) bits.push(session);
+    bits.push(label);
+    return bits.join(" · ");
   }
 
   function naCell(display) {
@@ -347,6 +351,8 @@
     state.earnings = earnings || {};
     state.alerts = (alerts && (alerts.activeAlerts || alerts.alerts)) || [];
     state.alertHistory = (alerts && alerts.alertHistory) || state.alerts;
+    state.homepageAttentionQueue = (alerts && alerts.homepageAttentionQueue) || [];
+    state.changedSinceLastCollection = (alerts && alerts.changedSinceLastCollection) || [];
     state.alertEngineStatus = (alerts && alerts.alertEngineStatus) || (meta && meta.alertEngineStatus) || null;
     state.alertEngineError = (alerts && alerts.alertEngineError) || (meta && meta.alertEngineError) || null;
     state.ready = true;
@@ -621,6 +627,8 @@
     titleRow.appendChild(el("h2", { className: "section-title", text: "Important Alerts", style: "margin:0" }));
     box.appendChild(titleRow);
     const status = state.alertEngineStatus || (state.meta && state.meta.alertEngineStatus);
+    const attention = state.homepageAttentionQueue || [];
+    const allActive = state.alerts || [];
     if (status !== "ok") {
       box.appendChild(
         el("div", {
@@ -636,12 +644,14 @@
           })
         );
       }
-    } else if (!state.alerts || !state.alerts.length) {
+    } else if (!allActive.length && !attention.length) {
       box.appendChild(el("div", { className: "alerts-empty", text: "No material alerts" }));
     } else {
-      const TOP_N = 5;
-      const top = state.alerts.slice(0, TOP_N);
-      const rest = state.alerts.slice(TOP_N);
+      /* Attention Queue: ranked Important (max 5, max 2/ticker) — NOT first-N of active */
+      const top = attention.length ? attention.slice(0, 5) : allActive.slice(0, 5);
+      const topIds = {};
+      top.forEach((a) => { if (a && a.id) topIds[a.id] = true; });
+      const rest = allActive.filter((a) => !(a && a.id && topIds[a.id]));
       top.forEach((a) => {
         const msg = typeof a === "string" ? a : a.message || a.title || JSON.stringify(a);
         const item = el("div", { className: "alert-item" });
@@ -653,7 +663,7 @@
       if (rest.length) {
         const details = el("details", { className: "alerts-view-all" });
         details.appendChild(
-          el("summary", { text: "View All (" + state.alerts.length + " active)" })
+          el("summary", { text: "View All (" + allActive.length + " active)" })
         );
         rest.forEach((a) => {
           const msg = typeof a === "string" ? a : a.message || a.title || JSON.stringify(a);
@@ -665,6 +675,17 @@
         });
         box.appendChild(details);
       }
+    }
+    /* WHAT CHANGED SINCE LAST COLLECTION */
+    const changed = state.changedSinceLastCollection || [];
+    if (changed.length) {
+      const ch = el("div", { className: "changed-since section-note" });
+      ch.appendChild(el("div", { className: "section-title", text: "What Changed Since Last Collection", style: "font-size:14px;margin:12px 0 6px" }));
+      changed.slice(0, 8).forEach((a) => {
+        const msg = typeof a === "string" ? a : a.message || a.title || JSON.stringify(a);
+        ch.appendChild(el("div", { className: "alert-item", text: msg }));
+      });
+      box.appendChild(ch);
     }
     parent.appendChild(box);
   }

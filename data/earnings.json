@@ -5,7 +5,7 @@
     "reportDate": "2026-08-26",
     "periodLabel": "Q2 2027 (fiscal 2027)",
     "lastEarnings": "8/26/2026",
-    "nextEarnings": "Nov 25, 2026 · Estimated",
+    "nextEarnings": "Nov 25, 2026 · Post-Market · Estimated",
     "revenue": [
       {
         "label": "Revenue",
@@ -342,7 +342,7 @@
     "reportDate": "2026-09-02",
     "periodLabel": "Q3 2026 (fiscal 2026)",
     "lastEarnings": "9/2/2026",
-    "nextEarnings": "Dec 10, 2026 · Estimated",
+    "nextEarnings": "Dec 10, 2026 · Post-Market · Estimated",
     "revenue": [
       {
         "label": "Revenue",
@@ -671,7 +671,7 @@
     "ticker": "MSFT",
     "hasDigest": false,
     "lastEarnings": "7/29/2026",
-    "nextEarnings": "Oct 29, 2026 · Estimated",
+    "nextEarnings": "Oct 29, 2026 · Post-Market · Estimated",
     "nextEarningsRaw": "10/29/2026 (Post-Market)",
     "nextEarningsStatus": "estimated",
     "nextEarningsSource": "Seeking Alpha",
@@ -692,7 +692,7 @@
     "ticker": "BE",
     "hasDigest": false,
     "lastEarnings": "7/28/2026",
-    "nextEarnings": "Oct 29, 2026 · Estimated",
+    "nextEarnings": "Oct 29, 2026 · Post-Market · Estimated",
     "nextEarningsRaw": "10/29/2026 (Post-Market)",
     "nextEarningsStatus": "estimated",
     "nextEarningsSource": "Seeking Alpha",
