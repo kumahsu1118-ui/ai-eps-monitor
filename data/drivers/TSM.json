@@ -1,0 +1,52 @@
+{
+  "ticker": "TSM",
+  "updated": "2026-09-15T01:36:00Z",
+  "status": "Baseline — not yet scored vs prior earnings",
+  "drivers": [
+    {
+      "name": "N2",
+      "status": "unchanged",
+      "note": "Awaiting first post-setup earnings refresh"
+    },
+    {
+      "name": "A16",
+      "status": "unchanged",
+      "note": "Awaiting first post-setup earnings refresh"
+    },
+    {
+      "name": "advanced packaging",
+      "status": "unchanged",
+      "note": "Awaiting first post-setup earnings refresh"
+    },
+    {
+      "name": "CoWoS",
+      "status": "unchanged",
+      "note": "Awaiting first post-setup earnings refresh"
+    },
+    {
+      "name": "AI accelerator demand",
+      "status": "unchanged",
+      "note": "Awaiting first post-setup earnings refresh"
+    },
+    {
+      "name": "HPC revenue",
+      "status": "unchanged",
+      "note": "Awaiting first post-setup earnings refresh"
+    },
+    {
+      "name": "utilization",
+      "status": "unchanged",
+      "note": "Awaiting first post-setup earnings refresh"
+    },
+    {
+      "name": "gross margin",
+      "status": "unchanged",
+      "note": "Awaiting first post-setup earnings refresh"
+    },
+    {
+      "name": "CapEx",
+      "status": "unchanged",
+      "note": "Awaiting first post-setup earnings refresh"
+    }
+  ]
+}

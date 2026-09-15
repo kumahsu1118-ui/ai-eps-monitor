@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>AI Investment Monitor — EPS · Earnings · Valuation · Revisions</title>
+  <link rel="stylesheet" href="./styles.css" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js" defer></script>
+  <script src="./app.js" defer></script>
+</head>
+<body>
+  <header class="app-header">
+    <div class="brand">
+      <h1>AI Investment Monitor</h1>
+      <p class="subtitle">EPS • Earnings • Valuation • Revisions</p>
+    </div>
+    <div class="header-meta" id="header-meta">
+      <div class="meta-row"><span class="meta-label">Consensus Data As Of</span><span id="meta-consensus">—</span></div>
+      <div class="meta-row"><span class="meta-label">Last Successful Collection</span><span id="meta-collection">—</span></div>
+      <div class="meta-row"><span class="meta-label">Site Published</span><span id="meta-published">—</span></div>
+      <div class="meta-row"><span class="meta-label">Primary Estimate Source</span><span id="meta-source">—</span></div>
+      <div class="meta-row meta-stale-row" id="meta-stale-row" hidden>
+        <span class="stale-badge" id="meta-stale-badge">DATA STALE</span>
+      </div>
+    </div>
+    <button type="button" class="theme-toggle" id="theme-toggle" title="Toggle light/dark" aria-label="Toggle theme">◐</button>
+  </header>
+
+  <nav class="tabs" id="main-nav" aria-label="Primary">
+    <a href="#/" class="tab" data-route="overview">Overview</a>
+    <a href="#/valuation" class="tab" data-route="valuation">Valuation</a>
+    <a href="#/revisions" class="tab" data-route="revisions">EPS Revisions</a>
+    <a href="#/earnings" class="tab" data-route="earnings">Earnings</a>
+    <a href="#/companies" class="tab" data-route="companies">Companies</a>
+  </nav>
+
+  <main id="app" class="app-main">
+    <p class="loading">Loading dashboard data…</p>
+  </main>
+
+  <footer class="app-footer">
+    <span>Missing values shown as — (Data unavailable from source). Never invented. Mapped slots ≠ true calendar-year EPS.</span>
+    <span id="footer-watchlist"></span>
+  </footer>
+</body>
+</html>

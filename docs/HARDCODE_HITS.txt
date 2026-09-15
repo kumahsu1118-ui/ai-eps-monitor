@@ -1,0 +1,117 @@
+web/app.js:24:chartYear: "2027E",
+web/app.js:410:if (r.rev1M28 != null && !Number.isNaN(Number(r.rev1M28))) {
+web/app.js:411:if (Number(r.rev1M28) > 0 && (!largestUp28 || Number(r.rev1M28) > Number(largestUp28.rev1M28))) {
+web/app.js:415:if (r.pe27 != null && !Number.isNaN(Number(r.pe27))) {
+web/app.js:416:if (!lowestPe || Number(r.pe27) < Number(lowestPe.pe27)) lowestPe = r;
+web/app.js:418:// CAGR only when mapped 2026E exists (cagr2628 already null if missing)
+web/app.js:419:if (r.cagr2628 != null && r.eps26 != null && !Number.isNaN(Number(r.cagr2628))) {
+web/app.js:420:if (!fastestCagr || Number(r.cagr2628) > Number(fastestCagr.cagr2628)) {
+web/app.js:459:"Largest 2027E EPS Upgrade (1M)",
+web/app.js:466:"Largest 2027E EPS Downgrade (1M)",
+web/app.js:473:"Largest 2028E EPS Upgrade (1M)",
+web/app.js:475:s.largestUp28 ? revCell(s.largestUp28.rev1M28) : null
+web/app.js:480:"Lowest 2027E PE",
+web/app.js:482:s.lowestPe ? fmtNum(s.lowestPe.pe27, 2) + "x" : null
+web/app.js:489:s.fastestCagr ? growthCell(s.fastestCagr.cagr2628) : null
+web/app.js:534:text: "FY-mapped calendar slots (not true CY EPS); Reported Fiscal Period Ending shown under consensus. 1M rev = Seeking
+web/app.js:539:const y0 = years[0] || "2026E";
+web/app.js:540:const y1 = years[1] || "2027E";
+web/app.js:541:const y2 = years[2] || "2028E";
+web/app.js:572:const pe27 = pe(px, e27.consensus);
+web/app.js:604:tdPe.appendChild(numCell(pe27, 2));
+web/app.js:672:{ key: "eps26", label: "Mapped 2026E" },
+web/app.js:673:{ key: "eps27", label: "Mapped 2027E" },
+web/app.js:674:{ key: "eps28", label: "Mapped 2028E" },
+web/app.js:675:{ key: "pe26", label: "2026E PE" },
+web/app.js:676:{ key: "pe27", label: "2027E PE" },
+web/app.js:677:{ key: "pe28", label: "2028E PE" },
+web/app.js:680:{ key: "cagr2628", label: "Mapped CAGR 26–28" },
+web/app.js:686:state.sort = { key: "pe27", dir: "asc" };
+web/app.js:727:} else if (c.key === "growth27" || c.key === "growth28" || c.key === "cagr2628") {
+web/app.js:728:td.appendChild(c.key === "cagr2628" ? cagrCell(v) : growthCell(v));
+web/app.js:737:} else if (c.key === "eps26" || c.key === "eps27" || c.key === "eps28") {
+web/app.js:738:const fyKey = c.key === "eps26" ? "reportedFy26" : c.key === "eps27" ? "reportedFy27" : "reportedFy28";
+web/app.js:740:} else if (c.key === "pe26" || c.key === "pe27" || c.key === "pe28") {
+web/app.js:741:const fyKey = c.key === "pe26" ? "reportedFy26" : c.key === "pe27" ? "reportedFy27" : "reportedFy28";
+web/app.js:781:const year = state.chartYear || "2027E";
+web/app.js:887:["2026E", "2027E", "2028E"].forEach((y) => {
+web/app.js:965:["2026E", "2027E", "2028E"].forEach((y) => {
+web/app.js:1211:const years = ["2026E", "2027E", "2028E"];
+web/app.js:1333:const y1 = years[1] || "2027E";
+web/app.js:1334:const y2 = years[2] || "2028E";
+web/app.js:1335:const pe27 = pe(px, ((c.eps || {})[y1] || {}).consensus);
+web/app.js:1336:kv(y1 + " PE (Last Close)", pe27 == null ? null : fmtNum(pe27, 2));
+web/app.js:1542:/* keep user sort; default pe27 asc on first visit via flag */
+web/app.js:1560:state.sort = { key: "pe27", dir: "asc" };
+web/tools/export_web_data.py:49:YEAR_KEYS = ["2026E", "2027E", "2028E", "2029E"]
+web/tools/export_web_data.py:50:CHART_YEARS = ["2026E", "2027E", "2028E"]
+web/tools/export_web_data.py:52:"CY2026": "2026E",
+web/tools/export_web_data.py:53:"CY2027": "2027E",
+web/tools/export_web_data.py:54:"CY2028": "2028E",
+web/tools/export_web_data.py:503:e26 = (c["eps"].get("2026E") or {})
+web/tools/export_web_data.py:504:e27 = (c["eps"].get("2027E") or {})
+web/tools/export_web_data.py:505:e28 = (c["eps"].get("2028E") or {})
+web/tools/export_web_data.py:516:"eps26": e26.get("consensus"),
+web/tools/export_web_data.py:517:"eps27": e27.get("consensus"),
+web/tools/export_web_data.py:518:"eps28": e28.get("consensus"),
+web/tools/export_web_data.py:519:"pe26": pe(price, e26.get("consensus")),
+web/tools/export_web_data.py:520:"pe27": pe(price, e27.get("consensus")),
+web/tools/export_web_data.py:521:"pe28": pe(price, e28.get("consensus")),
+web/tools/export_web_data.py:524:"cagr2628": cagr_2628(e26.get("consensus"), e28.get("consensus")),
+web/tools/export_web_data.py:526:"rev1M28": rev1m28,
+web/tools/export_web_data.py:920:"| Ticker | Last Close | Mapped 2026E EPS | Mapped 2027E EPS | Mapped 2028E EPS | 2026E PE | 2027E PE | 2028E PE | 27E G
+web/tools/export_web_data.py:927:e26 = fmt_md_num(r["eps26"])
+web/tools/export_web_data.py:928:e27 = fmt_md_num(r["eps27"])
+web/tools/export_web_data.py:929:e28 = fmt_md_num(r["eps28"])
+web/tools/export_web_data.py:939:f"{fmt_md_num(r['pe26'])} | {fmt_md_num(r['pe27'])} | {fmt_md_num(r['pe28'])} | {g27} | {g28} | {rev} | {r['momentum']} 
+web/tools/export_web_data.py:946:ranked28 = [(r["ticker"], r.get("rev1M28")) for r in valuation if r.get("rev1M28") is not None]
+web/tools/export_web_data.py:957:"| Ticker | Last Close | Mapped 2027E EPS | Reported FY label | 2027E PE | 1M EPS Rev (SA) | EPS Momentum | Last Earning
+web/tools/export_web_data.py:962:e27 = c["eps"]["2027E"]
+web/tools/export_web_data.py:964:pe27 = pe(price, e27.get("consensus"))
+web/tools/export_web_data.py:969:f"{e27.get('reportedFiscalLabel') or 'Data unavailable'} | {fmt_md_num(pe27)} | {rev_s} | "
+web/tools/export_web_data.py:977:"| Ticker | Mapped 2026E (reported) | Mapped 2027E (reported) | Mapped 2028E (reported) |",
+web/tools/export_web_data.py:983:for yk in ["2026E", "2027E", "2028E"]:
+web/tools/export_web_data.py:991:hlines += ["", "## 2. Largest 2027E EPS Upgrades (1M)", ""]
+web/tools/export_web_data.py:998:hlines += ["", "## 3. Largest 2027E EPS Downgrades (1M)", ""]
+web/tools/export_web_data.py:1005:hlines += ["", "## 3b. Largest 2028E EPS Upgrades (1M)", ""]
+web/tools/export_web_data.py:1010:hlines.append("- No positive 2028E 1M revisions in this snapshot.")
+tools/run_acceptance_tests.py:152:snap["tickers"]["NVDA"]["eps"]["2027E"]["consensus"] = 15.61
+tools/run_acceptance_tests.py:157:snap["tickers"]["NVDA"]["eps"]["2027E"]["consensus"] = 15.70
+tools/run_acceptance_tests.py:163:series = (hist.get("NVDA") or {}).get("2027E") or []
+tools/run_acceptance_tests.py:169:day_eps = (((day.get("tickers") or {}).get("NVDA") or {}).get("2027E") or {}).get("consensus")
+tools/run_acceptance_tests.py:283:# Ensure Jan 2028 is on 2027E slot in snapshot (NVDA FY ends Jan)
+tools/run_acceptance_tests.py:284:e27 = snap["tickers"]["NVDA"]["eps"]["2027E"]
+tools/run_acceptance_tests.py:299:# Jan 2027 may exist for 2026E mapping under Y=2026; under Y=2027 display years start 2027E
+tools/run_acceptance_tests.py:378:e = (companies.get("NVDA") or {}).get("eps", {}).get("2027E") or {}
+tools/export_web_data.py:49:YEAR_KEYS = ["2026E", "2027E", "2028E", "2029E"]
+tools/export_web_data.py:50:CHART_YEARS = ["2026E", "2027E", "2028E"]
+tools/export_web_data.py:52:"CY2026": "2026E",
+tools/export_web_data.py:53:"CY2027": "2027E",
+tools/export_web_data.py:54:"CY2028": "2028E",
+tools/export_web_data.py:503:e26 = (c["eps"].get("2026E") or {})
+tools/export_web_data.py:504:e27 = (c["eps"].get("2027E") or {})
+tools/export_web_data.py:505:e28 = (c["eps"].get("2028E") or {})
+tools/export_web_data.py:516:"eps26": e26.get("consensus"),
+tools/export_web_data.py:517:"eps27": e27.get("consensus"),
+tools/export_web_data.py:518:"eps28": e28.get("consensus"),
+tools/export_web_data.py:519:"pe26": pe(price, e26.get("consensus")),
+tools/export_web_data.py:520:"pe27": pe(price, e27.get("consensus")),
+tools/export_web_data.py:521:"pe28": pe(price, e28.get("consensus")),
+tools/export_web_data.py:524:"cagr2628": cagr_2628(e26.get("consensus"), e28.get("consensus")),
+tools/export_web_data.py:526:"rev1M28": rev1m28,
+tools/export_web_data.py:920:"| Ticker | Last Close | Mapped 2026E EPS | Mapped 2027E EPS | Mapped 2028E EPS | 2026E PE | 2027E PE | 2028E PE | 27E G
+tools/export_web_data.py:927:e26 = fmt_md_num(r["eps26"])
+tools/export_web_data.py:928:e27 = fmt_md_num(r["eps27"])
+tools/export_web_data.py:929:e28 = fmt_md_num(r["eps28"])
+tools/export_web_data.py:939:f"{fmt_md_num(r['pe26'])} | {fmt_md_num(r['pe27'])} | {fmt_md_num(r['pe28'])} | {g27} | {g28} | {rev} | {r['momentum']} 
+tools/export_web_data.py:946:ranked28 = [(r["ticker"], r.get("rev1M28")) for r in valuation if r.get("rev1M28") is not None]
+tools/export_web_data.py:957:"| Ticker | Last Close | Mapped 2027E EPS | Reported FY label | 2027E PE | 1M EPS Rev (SA) | EPS Momentum | Last Earning
+tools/export_web_data.py:962:e27 = c["eps"]["2027E"]
+tools/export_web_data.py:964:pe27 = pe(price, e27.get("consensus"))
+tools/export_web_data.py:969:f"{e27.get('reportedFiscalLabel') or 'Data unavailable'} | {fmt_md_num(pe27)} | {rev_s} | "
+tools/export_web_data.py:977:"| Ticker | Mapped 2026E (reported) | Mapped 2027E (reported) | Mapped 2028E (reported) |",
+tools/export_web_data.py:983:for yk in ["2026E", "2027E", "2028E"]:
+tools/export_web_data.py:991:hlines += ["", "## 2. Largest 2027E EPS Upgrades (1M)", ""]
+tools/export_web_data.py:998:hlines += ["", "## 3. Largest 2027E EPS Downgrades (1M)", ""]
+tools/export_web_data.py:1005:hlines += ["", "## 3b. Largest 2028E EPS Upgrades (1M)", ""]
+tools/export_web_data.py:1010:hlines.append("- No positive 2028E 1M revisions in this snapshot.")

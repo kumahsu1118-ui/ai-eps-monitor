@@ -27,6 +27,12 @@ node_modules/
 .DS_Store
 *.log
 overview-verify.png
+pages-verify.png
 .cache/
 tmp/
 ORIGIN.txt
+**/__pycache__/
+*.pyc
+site-repo/.git/
+web/overview-verify.png
+web/pages-verify.png

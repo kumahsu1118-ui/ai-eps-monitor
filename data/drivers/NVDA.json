@@ -1,0 +1,97 @@
+{
+  "ticker": "NVDA",
+  "updated": "2026-09-15T05:30:00Z",
+  "status": "Scored from Q2 FY27 digest (report 2026-08-26) — changes only with digest evidence",
+  "drivers": [
+    {
+      "name": "GPU shipment",
+      "previousStatus": "unchanged",
+      "currentStatus": "improving",
+      "status": "improving",
+      "changedAt": "2026-08-26",
+      "reason": "Record Q2 revenue $96.22B (+106% Y/Y); data-center revenue $89B (+18% QoQ) per IR release.",
+      "sourceUrl": "https://investor.nvidia.com/news/press-release-details/2026/NVIDIA-Announces-Financial-Results-for-Second-Quarter-Fiscal-2027/default.aspx",
+      "note": "Digest evidence: record DC / GPU demand"
+    },
+    {
+      "name": "ASP",
+      "previousStatus": "unchanged",
+      "currentStatus": "unchanged",
+      "status": "unchanged",
+      "changedAt": null,
+      "reason": "No change evidence this report — ASP not separately quantified vs prior quarter in digest.",
+      "sourceUrl": "https://investor.nvidia.com/news/press-release-details/2026/NVIDIA-Announces-Financial-Results-for-Second-Quarter-Fiscal-2027/default.aspx",
+      "note": "No ASP change evidence this report"
+    },
+    {
+      "name": "Rubin / Rubin Ultra",
+      "previousStatus": "unchanged",
+      "currentStatus": "improving",
+      "status": "improving",
+      "changedAt": "2026-08-26",
+      "reason": "Vera Rubin production shipments commenced; expected ~20% of Q3 data-center revenue (digest commentary).",
+      "sourceUrl": "https://seekingalpha.com/article/4940563-nvidia-corporation-nvda-q2-2027-earnings-call-transcript",
+      "note": "Ramp evidence from call/digest"
+    },
+    {
+      "name": "inference demand",
+      "previousStatus": "unchanged",
+      "currentStatus": "improving",
+      "status": "improving",
+      "changedAt": "2026-08-26",
+      "reason": "AI demand broadening; management cites ~70% FY28 revenue growth outlook with demand above supply (IR/digest).",
+      "sourceUrl": "https://investor.nvidia.com/news/press-release-details/2026/NVIDIA-Announces-Financial-Results-for-Second-Quarter-Fiscal-2027/default.aspx",
+      "note": "AI demand improving from record DC revenue / growth outlook"
+    },
+    {
+      "name": "HBM supply",
+      "previousStatus": "unchanged",
+      "currentStatus": "deteriorating",
+      "status": "deteriorating",
+      "changedAt": "2026-08-26",
+      "reason": "Memory pricing rising sharply; GM guide reset with Q4 trough 71%-72% tied to memory scarcity (digest negatives).",
+      "sourceUrl": "https://investor.nvidia.com/news/press-release-details/2026/NVIDIA-Announces-Financial-Results-for-Second-Quarter-Fiscal-2027/default.aspx",
+      "note": "Memory/HBM cost pressure"
+    },
+    {
+      "name": "TSMC capacity",
+      "previousStatus": "unchanged",
+      "currentStatus": "unchanged",
+      "status": "unchanged",
+      "changedAt": null,
+      "reason": "No change evidence this report specific to TSMC capacity allocation.",
+      "sourceUrl": "https://investor.nvidia.com/news/press-release-details/2026/NVIDIA-Announces-Financial-Results-for-Second-Quarter-Fiscal-2027/default.aspx",
+      "note": "No TSMC-specific change evidence"
+    },
+    {
+      "name": "CoWoS / advanced packaging",
+      "previousStatus": "unchanged",
+      "currentStatus": "unchanged",
+      "status": "unchanged",
+      "changedAt": null,
+      "reason": "No change evidence this report — packaging not newly scored vs prior.",
+      "sourceUrl": "https://investor.nvidia.com/news/press-release-details/2026/NVIDIA-Announces-Financial-Results-for-Second-Quarter-Fiscal-2027/default.aspx",
+      "note": "No change evidence this report"
+    },
+    {
+      "name": "networking",
+      "previousStatus": "unchanged",
+      "currentStatus": "improving",
+      "status": "improving",
+      "changedAt": "2026-08-26",
+      "reason": "Networking revenue grew 18% sequentially in Q2 (digest Q&A / commentary).",
+      "sourceUrl": "https://seekingalpha.com/article/4940563-nvidia-corporation-nvda-q2-2027-earnings-call-transcript",
+      "note": "Sequential networking growth"
+    },
+    {
+      "name": "gross margin",
+      "previousStatus": "unchanged",
+      "currentStatus": "deteriorating",
+      "status": "deteriorating",
+      "changedAt": "2026-08-26",
+      "reason": "Q3 GM guided 74% ±50 bps; Q4 trough expected 71%-72% vs Q2 reported 75% — memory-driven reset (IR guidance).",
+      "sourceUrl": "https://investor.nvidia.com/news/press-release-details/2026/NVIDIA-Announces-Financial-Results-for-Second-Quarter-Fiscal-2027/default.aspx",
+      "note": "GM deteriorating from memory/GM guide"
+    }
+  ]
+}

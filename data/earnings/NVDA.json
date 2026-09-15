@@ -1,0 +1,318 @@
+{
+  "ticker": "NVDA",
+  "hasDigest": true,
+  "reportDate": "2026-08-26",
+  "periodLabel": "Q2 2027 (fiscal 2027)",
+  "lastEarnings": "8/26/2026",
+  "nextEarnings": "11/25/2026 (Post-Market)",
+  "revenue": [
+    {
+      "label": "Revenue",
+      "value": "$96.22B",
+      "yoy": "+105.85% Y/Y",
+      "qoq": null,
+      "sourceUrl": "https://investor.nvidia.com/news/press-release-details/2026/NVIDIA-Announces-Financial-Results-for-Second-Quarter-Fiscal-2027/default.aspx",
+      "sourceTier": 1,
+      "source": "Company IR"
+    }
+  ],
+  "eps": [
+    {
+      "label": "EPS",
+      "value": "$2.22",
+      "type": "non-GAAP (call discusses non-GAAP measures)",
+      "sourceUrl": "https://investor.nvidia.com/news/press-release-details/2026/NVIDIA-Announces-Financial-Results-for-Second-Quarter-Fiscal-2027/default.aspx",
+      "sourceTier": 1,
+      "source": "Company IR"
+    }
+  ],
+  "margins": [
+    {
+      "label": "Gross Margin",
+      "value": "75% GAAP and non-GAAP",
+      "sourceUrl": "https://investor.nvidia.com/news/press-release-details/2026/NVIDIA-Announces-Financial-Results-for-Second-Quarter-Fiscal-2027/default.aspx",
+      "sourceTier": 1,
+      "source": "Company IR"
+    }
+  ],
+  "results": {
+    "revenue": "$96.22B",
+    "revenueYoY": "+105.85% Y/Y",
+    "eps": "$2.22",
+    "epsType": "non-GAAP (call discusses non-GAAP measures)",
+    "grossMargin": "75% GAAP and non-GAAP",
+    "vsConsensus": "Above",
+    "notes": "SA earnings summary says EPS beat consensus by $0.13 and revenue beat by $4.06B. Data-center revenue was $89B, +18% QoQ; hyperscale was $49B, +13% sequentially; ACIE was $40B, +25% sequentially and +138% Y/Y.",
+    "sourceUrl": "https://investor.nvidia.com/news/press-release-details/2026/NVIDIA-Announces-Financial-Results-for-Second-Quarter-Fiscal-2027/default.aspx",
+    "secUrl": "https://www.sec.gov/Archives/edgar/data/1045810/000104581026000073/nvda-20260826.htm",
+    "sourceTier": 1
+  },
+  "guidance": "Next-qtr revenue: $108B +/- 2%; GM guide: Q3 FY27 GAAP and non-GAAP 74% +/- 50 bps; expected Q4 trough 71%-72%; FY28 expected 72%-73%; Annual / LT: Preliminary FY28 revenue growth approximately 70% Y/Y; supply expected to remain a bottleneck through at least FY28; Guide vs consensus: unknown",
+  "guidanceDetail": {
+    "nextQuarterRevenue": "$108B +/- 2%",
+    "grossMargin": "Q3 FY27 GAAP and non-GAAP 74% +/- 50 bps; expected Q4 trough 71%-72%; FY28 expected 72%-73%",
+    "annual": "Preliminary FY28 revenue growth approximately 70% Y/Y; supply expected to remain a bottleneck through at least FY28",
+    "vsConsensus": "unknown",
+    "sourceUrl": "https://investor.nvidia.com/news/press-release-details/2026/NVIDIA-Announces-Financial-Results-for-Second-Quarter-Fiscal-2027/default.aspx",
+    "sourceTier": 1
+  },
+  "comparison": "Above",
+  "positives": [
+    {
+      "text": "Record Q2 revenue of $96.22B more than doubled year-over-year; SA summary reports 105.85% Y/Y growth and an EPS/revenue beat.",
+      "source": "Seeking Alpha supplemental (earnings transcript)",
+      "sourceDate": "2026-08-26",
+      "url": "https://seekingalpha.com/article/4940563-nvidia-corporation-nvda-q2-2027-earnings-call-transcript",
+      "sourceTier": 4
+    },
+    {
+      "text": "Data-center revenue reached $89B, up 18% sequentially; ACIE revenue was $40B, up 25% sequentially and 138% Y/Y.",
+      "source": "Seeking Alpha supplemental (earnings transcript)",
+      "sourceDate": "2026-08-26",
+      "url": "https://seekingalpha.com/article/4940563-nvidia-corporation-nvda-q2-2027-earnings-call-transcript",
+      "sourceTier": 4
+    },
+    {
+      "text": "AWS is deploying an additional 2 million NVIDIA GPUs from Q2 FY27 through Q2 FY29; Vera Rubin production shipments commenced and are expected to be the fastest product ramp in company history.",
+      "source": "Seeking Alpha supplemental (earnings transcript)",
+      "sourceDate": "2026-08-26",
+      "url": "https://seekingalpha.com/article/4940563-nvidia-corporation-nvda-q2-2027-earnings-call-transcript",
+      "sourceTier": 4
+    },
+    {
+      "text": "NVIDIA expects approximately 70% FY28 revenue growth; demand is described as higher, but the outlook is supply constrained.",
+      "source": "Seeking Alpha supplemental (earnings transcript)",
+      "sourceDate": "2026-08-26",
+      "url": "https://seekingalpha.com/article/4940563-nvidia-corporation-nvda-q2-2027-earnings-call-transcript",
+      "sourceTier": 4
+    },
+    {
+      "text": "Vera CPU revenue is preliminarily expected to more than double in FY28; management sees approximately $20B total server-CPU demand.",
+      "source": "Seeking Alpha supplemental (earnings transcript)",
+      "sourceDate": "2026-08-26",
+      "url": "https://seekingalpha.com/article/4940563-nvidia-corporation-nvda-q2-2027-earnings-call-transcript",
+      "sourceTier": 4
+    }
+  ],
+  "negatives": [
+    {
+      "text": "Memory pricing is rising sharply; management reset Q3 gross-margin expectations to 74% and expects a Q4 bottom at 71%-72%.",
+      "source": "Seeking Alpha supplemental (earnings transcript)",
+      "sourceDate": "2026-08-26",
+      "url": "https://seekingalpha.com/article/4940563-nvidia-corporation-nvda-q2-2027-earnings-call-transcript",
+      "sourceTier": 4
+    },
+    {
+      "text": "Current Hopper shipments are dilutive to corporate gross margin, and the forward outlook contains no China data-center compute revenue due to geopolitical uncertainty.",
+      "source": "Seeking Alpha supplemental (earnings transcript)",
+      "sourceDate": "2026-08-26",
+      "url": "https://seekingalpha.com/article/4940563-nvidia-corporation-nvda-q2-2027-earnings-call-transcript",
+      "sourceTier": 4
+    },
+    {
+      "text": "GAAP and non-GAAP operating expenses rose 10% and 11% sequentially; full-year FY27 OpEx is expected to grow in the low 50s.",
+      "source": "Seeking Alpha supplemental (earnings transcript)",
+      "sourceDate": "2026-08-26",
+      "url": "https://seekingalpha.com/article/4940563-nvidia-corporation-nvda-q2-2027-earnings-call-transcript",
+      "sourceTier": 4
+    },
+    {
+      "text": "Inventory rose to $32B and days sales outstanding to 60 days, reflecting preparation for Vera Rubin and extended payment terms on large customer purchases.",
+      "source": "Seeking Alpha supplemental (earnings transcript)",
+      "sourceDate": "2026-08-26",
+      "url": "https://seekingalpha.com/article/4940563-nvidia-corporation-nvda-q2-2027-earnings-call-transcript",
+      "sourceTier": 4
+    }
+  ],
+  "uncertainties": [
+    {
+      "text": "Supply is expected to remain a bottleneck through at least FY28, despite demand that management says is materially above the 70% outlook.",
+      "source": "Seeking Alpha supplemental (earnings transcript)",
+      "sourceDate": "2026-08-26",
+      "url": "https://seekingalpha.com/article/4940563-nvidia-corporation-nvda-q2-2027-earnings-call-transcript",
+      "sourceTier": 4
+    },
+    {
+      "text": "NVIDIA has invested nearly $50B in frontier AI labs and may provide selective credit enhancement; management notes the scale and circular-financing criticism.",
+      "source": "Seeking Alpha supplemental (earnings transcript)",
+      "sourceDate": "2026-08-26",
+      "url": "https://seekingalpha.com/article/4940563-nvidia-corporation-nvda-q2-2027-earnings-call-transcript",
+      "sourceTier": 4
+    },
+    {
+      "text": "AI-lab demand supported by NVIDIA balance-sheet leverage could represent roughly one-quarter of next year's business; customer payment terms have lengthened.",
+      "source": "Seeking Alpha supplemental (earnings transcript)",
+      "sourceDate": "2026-08-26",
+      "url": "https://seekingalpha.com/article/4940563-nvidia-corporation-nvda-q2-2027-earnings-call-transcript",
+      "sourceTier": 4
+    }
+  ],
+  "commentary": "AI demand: Demand is broadening across hyperscalers, AI labs, neoclouds, enterprises and sovereigns; AI agents require materially more compute than conventional use cases. | Capacity: Neocloud partners are expected to exit the year with 8GW of installed capacity versus approximately 3GW at end-2025; Vera Rubin is expected to be about 20% of Q3 data-center revenue. | Gross margin: Memory scarcity is driven by the AI buildout; price increases are expected to be offset over time by executed customer price increases, but management expects margins to bottom in Q4. | Customers: AWS expansion, OpenAI commitments of approximately 12GW through 2030, and additional frontier-lab demand support future shipments, while China is excluded from forward data-center compute outlook.",
+  "commentaryDetail": [
+    {
+      "topic": "AI demand",
+      "text": "Demand is broadening across hyperscalers, AI labs, neoclouds, enterprises and sovereigns; AI agents require materially more compute than conventional use cases.",
+      "source": "NVIDIA IR official Corrected Earnings Call Transcript (Q2 FY2027, 26 Aug 2026 5:00 PM ET)",
+      "url": "https://investor.nvidia.com/files/content_files/TRANSCRIPT_-NVIDIA-Corp-NVDA-US-Q2-2027-Earnings-Call-26-August-2026-5_00-PM-ET.pdf",
+      "sourceDate": "2026-08-26",
+      "sourceTier": 3,
+      "supplementalUrl": "https://seekingalpha.com/article/4940563-nvidia-corporation-nvda-q2-2027-earnings-call-transcript"
+    },
+    {
+      "topic": "Capacity",
+      "text": "Neocloud partners are expected to exit the year with 8GW of installed capacity versus approximately 3GW at end-2025; Vera Rubin is expected to be about 20% of Q3 data-center revenue.",
+      "source": "NVIDIA IR official Corrected Earnings Call Transcript (Q2 FY2027, 26 Aug 2026 5:00 PM ET)",
+      "url": "https://investor.nvidia.com/files/content_files/TRANSCRIPT_-NVIDIA-Corp-NVDA-US-Q2-2027-Earnings-Call-26-August-2026-5_00-PM-ET.pdf",
+      "sourceDate": "2026-08-26",
+      "sourceTier": 3,
+      "supplementalUrl": "https://seekingalpha.com/article/4940563-nvidia-corporation-nvda-q2-2027-earnings-call-transcript"
+    },
+    {
+      "topic": "Gross margin",
+      "text": "Memory scarcity is driven by the AI buildout; price increases are expected to be offset over time by executed customer price increases, but management expects margins to bottom in Q4.",
+      "source": "NVIDIA IR official Corrected Earnings Call Transcript (Q2 FY2027, 26 Aug 2026 5:00 PM ET)",
+      "url": "https://investor.nvidia.com/files/content_files/TRANSCRIPT_-NVIDIA-Corp-NVDA-US-Q2-2027-Earnings-Call-26-August-2026-5_00-PM-ET.pdf",
+      "sourceDate": "2026-08-26",
+      "sourceTier": 3,
+      "supplementalUrl": "https://seekingalpha.com/article/4940563-nvidia-corporation-nvda-q2-2027-earnings-call-transcript"
+    },
+    {
+      "topic": "Customers",
+      "text": "AWS expansion, OpenAI commitments of approximately 12GW through 2030, and additional frontier-lab demand support future shipments, while China is excluded from forward data-center compute outlook.",
+      "source": "NVIDIA IR official Corrected Earnings Call Transcript (Q2 FY2027, 26 Aug 2026 5:00 PM ET)",
+      "url": "https://investor.nvidia.com/files/content_files/TRANSCRIPT_-NVIDIA-Corp-NVDA-US-Q2-2027-Earnings-Call-26-August-2026-5_00-PM-ET.pdf",
+      "sourceDate": "2026-08-26",
+      "sourceTier": 3,
+      "supplementalUrl": "https://seekingalpha.com/article/4940563-nvidia-corporation-nvda-q2-2027-earnings-call-transcript"
+    }
+  ],
+  "qa": [
+    {
+      "question": "Why guide to about 70% FY28 revenue growth when management says demand is higher?",
+      "answer": "Management says supply, not demand, supports the 70% outlook; supply is expected to remain a bottleneck through FY28.",
+      "whyMattersForEps": "2027E/2028E",
+      "source": "NVIDIA IR official Corrected Earnings Call Transcript (Q2 FY2027, 26 Aug 2026 5:00 PM ET)",
+      "sourceDate": "2026-08-26",
+      "url": "https://investor.nvidia.com/files/content_files/TRANSCRIPT_-NVIDIA-Corp-NVDA-US-Q2-2027-Earnings-Call-26-August-2026-5_00-PM-ET.pdf",
+      "sourceTier": 3,
+      "supplementalUrl": "https://seekingalpha.com/article/4940563-nvidia-corporation-nvda-q2-2027-earnings-call-transcript",
+      "supplementalSource": "Seeking Alpha supplemental (tier 4)"
+    },
+    {
+      "question": "What is the near-term gross-margin path?",
+      "answer": "Q3 GAAP and non-GAAP gross margin is guided to 74% +/- 50 bps; management expects Q4 at 71%-72% and FY28 at 72%-73%.",
+      "whyMattersForEps": "2026E/2027E/2028E",
+      "source": "NVIDIA IR official Corrected Earnings Call Transcript (Q2 FY2027, 26 Aug 2026 5:00 PM ET)",
+      "sourceDate": "2026-08-26",
+      "url": "https://investor.nvidia.com/files/content_files/TRANSCRIPT_-NVIDIA-Corp-NVDA-US-Q2-2027-Earnings-Call-26-August-2026-5_00-PM-ET.pdf",
+      "sourceTier": 3,
+      "supplementalUrl": "https://seekingalpha.com/article/4940563-nvidia-corporation-nvda-q2-2027-earnings-call-transcript",
+      "supplementalSource": "Seeking Alpha supplemental (tier 4)"
+    },
+    {
+      "question": "How material are frontier AI labs to future revenue and risk?",
+      "answer": "Demand from labs for which NVIDIA may leverage its balance sheet could be roughly one-quarter of next year's business; NVIDIA has invested nearly $50B and may provide selective credit enhancement.",
+      "whyMattersForEps": "2027E",
+      "source": "NVIDIA IR official Corrected Earnings Call Transcript (Q2 FY2027, 26 Aug 2026 5:00 PM ET)",
+      "sourceDate": "2026-08-26",
+      "url": "https://investor.nvidia.com/files/content_files/TRANSCRIPT_-NVIDIA-Corp-NVDA-US-Q2-2027-Earnings-Call-26-August-2026-5_00-PM-ET.pdf",
+      "sourceTier": 3,
+      "supplementalUrl": "https://seekingalpha.com/article/4940563-nvidia-corporation-nvda-q2-2027-earnings-call-transcript",
+      "supplementalSource": "Seeking Alpha supplemental (tier 4)"
+    },
+    {
+      "question": "What customer capacity is already visible?",
+      "answer": "AWS plans an additional 2M GPUs from this quarter through Q2 FY29; OpenAI's existing and planned commitments represent approximately 12GW of NVIDIA compute through 2030.",
+      "whyMattersForEps": "2026E/2027E/2028E",
+      "source": "NVIDIA IR official Corrected Earnings Call Transcript (Q2 FY2027, 26 Aug 2026 5:00 PM ET)",
+      "sourceDate": "2026-08-26",
+      "url": "https://investor.nvidia.com/files/content_files/TRANSCRIPT_-NVIDIA-Corp-NVDA-US-Q2-2027-Earnings-Call-26-August-2026-5_00-PM-ET.pdf",
+      "sourceTier": 3,
+      "supplementalUrl": "https://seekingalpha.com/article/4940563-nvidia-corporation-nvda-q2-2027-earnings-call-transcript",
+      "supplementalSource": "Seeking Alpha supplemental (tier 4)"
+    },
+    {
+      "question": "What is driving the mix beyond GPUs?",
+      "answer": "Management expects Vera CPU revenue to more than double in FY28, with approximately $20B of total server-CPU demand; networking revenue also grew 18% sequentially in Q2.",
+      "whyMattersForEps": "2027E/2028E",
+      "source": "NVIDIA IR official Corrected Earnings Call Transcript (Q2 FY2027, 26 Aug 2026 5:00 PM ET)",
+      "sourceDate": "2026-08-26",
+      "url": "https://investor.nvidia.com/files/content_files/TRANSCRIPT_-NVIDIA-Corp-NVDA-US-Q2-2027-Earnings-Call-26-August-2026-5_00-PM-ET.pdf",
+      "sourceTier": 3,
+      "supplementalUrl": "https://seekingalpha.com/article/4940563-nvidia-corporation-nvda-q2-2027-earnings-call-transcript",
+      "supplementalSource": "Seeking Alpha supplemental (tier 4)"
+    }
+  ],
+  "sources": [
+    {
+      "tier": 1,
+      "title": "NVDA Company IR earnings release",
+      "url": "https://investor.nvidia.com/news/press-release-details/2026/NVIDIA-Announces-Financial-Results-for-Second-Quarter-Fiscal-2027/",
+      "date": "2026-08-26",
+      "sourceTier": "Company IR"
+    },
+    {
+      "title": "NVIDIA Announces Financial Results for Second Quarter Fiscal 2027",
+      "url": "https://investor.nvidia.com/news/press-release-details/2026/NVIDIA-Announces-Financial-Results-for-Second-Quarter-Fiscal-2027/default.aspx",
+      "date": "2026-08-26",
+      "sourceTier": 1,
+      "attribution": "Company IR",
+      "note": "Official investor.nvidia.com press release"
+    },
+    {
+      "title": "NVIDIA Form 8-K (Item 2.02) — Q2 FY2027",
+      "url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581026000073/nvda-20260826.htm",
+      "date": "2026-08-26",
+      "sourceTier": 2,
+      "attribution": "SEC",
+      "note": "Current Report on Form 8-K; press release as Exhibit 99.1"
+    },
+    {
+      "title": "Exhibit 99.1 — Q2 FY2027 Press Release (SEC)",
+      "url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581026000073/q2fy27pr.htm",
+      "date": "2026-08-26",
+      "sourceTier": 2,
+      "attribution": "SEC",
+      "note": "Press release furnished with 8-K"
+    },
+    {
+      "title": "NVIDIA Corp NVDA US Q2 2027 Earnings Call — Official Corrected Transcript",
+      "url": "https://investor.nvidia.com/files/content_files/TRANSCRIPT_-NVIDIA-Corp-NVDA-US-Q2-2027-Earnings-Call-26-August-2026-5_00-PM-ET.pdf",
+      "date": "2026-08-26",
+      "sourceTier": 3,
+      "attribution": "Company IR",
+      "note": "Official investor.nvidia.com Corrected Earnings Call Transcript (verified PDF). Used for Q&A and management commentary."
+    },
+    {
+      "title": "NVIDIA Corporation (NVDA) Q2 2027 Earnings Call Transcript",
+      "url": "https://seekingalpha.com/article/4940563-nvidia-corporation-nvda-q2-2027-earnings-call-transcript",
+      "date": "2026-08-26",
+      "sourceTier": 4,
+      "attribution": "Seeking Alpha supplemental",
+      "note": "SA-hosted transcript — Q&A supplemental (tier 4)"
+    },
+    {
+      "title": "NVIDIA Q2 2027 Earnings Call Insights",
+      "url": "https://seekingalpha.com/news/4637259-nvidia-expects-70-percent-fiscal-2028-revenue-growth-as-it-resets-gross-margin-outlook",
+      "date": "2026-08-26",
+      "sourceTier": 4,
+      "attribution": "Seeking Alpha supplemental",
+      "note": "Seeking Alpha supplemental coverage SA demoted to Tier 4 supplemental; official IR transcript is Tier 3."
+    }
+  ],
+  "dataGaps": [
+    "revenueQoQ for consolidated revenue not stated on the transcript page",
+    "operatingMargin not stated",
+    "fcf not stated",
+    "nextQuarterEps not stated",
+    "guidance operatingMargin not stated"
+  ],
+  "digestVersion": "investor-v1",
+  "updatedAt": "2026-09-15T05:30:00Z",
+  "sourceHierarchy": "Source hierarchy: (1) Company IR earnings release (2) SEC 10-Q/10-K/8-K (3) Official IR Corrected Earnings Call Transcript (https://investor.nvidia.com/files/content_files/TRANSCRIPT_-NVIDIA-Corp-NVDA-US-Q2-2027-Earnings-Call-26-August-2026-5_00-PM-ET.pdf) (4) Seeking Alpha supplemental",
+  "nextEarningsStatus": "estimated",
+  "nextEarningsSource": "Seeking Alpha",
+  "qaPrimarySource": "NVIDIA IR official Corrected Earnings Call Transcript (Q2 FY2027, 26 Aug 2026 5:00 PM ET)",
+  "qaPrimarySourceUrl": "https://investor.nvidia.com/files/content_files/TRANSCRIPT_-NVIDIA-Corp-NVDA-US-Q2-2027-Earnings-Call-26-August-2026-5_00-PM-ET.pdf",
+  "qaPrimarySourceTier": 3
+}

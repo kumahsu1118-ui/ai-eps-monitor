@@ -1,0 +1,42 @@
+{
+  "ticker": "KEYS",
+  "updated": "2026-09-15T01:36:00Z",
+  "status": "Baseline — not yet scored vs prior earnings",
+  "drivers": [
+    {
+      "name": "AI / data center testing",
+      "status": "unchanged",
+      "note": "Awaiting first post-setup earnings refresh"
+    },
+    {
+      "name": "semiconductor test",
+      "status": "unchanged",
+      "note": "Awaiting first post-setup earnings refresh"
+    },
+    {
+      "name": "networking",
+      "status": "unchanged",
+      "note": "Awaiting first post-setup earnings refresh"
+    },
+    {
+      "name": "800G / 1.6T",
+      "status": "unchanged",
+      "note": "Awaiting first post-setup earnings refresh"
+    },
+    {
+      "name": "R&D demand",
+      "status": "unchanged",
+      "note": "Awaiting first post-setup earnings refresh"
+    },
+    {
+      "name": "order growth",
+      "status": "unchanged",
+      "note": "Awaiting first post-setup earnings refresh"
+    },
+    {
+      "name": "gross margin",
+      "status": "unchanged",
+      "note": "Awaiting first post-setup earnings refresh"
+    }
+  ]
+}
