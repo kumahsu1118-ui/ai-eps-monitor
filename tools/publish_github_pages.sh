@@ -1,47 +1,16 @@
 #!/usr/bin/env bash
-# Publish-only GitHub Pages sync (ingest is the sole pipeline writer).
-#
-# Default: publish already-exported CURRENT generation web/; do not re-export
-# or mutate snapshots/revisions/daily/alerts. Pass --legacy-mutate to re-export.
-#
-# AI_EPS_ROOT / AIEPS_ROOT: configurable project root (fixture / work root).
-# PIPELINE_LOCK_HELD=1: parent already holds data/.pipeline.lock — skip re-flock.
-# Pending publish: data/.pending-publish retries after a failed push, always
-# from CURRENT generation web/ after ensure_live_matches_current.
+# Sync FULL public web/ asset tree → site-repo → git push
+# Second line of defense: abort if qualityGate.publishable != true
+# NO_CHANGES (exit 0) when public payload hash unchanged
+# ROOT via AI_EPS_ROOT or script-relative project root (never hard-require /workspace/...)
 set -euo pipefail
-
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-if [[ -n "${AI_EPS_ROOT:-}" ]]; then
-  ROOT="$AI_EPS_ROOT"
-elif [[ -n "${AIEPS_ROOT:-}" ]]; then
-  ROOT="$AIEPS_ROOT"
-else
-  ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-fi
-ROOT="$(cd "$ROOT" && pwd)"
-export AI_EPS_ROOT="$ROOT"
-export AIEPS_ROOT="$ROOT"
-
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT="${AI_EPS_ROOT:-$(cd "$SCRIPT_DIR/.." && pwd)}"
 LOCK="$ROOT/data/.pipeline.lock"
-PENDING="$ROOT/data/.pending-publish"
 mkdir -p "$ROOT/data"
-
-LEGACY_MUTATE=0
-VALIDATE_ONLY=0
-for arg in "$@"; do
-  if [[ "$arg" == "--legacy-mutate" ]]; then
-    LEGACY_MUTATE=1
-  fi
-  if [[ "$arg" == "--validate-only" ]]; then
-    VALIDATE_ONLY=1
-  fi
-done
-if [[ "${LEGACY_MUTATE_ENV:-}" == "1" ]]; then
-  LEGACY_MUTATE=1
-fi
-
-if [[ "${PIPELINE_LOCK_HELD:-0}" == "1" ]]; then
-  echo "skip re-flock (PIPELINE_LOCK_HELD=1)"
+# Nested pipeline: if parent ingest already holds data/.pipeline.lock, do NOT re-acquire.
+if [[ "${PIPELINE_LOCK_HELD:-}" == "1" ]]; then
+  echo "pipeline lock already held by parent — skip re-acquire"
 else
   exec 9>"$LOCK"
   if ! flock -n 9; then
@@ -50,56 +19,37 @@ else
   fi
   export PIPELINE_LOCK_HELD=1
 fi
+WEB="$ROOT/web"
+REPO="$ROOT/site-repo"
+export PATH="/home/box/.local/bin:$PATH"
+export AI_EPS_ROOT="$ROOT"
 
-export PATH="/home/box/.local/bin:${PATH:-}"
-REPO="${SITE_REPO:-$ROOT/site-repo}"
-
-# Publish-only unless --legacy-mutate explicitly re-enables export.
-if [[ "$LEGACY_MUTATE" -eq 1 && "${SKIP_EXPORT:-}" != "1" && "${PUBLISH_PREBUILT:-}" != "1" ]]; then
-  set +e
-  python3 "$ROOT/tools/export_web_data.py" --legacy-mutate
-  EXP_RC=$?
-  set -e
-  if [[ "$EXP_RC" -ne 0 ]]; then
-    echo "ERROR: export_web_data.py exited $EXP_RC — abort publish (fail-closed)" >&2
-    exit "$EXP_RC"
-  fi
-else
-  echo "publish-only: skipping export (pass --legacy-mutate to re-export)"
-  export SKIP_EXPORT=1
-  export PUBLISH_PREBUILT=1
+# Publish-only: NEVER recompute / mutate financial history (ingest is sole writer).
+# SKIP_EXPORT / PUBLISH_PREBUILT kept for back-compat; export path removed.
+echo "publish-only: no export / no history mutation (ingest_snapshot.py is sole writer)"
+if [[ "${ALLOW_PUBLISH_EXPORT:-}" == "1" ]]; then
+  echo "ERROR: ALLOW_PUBLISH_EXPORT is banned — publish must not recompute" >&2
+  exit 2
 fi
 
-# Prefer CURRENT generation web/; ensure live matches CURRENT before pending retry.
-eval "$(python3 - <<'PYWEB'
-import os, sys
+# Stamp cache-bust THEN finalize appVersion/releaseVersion so meta matches final asset tree
+python3 - <<PYSTAMP
+import sys
 from pathlib import Path
-root = Path(os.environ["AI_EPS_ROOT"])
-sys.path.insert(0, str(root / "tools"))
-from transaction import ensure_live_matches_current, resolve_publish_web_dir, read_current
-from atomic_io import has_pending_publish
-pending = has_pending_publish(root)
-status = ensure_live_matches_current(root, repair=False)
-web = resolve_publish_web_dir(root)
-current = read_current(root) or ""
-print(f"export PUBLISH_WEB={web}")
-print(f"export PUBLISH_CURRENT={current}")
-print(f"export LIVE_MATCHES_CURRENT={'1' if status.get('matched') else '0'}")
-print(f"export PENDING_PUBLISH={'1' if pending else '0'}")
-if pending:
-    print("pending publish retry: using CURRENT generation web/", file=sys.stderr)
-print(f"publish web={web} current={current or 'none'} live_matches={status.get('matched')} pending={pending}", file=sys.stderr)
-PYWEB
-)"
+sys.path.insert(0, "${ROOT}/tools")
+from ingest_snapshot import finalize_release_identity, ensure_live_matches_current, rebind_paths
+root = Path("${ROOT}")
+rebind_paths(root)
+ensure_live_matches_current()
+meta = finalize_release_identity(root / "web")
+print("cache-bust + release identity finalized appVersion=", (meta or {}).get("appVersion", "")[:16])
+PYSTAMP
 
-WEB="${PUBLISH_WEB:-$ROOT/web}"
-export PUBLISH_WEB="$WEB"
-
-python3 - <<'PYGATE'
-import json, os, sys
+# Second line of defense: qualityGate.publishable must be true
+python3 - <<PYGATE
+import json, sys
 from pathlib import Path
-web = Path(os.environ.get("PUBLISH_WEB") or (Path(os.environ["AI_EPS_ROOT"]) / "web"))
-meta_path = web / "data" / "meta.json"
+meta_path = Path("${ROOT}") / "web" / "data" / "meta.json"
 if not meta_path.exists():
     print("ERROR: meta.json missing after export — abort publish", file=sys.stderr)
     sys.exit(1)
@@ -112,24 +62,62 @@ if qg.get("publishable") is not True:
         file=sys.stderr,
     )
     sys.exit(1)
-print(f"qualityGate OK status={qg.get('status')} publishable=true web={web}")
+print(f"qualityGate OK status={qg.get('status')} publishable=true")
 PYGATE
 
-if [[ "${VALIDATE_ONLY:-0}" == "1" ]]; then
-  echo "VALIDATE_ONLY — no git commit / push"
-  exit 0
-fi
-
-HASH=$(python3 - <<'PY'
-import os, sys
+# Compute content hash: full static tree (incl vendor) + dataVersion + refreshVersion
+HASH=$(AI_EPS_ROOT="$ROOT" python3 - <<'PY'
+import hashlib, json, os, re, sys
 from pathlib import Path
-web = Path(os.environ.get("PUBLISH_WEB") or (Path(os.environ["AI_EPS_ROOT"]) / "web"))
-sys.path.insert(0, str(Path(os.environ["AI_EPS_ROOT"]) / "tools"))
-from static_publish import compute_publish_hash
-print(compute_publish_hash(web))
+ROOT = Path(os.environ["AI_EPS_ROOT"])
+WEB = ROOT / "web"
+sys.path.insert(0, str(ROOT / "tools"))
+from ingest_snapshot import iter_frontend_static_files, list_index_local_assets
+
+h = hashlib.sha256()
+
+def feed_bytes(b: bytes):
+    h.update(len(b).to_bytes(8, "big"))
+    h.update(b)
+
+def feed_file(p: Path):
+    feed_bytes(p.read_bytes())
+
+# Full frontend static deps including vendor/
+for p in iter_frontend_static_files(WEB):
+    feed_bytes(str(p.relative_to(WEB)).encode("utf-8"))
+    feed_file(p)
+
+meta_path = WEB / "data" / "meta.json"
+meta = json.loads(meta_path.read_text(encoding="utf-8")) if meta_path.exists() else {}
+if meta.get("dataVersion") or meta.get("refreshVersion"):
+    feed_bytes(str(meta.get("dataVersion") or "").encode("utf-8"))
+    feed_bytes(b"|")
+    feed_bytes(str(meta.get("refreshVersion") or "").encode("utf-8"))
+else:
+    data_names = [
+        "companies.json",
+        "valuation.json",
+        "revisions.json",
+        "eps_history.json",
+        "earnings.json",
+        "watchlist.json",
+    ]
+    for name in data_names:
+        p = WEB / "data" / name
+        if p.exists():
+            feed_file(p)
+    ap = WEB / "data" / "alerts.json"
+    if ap.exists():
+        alerts = json.loads(ap.read_text(encoding="utf-8"))
+        feed_bytes(json.dumps({
+            "activeAlerts": alerts.get("activeAlerts") or alerts.get("alerts") or [],
+            "alertEngineStatus": alerts.get("alertEngineStatus"),
+        }, sort_keys=True, separators=(",", ":")).encode("utf-8"))
+
+print(h.hexdigest())
 PY
 )
-export EXPORT_HASH="$HASH"
 
 VERSION_FILE="$REPO/.data-version"
 PREV=""
@@ -137,31 +125,24 @@ if [[ -f "$VERSION_FILE" ]]; then
   PREV=$(tr -d '[:space:]' < "$VERSION_FILE" || true)
 fi
 
-PENDING_EXISTS=0
-if [[ -f "$PENDING" ]]; then
-  PENDING_EXISTS=1
-  echo "pending publish retry: $PENDING (CURRENT gen web=$WEB)"
-fi
-
-if [[ -n "$PREV" && "$PREV" == "$HASH" && "$PENDING_EXISTS" -eq 0 && "${FORCE_PUBLISH:-0}" != "1" ]]; then
+if [[ -n "$PREV" && "$PREV" == "$HASH" ]]; then
   echo "NO_CHANGES"
   exit 0
 fi
 
-# Stamp sitePublished on the *publish source* (CURRENT gen web when present).
-EXPORT_HASH="$HASH" python3 - <<'PYSTAMP'
+# Payload changed — stamp sitePublished + atomically sync meta.json AND dashboard.json.meta
+EXPORT_HASH="$HASH" AI_EPS_ROOT="$ROOT" python3 - <<'PYSTAMP'
 import json
 import os
 import sys
 from pathlib import Path
 from datetime import datetime, timezone, timedelta
-sys.path.insert(0, str(Path(os.environ["AI_EPS_ROOT"]) / "tools"))
+ROOT = Path(os.environ["AI_EPS_ROOT"])
+sys.path.insert(0, str(ROOT / "tools"))
 from atomic_io import atomic_write_json
-from static_publish import compute_app_version, compute_release_version
 
-web = Path(os.environ.get("PUBLISH_WEB") or (Path(os.environ["AI_EPS_ROOT"]) / "web"))
-meta_path = web / "data" / "meta.json"
-dash_path = web / "data" / "dashboard.json"
+meta_path = ROOT / "web" / "data" / "meta.json"
+dash_path = ROOT / "web" / "data" / "dashboard.json"
 meta = json.loads(meta_path.read_text(encoding="utf-8"))
 now = datetime.now(timezone(timedelta(hours=8)))
 utc = now.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -175,16 +156,6 @@ hash_val = os.environ.get("EXPORT_HASH") or ""
 if not meta.get("dataVersion") and hash_val:
     meta["dataVersion"] = hash_val
     meta["buildId"] = hash_val
-app_v = compute_app_version(web)
-rel_v = compute_release_version(
-    web,
-    app_version=app_v,
-    data_version=meta.get("dataVersion"),
-    refresh_version=meta.get("refreshVersion"),
-)
-meta["appVersion"] = app_v
-meta["releaseVersion"] = rel_v
-meta["schemaVersion"] = meta.get("schemaVersion") or "1"
 atomic_write_json(meta_path, meta)
 if dash_path.exists():
     dash = json.loads(dash_path.read_text(encoding="utf-8"))
@@ -204,56 +175,85 @@ if dash_path.exists():
     if meta.get("buildId"):
         dash["buildId"] = meta["buildId"]
     atomic_write_json(dash_path, dash)
-marker = Path(os.environ["AI_EPS_ROOT"]) / "data" / ".last-publish-web"
-marker.write_text(str(web.resolve()) + "\n", encoding="utf-8")
-print("stamped sitePublished", display, "appVersion", app_v[:12], "web", web)
+print("stamped sitePublished", display, "(meta.json + dashboard.json.meta synced)")
 PYSTAMP
 
-python3 - <<'PYCOPY'
-import os, sys
+# Sync FULL public asset tree: index/app/styles/vendor/**/data — never touch .git
+mkdir -p "$REPO/data" "$REPO/vendor"
+AI_EPS_ROOT="$ROOT" python3 - <<'PYCOPY'
+import os, shutil, sys
 from pathlib import Path
-root = Path(os.environ["AI_EPS_ROOT"])
-sys.path.insert(0, str(root / "tools"))
-from static_publish import copy_static_tree, parse_index_assets
-web = Path(os.environ.get("PUBLISH_WEB") or (root / "web"))
-repo = Path(os.environ.get("SITE_REPO") or (root / "site-repo"))
-copied = copy_static_tree(web, repo)
-index = (web / "index.html").read_text(encoding="utf-8") if (web / "index.html").exists() else ""
-assets = parse_index_assets(index)
-missing = [a for a in assets if not (repo / a).exists()]
+ROOT = Path(os.environ["AI_EPS_ROOT"])
+WEB, REPO = ROOT / "web", ROOT / "site-repo"
+sys.path.insert(0, str(ROOT / "tools"))
+from ingest_snapshot import iter_frontend_static_files, list_index_local_assets
+REPO.mkdir(parents=True, exist_ok=True)
+# Copy every frontend static dep (index, app, styles, vendor/**, future assets)
+for p in iter_frontend_static_files(WEB):
+    rel = p.relative_to(WEB)
+    dest = REPO / rel
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(p, dest)
+# Explicit shell copies (belt-and-suspenders)
+for name in ("index.html", "app.js", "styles.css"):
+    src = WEB / name
+    if src.exists():
+        shutil.copy2(src, REPO / name)
+# vendor tree
+vendor_src = WEB / "vendor"
+if vendor_src.is_dir():
+    for src in vendor_src.rglob("*"):
+        if src.is_file():
+            dest = REPO / "vendor" / src.relative_to(vendor_src)
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(src, dest)
+# data tree
+data_src, data_dst = WEB / "data", REPO / "data"
+data_dst.mkdir(parents=True, exist_ok=True)
+if data_src.is_dir():
+    for src in data_src.rglob("*"):
+        if src.is_file():
+            dest = data_dst / src.relative_to(data_src)
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(src, dest)
+missing = [rel for rel in list_index_local_assets(WEB / "index.html") if not (REPO / rel).is_file()]
 if missing:
-    print("ERROR: published tree missing index assets:", missing, file=sys.stderr)
-    sys.exit(1)
-print("copied static tree files=", len(copied), "indexAssets=", assets, "from", web)
+    raise SystemExit(f"ERROR: clean publish missing index assets: {missing}")
+print("copied full static tree + data")
 PYCOPY
 
-if [[ "${FAULT_INJECT_PUSH:-}" == "1" ]]; then
-  python3 - <<'PYPEND'
+# Final assert: every index local asset present in REPO
+AI_EPS_ROOT="$ROOT" python3 - <<'PYASSERT'
 import os, sys
 from pathlib import Path
-sys.path.insert(0, str(Path(os.environ["AI_EPS_ROOT"]) / "tools"))
-from atomic_io import write_pending_publish
-from transaction import read_current
-write_pending_publish(Path(os.environ["AI_EPS_ROOT"]), {
-    "reason": "FAULT_INJECT_PUSH",
-    "hash": os.environ.get("EXPORT_HASH"),
-    "current": read_current(Path(os.environ["AI_EPS_ROOT"])),
-    "web": os.environ.get("PUBLISH_WEB"),
-})
-print("ERROR: FAULT_INJECT_PUSH=1 — pending publish written", file=sys.stderr)
-sys.exit(1)
-PYPEND
-fi
+ROOT = Path(os.environ["AI_EPS_ROOT"])
+sys.path.insert(0, str(ROOT / "tools"))
+from ingest_snapshot import list_index_local_assets
+REPO = ROOT / "site-repo"
+missing = [rel for rel in list_index_local_assets(ROOT / "web" / "index.html") if not (REPO / rel).is_file()]
+# Also accept query-stripped paths from stamped index in REPO
+if missing:
+    # try parsing REPO index
+    missing2 = [rel for rel in list_index_local_assets(REPO / "index.html") if not (REPO / rel).is_file()]
+    if missing2:
+        print(f"ERROR: clean publish missing index assets: {missing2}", file=sys.stderr)
+        sys.exit(1)
+print("clean_publish_contains_all_index_assets OK")
+PYASSERT
 
-if [[ "${SKIP_GIT_PUSH:-}" == "1" ]]; then
-  rm -f "$PENDING"
-  printf '%s\n' "$HASH" > "$VERSION_FILE"
-  echo "SKIP_GIT_PUSH=1 — static tree published locally hash=${HASH:0:12} web=$WEB"
+cp "$REPO/index.html" "$REPO/404.html"
+touch "$REPO/.nojekyll"
+rm -f "$REPO/ORIGIN.txt" "$REPO/overview-verify.png"
+
+cd "$REPO"
+# Skip git push when site-repo is not a git repo (fixture / clean review)
+if [[ ! -d "$REPO/.git" ]]; then
+  echo "$HASH" > "$VERSION_FILE"
+  echo "PUBLISH_LOCAL hash=${HASH:0:12} (no .git — skipped push)"
   exit 0
 fi
 
-cd "$REPO"
-gh auth setup-git >/dev/null
+gh auth setup-git >/dev/null 2>&1 || true
 git add -A
 NEED_COMMIT=1
 if git diff --cached --quiet; then
@@ -270,7 +270,7 @@ if git rev-parse --verify origin/main >/dev/null 2>&1; then
   fi
 fi
 
-if [[ "$NEED_COMMIT" -eq 0 && "$AHEAD" -eq 0 && "$PENDING_EXISTS" -eq 0 ]]; then
+if [[ "$NEED_COMMIT" -eq 0 && "$AHEAD" -eq 0 ]]; then
   if [[ -n "$PREV" && "$PREV" == "$HASH" ]]; then
     echo "NO_CHANGES"
     exit 0
@@ -293,23 +293,9 @@ git push origin main
 PUSH_RC=$?
 set -e
 if [[ "$PUSH_RC" -ne 0 ]]; then
-  PUSH_RC="$PUSH_RC" python3 - <<'PYPEND'
-import os, sys
-from pathlib import Path
-sys.path.insert(0, str(Path(os.environ["AI_EPS_ROOT"]) / "tools"))
-from atomic_io import write_pending_publish
-from transaction import read_current
-write_pending_publish(Path(os.environ["AI_EPS_ROOT"]), {
-    "reason": "git_push_failed",
-    "rc": int(os.environ.get("PUSH_RC") or 1),
-    "current": read_current(Path(os.environ["AI_EPS_ROOT"])),
-    "web": os.environ.get("PUBLISH_WEB"),
-})
-PYPEND
-  echo "ERROR: git push failed (rc=$PUSH_RC) — .data-version NOT updated; pending publish set; retry will still push" >&2
+  echo "ERROR: git push failed (rc=$PUSH_RC) — .data-version NOT updated; retry will still push" >&2
   exit "$PUSH_RC"
 fi
-rm -f "$PENDING"
 echo "$HASH" > "$VERSION_FILE"
 echo "PUSHED hash=${HASH:0:12}"
 gh api "repos/kumahsu1118-ui/ai-eps-monitor/pages" -q .html_url 2>/dev/null || true

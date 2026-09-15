@@ -8,6 +8,8 @@ only parses already-captured content.
 """
 from __future__ import annotations
 
+import math
+
 import json
 import re
 from pathlib import Path
@@ -42,17 +44,22 @@ _MONTH_NUM = {
 
 
 def to_num(x) -> float | None:
+    """Parse number; reject non-finite (NaN/Infinity) — math.isfinite only."""
     if x is None:
         return None
+    if isinstance(x, bool):
+        return None
     if isinstance(x, (int, float)):
-        return float(x)
+        v = float(x)
+        return v if math.isfinite(v) else None
     s = str(x).strip().replace(",", "").replace("%", "").replace("$", "")
-    if s.lower() in {"", "n/a", "na", "data unavailable", "null", "none", "—", "-"}:
+    if s.lower() in {"", "n/a", "na", "data unavailable", "null", "none", "—", "-", "nan", "inf", "-inf", "+inf", "infinity", "-infinity"}:
         return None
     try:
-        return float(s)
+        v = float(s)
     except Exception:
         return None
+    return v if math.isfinite(v) else None
 
 
 def _first_present(*vals):
@@ -190,6 +197,34 @@ def mapped_year_for_fiscal_ending(
     return None
 
 
+def normalize_fiscal_period_label(label: str | None) -> str | None:
+    """Canonical fiscal identity key: 'Mon YYYY' (e.g. Jan 2027)."""
+    if not label:
+        return None
+    parsed = parse_fiscal_period_ending(label)
+    if not parsed:
+        return str(label).strip()
+    month, year = parsed
+    months = [
+        "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+        "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+    ]
+    return f"{months[month - 1]} {year}"
+
+
+def _fiscal_row_signal(r: dict) -> tuple:
+    """Comparable consensus/high/low/analyst/revision signal for conflict detection."""
+    return (
+        r.get("consensus"),
+        r.get("high"),
+        r.get("low"),
+        r.get("analystCount") if "analystCount" in r else r.get("analysts"),
+        r.get("rev1M") if "rev1M" in r else r.get("rev_1M_pct"),
+        r.get("rev3M") if "rev3M" in r else r.get("rev_3M_pct"),
+        r.get("rev6M") if "rev6M" in r else r.get("rev_6M_pct"),
+    )
+
+
 def pack_snapshot_eps_from_rows(
     rows: list[dict],
     fiscal_to_mapped: dict[str, str] | None = None,
@@ -201,15 +236,52 @@ def pack_snapshot_eps_from_rows(
       Jan–Mar ending → prior-year mapped slot
       Apr–Dec ending → ending-year mapped slot
     Explicit fiscal_to_mapped overrides the heuristic.
+
+    Fail-closed duplicate fiscal identity:
+      - identical consensus/high/low/analyst/revision → dedupe (keep one)
+      - conflicting signals → {status: needs_verification, reason: duplicate_conflicting_fiscal_row}
+    Two different fiscal identities mapping to same display slot → mapped_slot_collision.
+    On success returns eps mapping (YYYYE → fields) for backward compatibility.
     """
     fiscal_to_mapped = fiscal_to_mapped or {}
     out: dict[str, dict] = {}
+    by_fiscal: dict[str, dict] = {}
+    slot_to_fiscal: dict[str, str] = {}
+
     for r in rows:
+        if not isinstance(r, dict):
+            continue
         lab = r.get("fiscalPeriodEnding")
+        norm = normalize_fiscal_period_label(lab)
         mapped = mapped_year_for_fiscal_ending(lab, ticker=ticker, fiscal_to_mapped=fiscal_to_mapped)
         if not mapped:
             continue
-        out[mapped] = {
+
+        # Same normalized fiscal period
+        if norm and norm in by_fiscal:
+            prev = by_fiscal[norm]
+            if _fiscal_row_signal(prev) == _fiscal_row_signal(r):
+                continue  # identical → dedupe
+            return {
+                "status": "needs_verification",
+                "reason": "duplicate_conflicting_fiscal_row",
+                "eps": {},
+                "conflictFiscal": norm,
+            }
+
+        # Different fiscal identities → same display slot
+        if mapped in slot_to_fiscal:
+            prior_fiscal = slot_to_fiscal[mapped]
+            if norm and prior_fiscal != norm:
+                return {
+                    "status": "needs_verification",
+                    "reason": "mapped_slot_collision",
+                    "eps": {},
+                    "slot": mapped,
+                    "fiscals": [prior_fiscal, norm],
+                }
+
+        entry = {
             "consensus": r.get("consensus"),
             "high": r.get("high"),
             "low": r.get("low"),
@@ -220,6 +292,10 @@ def pack_snapshot_eps_from_rows(
             "reported_fiscal_label": lab,
             "calendar_alignment": f"CY{mapped[:-1]}" if mapped.endswith("E") else None,
         }
+        if norm:
+            by_fiscal[norm] = r
+            slot_to_fiscal[mapped] = norm
+        out[mapped] = entry
     return out
 
 

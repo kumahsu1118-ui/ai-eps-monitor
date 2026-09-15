@@ -37,6 +37,7 @@ Writes data/alerts/index.json with activeAlerts + alertHistory (+ legacy alerts 
 from __future__ import annotations
 
 import json
+import math
 import re
 import sys
 from datetime import datetime, timedelta, timezone
@@ -113,17 +114,22 @@ def now_utc_iso() -> str:
 
 
 def to_num(x):
+    """Parse number; reject non-finite (NaN/Infinity) — math.isfinite only."""
     if x is None:
         return None
+    if isinstance(x, bool):
+        return None
     if isinstance(x, (int, float)):
-        return float(x)
+        v = float(x)
+        return v if math.isfinite(v) else None
     s = str(x).strip().replace(",", "").replace("%", "").replace("$", "")
-    if s.lower() in {"", "n/a", "na", "n/a (baseline)", "data unavailable", "null", "none"}:
+    if s.lower() in {"", "n/a", "na", "n/a (baseline)", "data unavailable", "null", "none", "nan", "inf", "-inf", "+inf", "infinity", "-infinity"}:
         return None
     try:
-        return float(s)
+        v = float(s)
     except Exception:
         return None
+    return v if math.isfinite(v) else None
 
 
 def load_tickers() -> list[str]:

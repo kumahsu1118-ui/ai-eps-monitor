@@ -5,30 +5,6 @@ Routine: **AI EPS Monitor daily check** — weekdays `0 8 * * 1-5` (Taipei / CRO
 Public site: https://kumahsu1118-ui.github.io/ai-eps-monitor/  
 Repo: https://github.com/kumahsu1118-ui/ai-eps-monitor  
 
-## Writer roles (fail-closed)
-
-| Command | Default role | May persist snapshots / revisions / daily / alerts? |
-|---------|--------------|------------------------------------------------------|
-| `python3 tools/ingest_snapshot.py` | **Sole writer** | Yes — stages in a work root, flips `data/generations/CURRENT`, then materializes live trees |
-| `python3 tools/export_web_data.py` | **Pure read-only** | No. Writes public `web/data/*.json` only. Persist requires `--legacy-mutate` |
-| `bash tools/publish_github_pages.sh` | **Publish-only** | No. Copies CURRENT generation `web/` to Pages. Re-export requires `--legacy-mutate` |
-
-`--legacy-mutate` is the only switch that lets standalone export/publish mutate pipeline state. Do not use it in the daily path; ingest already persists into its work root.
-
-## Commit vs materialization
-
-1. Gate + stage under `data/staging/<runId>/work`.
-2. Export (legacy-mutate **inside the work root only**).
-3. Snapshot `data/generations/<id>/` and **atomically flip `CURRENT`** — this is COMMIT (`runStatus=committed`).
-4. Materialize live trees from CURRENT (`materializationStatus=ok`).
-5. If step 4 fails: **still committed**. `materializationStatus` is `failed` or `pending`, **never `aborted`**. Retry:
-
-```bash
-python3 tools/ingest_snapshot.py --materialize-current
-```
-
-Publish retries (`data/.pending-publish`) call `ensure_live_matches_current` and prefer CURRENT generation `web/` over a drifted live tree.
-
 ## End-to-end steps
 
 ### 1. Wake & load context
@@ -41,7 +17,7 @@ Publish retries (`data/.pending-publish`) call `ensure_live_matches_current` and
 - Open SA in the box browser (persistent login).
 - If session expired → in-chat login form / box help; **do not** push stale numbers as fresh.
 
-**On failure:** Mark collection failed; keep previous consensus; set / keep freshness so **DATA STALE** can appear when >48h since last good consensus; notify user to re-auth.
+**On failure:** Mark collection failed; keep previous consensus; set / keep freshness so **DATA STALE** can appear when past the most recent weekday **08:00 Taipei** collection window + grace without a successful pull; notify user to re-auth.
 
 ### 3. Pull consensus & prices
 - For each ticker: earnings estimates + revisions (SA **1M/3M/6M** only; never invent 7D/30D/90D).
@@ -50,15 +26,20 @@ Publish retries (`data/.pending-publish`) call `ensure_live_matches_current` and
 
 **On failure for one ticker:** Write `Data unavailable` / null for that name; continue others; list gaps.
 
-### 4. Persist via ingest (sole writer)
-```bash
-python3 tools/ingest_snapshot.py --publish
-```
-- Incoming JSON under `data/incoming/` only.
-- Quality gate → work-root stage → CURRENT commit → materialize → publish-only.
+### 4. Quality Gate (fail-closed) then persist
+- Order: **Collection → Quality Gate → publishable → persist history → Alert Engine → Export → Publish**.
+- Browser/collection writes ONLY `data/incoming/<UTC timestamp>.json` (never unvalidated into `data/snapshots/`).
+- Single entrypoint: `python3 tools/ingest_snapshot.py` — Incoming → Gate → **stage** `data/staging/<runId>/` → pure-build export (`--no-persistent-mutation`) → **atomic COMMIT** of ALL mutable outputs (validated snapshots, revisions, daily, alerts, comparison checkpoint, web/data; `runStatus=committed`; `data/CURRENT.json` sole commit pointer) → optional `publish_prebuilt_site` (no second export). Pre-CURRENT failure → `runStatus=aborted` (must not become LKG). Post-CURRENT materialization failure → `runStatus=committed` + `materializationStatus=failed` (never aborted; no CURRENT rollback; retry `materialize_generation(resolve_current_generation())`).
+- `--validate-only` gates/stages without commit (unsafe `--no-export` commit banned). Historical timestamps require explicit `--backfill`.
+- Rejected / needs_verification / future/invalid timestamps → quarantine only; **must not** remain as validated snapshot candidates; **do not** mutate Alert DB or daily EPS history before COMMIT.
+- Global lock: `data/.pipeline.lock` (concurrent → `RUN ALREADY IN PROGRESS`). Nested `PIPELINE_LOCK_HELD=1` skips re-acquire for ingest→publish.
 
-**On failure before CURRENT:** `runStatus=aborted`; leave prior generation intact.  
-**On materialization failure after CURRENT:** retry `--materialize-current`.
+### 4b. Persist private database (append-only)
+- Append dated file under `data/snapshots/` (never overwrite prior dates).
+- **Daily EPS snapshots:** append/update `data/daily_eps_snapshots/` for the calendar day **even if EPS unchanged**.
+- **Revision events:** append to `data/revisions/history.jsonl` **only if** consensus EPS actually changed vs prior snapshot. No empty revision rows.
+
+**On failure mid-write:** Prefer leave prior files intact; do not delete `history.jsonl` or earnings digests.
 
 ### 5. Earnings digests (persistent)
 - Read `data/earnings/{TICKER}.json`.
@@ -67,29 +48,27 @@ python3 tools/ingest_snapshot.py --publish
 
 **On failure:** Keep existing digest; flag gap in digest `dataGaps`.
 
-### 6. Export web JSON (read-only by default)
-```bash
-python3 tools/export_web_data.py
-```
-- Builds `web/data/*.json` from **validated** snapshots (no daily/alerts/revision persist).
-- Ingest already built the committed generation; a standalone export is for inspection.
+### 6. Export web JSON (via ingest only — single writer)
+- **`ingest_snapshot.py` is the sole persistent financial-state writer** (validated snapshots, revisions, daily, alerts, checkpoint, CURRENT).
+- Export runs inside ingest as a **read-only pure-build** (`--no-persistent-mutation`) into staging; COMMIT materializes.
+- Standalone `export_web_data.py` is **read-only by default** (writes web JSON only; does not mutate daily/revision/alert/checkpoint). Legacy mutation requires explicit `--legacy-mutate` (not for production/scheduler).
+- Do **not** run standalone export after ingest as a second writer.
 
-```bash
-python3 tools/export_web_data.py --legacy-mutate   # emergency only
-```
-
-**On failure:** Do not publish; notify user with exporter traceback.
+**On failure / qualityGate.publishable!=true:** Do not modify public web/data; quarantine snapshot; keep last-known-good site; exit non-zero; do not git push.
+Partial watchlist: missing tickers use last-known-good + FAILED/STALE; collectionStatus=PARTIAL (never COMPLETE with missing tickers).
 
 ### 7. Publish to GitHub Pages (publish-only)
 ```bash
-bash tools/publish_github_pages.sh
+/workspace/ai-eps-monitor/tools/publish_github_pages.sh
+# or: python3 tools/ingest_snapshot.py --publish   # after commit
 ```
-- Copies **CURRENT generation** `web/` (full static tree, cache-bust `?v=`).
+- **Publish-only:** no recompute / no history mutation; syncs prebuilt `web/` (prefer CURRENT generation web/).
+- Copies **public** assets only into `site-repo/`.
 - `git commit` + `git push` **only if files changed** (no empty commits).
 - Never commit cookies, tokens, `.env`, browser profiles, SA sessions.
-- Failed push writes `data/.pending-publish`; the next run retries from CURRENT.
+- Pending publish retries **reconcile CURRENT → live** before push.
 
-**On failure (auth/push):** Leave CURRENT intact; notify user GitHub push failed; site may lag until retry.
+**On failure (auth/push):** Leave financial commit intact; publishStatus=failed/pending; notify user; retry next run before new collection.
 
 ### 8. User digest
 - Short Chinese summary: who was revised, alerts (only if material), link to public HTTPS.
@@ -99,12 +78,29 @@ bash tools/publish_github_pages.sh
 
 | Step | Failure | Handling |
 |------|---------|----------|
-| SA login | Session dead | Re-auth; no fake refresh; stale badge when >48h |
+| SA login | Session dead | Re-auth; no fake refresh; stale badge after weekday 08:00 Taipei + grace |
 | Single ticker pull | Page/block | Null/gaps for ticker; continue |
-| Snapshot write / export before CURRENT | Disk/error | Abort; keep last good generation |
-| Materialize after CURRENT | Promote error | committed + failed/pending; retry `--materialize-current` |
-| Git push | Auth/network | pending-publish; retry from CURRENT web/ |
+| Snapshot write | Disk/error | Abort publish; keep last good snapshot |
+| Export | Script error | Abort publish; notify |
+| Git push | Auth/network | Local OK; notify; retry next run |
 | Pages CDN lag | Old JSON briefly | Expected; cache-bust / wait |
 
 ## What is NOT in the public repo
 Seeking Alpha cookies/sessions, GitHub tokens beyond Actions secrets (none required for static Pages from this machine’s push), `.env`, browser profiles, private raw pulls beyond published JSON fields.
+
+## Identity / Deploy / Crash (2026-09-15)
+
+- EPS comparison identity = ticker + Reported Fiscal Period Ending only (mapped slot is UI display)
+- Publish syncs full static tree including `web/vendor/**`; `AI_EPS_ROOT` selects project root
+- Commit: `data/generations/<runId>/` then atomic `CURRENT.json`; materialize live after; SIGKILL-safe
+- Publish status: `data/publish_state.json` pending/published/failed (no financial rollback on push fail)
+
+
+## Commit Semantics + Single Writer + Release Identity (2026-09-15)
+
+- **CURRENT flip = financial commit DONE.** Post-CURRENT materialize failure → committed + materializationStatus=failed/pending (never aborted; no CURRENT rollback).
+- **Single writer:** `ingest_snapshot.py` only. `export_web_data.py` read-only by default; `publish_github_pages.sh` publish-only.
+- **Readers:** `ensure_live_matches_current()` before live cache use (incl. pending publish retry).
+- **Release identity:** stamp cache-bust then finalize; `appVersion` hashes canonicalized index (strip `?v=`) + assets; `releaseVersion = hash(appVersion|schema|data|refresh)`.
+- **Official domains:** Tier1 only `officialDomainsByTicker[ticker]` (or any listed domain when ticker unknown). Generic `investor.*`/`ir.*` → `unverified_ir_candidate`. Seeking Alpha host must be `seekingalpha.com` / `*.seekingalpha.com`.
+- **Parser:** duplicate identical fiscal rows dedupe; conflicting → `needs_verification` / `duplicate_conflicting_fiscal_row`; slot collision → `mapped_slot_collision`.

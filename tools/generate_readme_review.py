@@ -18,26 +18,58 @@ def main() -> int:
     if mp.exists():
         meta = json.loads(mp.read_text(encoding="utf-8"))
 
-    test_results = ROOT / "TEST_RESULTS_INGESTION_INTEGRITY.md"
-    if not test_results.exists():
-        test_results = ROOT / "TEST_RESULTS_PIPELINE_INTEGRITY.md"
-    if not test_results.exists():
-        test_results = ROOT / "TEST_RESULTS_FAILCLOSED_SIGNAL.md"
-    if not test_results.exists():
-        test_results = ROOT / "TEST_RESULTS_FINAL_RELIABILITY.md"
+    test_results = ROOT / "TEST_RESULTS_COMMIT_SEMANTICS.md"
+    for cand in (
+        test_results,
+        ROOT / "TEST_RESULTS_IDENTITY_DEPLOY_CRASH.md",
+        ROOT / "TEST_RESULTS_INGESTION_INTEGRITY.md",
+    ):
+        if cand.exists():
+            test_results = cand
+            break
+
     test_count = "n/a"
     test_pass = "n/a"
+    unit_line = "n/a"
+    integ_line = "n/a"
+    total_line = "n/a"
     if test_results.exists():
         body = test_results.read_text(encoding="utf-8")
         m = re.search(r"(\d+)\s*/\s*(\d+)\s*PASS", body)
         if m:
             test_pass, test_count = m.group(1), m.group(2)
-        else:
-            m = re.search(r"Passed:\s*(\d+).*Failed:\s*(\d+)", body)
-            if m:
-                p, f = int(m.group(1)), int(m.group(2))
-                test_pass = str(p)
-                test_count = str(p + f)
+        # Prefer acceptance total if present
+        m_all = re.search(
+            r"run_acceptance_tests\.py`?\s*→\s*\*\*(\d+)\s*/\s*(\d+)\s*PASS\*\*.*?(\d+\.\d+)s",
+            body,
+            re.S,
+        )
+        if m_all:
+            test_pass, test_count = m_all.group(1), m_all.group(2)
+            total_line = f"{m_all.group(1)}/{m_all.group(2)} in {m_all.group(3)}s"
+        m_u = re.search(
+            r"run_unit_tests\.py`?\s*→\s*\*\*(\d+)\s*/\s*(\d+)\s*PASS\*\*.*?(\d+\.\d+)s",
+            body,
+            re.S,
+        )
+        if m_u:
+            unit_line = f"{m_u.group(1)}/{m_u.group(2)} in {m_u.group(3)}s"
+        m_i = re.search(
+            r"run_integration_tests\.py`?\s*→\s*\*\*(\d+)\s*/\s*(\d+)\s*PASS\*\*.*?(\d+\.\d+)s",
+            body,
+            re.S,
+        )
+        if m_i:
+            integ_line = f"{m_i.group(1)}/{m_i.group(2)} in {m_i.group(3)}s"
+        # Table fallback
+        if unit_line == "n/a":
+            mt = re.search(r"unit.*?\|?\s*(\d+)\s*\|\s*([\d.]+)s", body, re.I)
+            if mt:
+                unit_line = f"{mt.group(1)} in {mt.group(2)}s"
+        if integ_line == "n/a":
+            mt = re.search(r"integration.*?\|?\s*(\d+)\s*\|\s*([\d.]+)s", body, re.I)
+            if mt:
+                integ_line = f"{mt.group(1)} in {mt.group(2)}s"
 
     shot_dir = ROOT / "review-pack" / "screenshots"
     hashes = []
@@ -48,25 +80,31 @@ def main() -> int:
 
     now = datetime.now(TAIPEI).strftime("%Y-%m-%d %H:%M Taipei")
     lines = [
-        "# AI EPS Monitor — Review Pack (Ingestion Integrity)",
+        "# AI EPS Monitor — Review Pack (Commit Semantics + Single Writer + Release Identity)",
         "",
         f"**Generated:** {now}  ",
-        f"**Round:** Ingestion Integrity (auto-generated — replaces prior round README metadata)",
+        "**Round:** Commit Semantics + Single Writer + Release Identity (auto-generated — replaces prior round README metadata)",
         "",
         "## Build identity",
         "",
-        f"| Field | Value |",
-        f"|-------|-------|",
+        "| Field | Value |",
+        "|-------|-------|",
         f"| sitePublished | `{meta.get('sitePublished')}` |",
         f"| sitePublishedDisplay | {meta.get('sitePublishedDisplay')} |",
         f"| dataVersion | `{meta.get('dataVersion')}` |",
         f"| refreshVersion | `{meta.get('refreshVersion')}` |",
         f"| buildId | `{meta.get('buildId')}` |",
+        f"| schemaVersion | `{meta.get('schemaVersion')}` |",
+        f"| appVersion | `{meta.get('appVersion')}` |",
+        f"| releaseVersion | `{meta.get('releaseVersion')}` |",
         f"| lastSuccessfulCollection | `{meta.get('lastSuccessfulCollection')}` |",
         f"| collectionStatus | {meta.get('collectionStatusLabel') or meta.get('collectionStatus')} |",
         f"| alertEngineStatus | {meta.get('alertEngineStatus')} |",
         f"| qualityGate | {(meta.get('qualityGate') or {}).get('status') if isinstance(meta.get('qualityGate'), dict) else meta.get('qualityGate')} |",
         f"| acceptance tests | **{test_pass}/{test_count} PASS** (this round only) |",
+        f"| unit suite | {unit_line} |",
+        f"| integration suite | {integ_line} |",
+        f"| total suite | {total_line} |",
         "",
         "## Public URL",
         "",
@@ -80,15 +118,15 @@ def main() -> int:
     lines.extend(hashes or ["| _(none)_ | |"])
     lines += [
         "",
-        "## Ingestion Integrity highlights",
+        "## Commit Semantics + Single Writer + Release Identity highlights",
         "",
-        "- Collection → `data/incoming/` only; Quality Gate → validated `data/snapshots/` or quarantine",
-        "- Per-ticker LKG (`load_last_known_good_by_ticker`) for Extreme EPS / Price / Fiscal Coverage",
-        "- Auto revision events before Alert Engine; Alert Engine uses gated snapshot (not manifest.json)",
-        "- Reported Fiscal Period Ending required; FY-only normalized via universe.json fiscal-end config",
-        "- Publish stamps meta.json AND dashboard.json.meta atomically",
-        "- Single entrypoint `tools/ingest_snapshot.py`; screenshot DOM sidecars + secret content scan",
-        "- Prior Pipeline Integrity: Quality Gate before Alert mutation; no fake daily LKG observations",
+        "- Post-CURRENT materialize failure → committed + materializationStatus=failed (never aborted; no CURRENT rollback)",
+        "- Single writer: ingest_snapshot.py only; export read-only by default; publish_github_pages.sh publish-only",
+        "- Readers ensure_live_matches_current() before live cache; pending publish from CURRENT generation web/",
+        "- appVersion canonicalizes index ?v=; releaseVersion = hash(appVersion|schema|data|refresh); finalize after stamp",
+        "- Tier1 only officialDomainsByTicker; generic investor.*/ir.* → unverified_ir_candidate; SA host-strict",
+        "- Parser: identical fiscal dedupe; conflicting → duplicate_conflicting_fiscal_row; mapped_slot_collision",
+        "- Suite split: run_unit_tests.py (<30s) + run_integration_tests.py; run_acceptance_tests.py runs both",
         "",
         "## Review ZIP",
         "",
@@ -98,15 +136,13 @@ def main() -> int:
         "",
         "---",
         "",
-        "_This file is regenerated from `web/data/meta.json` + `TEST_RESULTS_INGESTION_INTEGRITY.md`. "
-        "It MUST NOT retain leftover 10/10, 17/17, or 30/30 round metadata._",
+        "_This file is regenerated from `web/data/meta.json` + `TEST_RESULTS_COMMIT_SEMANTICS.md`. "
+        "It MUST NOT retain leftover prior-round score metadata._",
         "",
     ]
     out = "\n".join(lines)
-    # Hard guard: no leftover multi-round score lines
-    for bad in ("10/10", "17/17", "30/30"):
+    for bad in ("10/10", "17/17", "30/30", "118/118"):
         if bad in out and f"{test_pass}/{test_count}" != bad:
-            # allow only if it is the current score
             out = out.replace(bad, "(prior-round-omitted)")
     (ROOT / "README_REVIEW.md").write_text(out, encoding="utf-8")
     print("Wrote README_REVIEW.md")

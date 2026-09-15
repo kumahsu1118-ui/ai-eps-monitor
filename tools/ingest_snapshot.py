@@ -1,21 +1,18 @@
 #!/usr/bin/env python3
-"""Single E2E ingest entrypoint — sole writer of pipeline state.
+"""Single E2E ingest entrypoint (deterministic, transactional).
 
 Fixed flow:
   Incoming raw → Quality Gate (per-ticker LKG)
-  → STAGE under data/staging/<runId>/work (runStatus=staged)
-  → revision/daily/alerts/web build in the work root
-  → generation snapshot + atomic CURRENT flip (runStatus=committed)
-  → materialize live trees from CURRENT (materializationStatus ok/failed/pending)
-  → (optional) publish_prebuilt_site (publish-only, no second export)
+  → STAGE under data/staging/<runId>/ (runStatus=staged)
+  → revision/daily/alerts/web build
+  → atomic COMMIT to validated persistent history (runStatus=committed)
+  → (optional) publish_prebuilt_site (no second export)
 
-Export failure BEFORE CURRENT → ABORT (runStatus=aborted): must NOT become LKG.
-Materialization failure AFTER CURRENT → committed + materializationStatus
-failed/pending, never aborted. Retry with --materialize-current.
+On export failure → ABORT (runStatus=aborted): must NOT become LKG;
+incoming must NOT be marked successfully processed.
 
 Browser/collection writes ONLY data/incoming/<UTC timestamp>.json.
 Only this module may COMMIT validated snapshots + revision history.
-Standalone export/publish are read-only / publish-only unless --legacy-mutate.
 """
 from __future__ import annotations
 
@@ -30,20 +27,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 _here = Path(__file__).resolve().parent
+ROOT = _here.parent
 if str(_here) not in sys.path:
     sys.path.insert(0, str(_here))
-
-try:
-    from project_root import detect_root, export_root_env
-except Exception:  # pragma: no cover
-    def detect_root(start=None):
-        return Path(start or _here).resolve().parent if start else _here.parent
-
-    def export_root_env(root):
-        resolved = str(Path(root).resolve())
-        return {"AI_EPS_ROOT": resolved, "AIEPS_ROOT": resolved}
-
-ROOT = detect_root(_here)
 
 from atomic_io import append_jsonl_atomic, atomic_write_json  # noqa: E402
 import snapshot_quality as sq  # noqa: E402
@@ -52,8 +38,36 @@ INCOMING_DIR = ROOT / "data" / "incoming"
 SNAP_DIR = ROOT / "data" / "snapshots"
 QUARANTINE_DIR = SNAP_DIR / "quarantine"
 STAGING_DIR = ROOT / "data" / "staging"
+GENERATIONS_DIR = ROOT / "data" / "generations"
+CURRENT_POINTER = ROOT / "data" / "CURRENT.json"
+DAILY_DIR = ROOT / "data" / "daily_eps_snapshots"
+ALERTS_PATH = ROOT / "data" / "alerts" / "index.json"
+COMPARISON_CHECKPOINT_PATH = ROOT / "data" / "comparison_checkpoint.json"
+WEB_DATA = ROOT / "web" / "data"
 REV_PATH = ROOT / "data" / "revisions" / "history.jsonl"
 UNIVERSE_PATH = ROOT / "data" / "universe.json"
+
+
+
+def rebind_paths(root: Path) -> None:
+    """Point module-level paths at an alternate project root (acceptance fixtures)."""
+    global ROOT, INCOMING_DIR, SNAP_DIR, QUARANTINE_DIR, STAGING_DIR
+    global GENERATIONS_DIR, CURRENT_POINTER, DAILY_DIR, ALERTS_PATH
+    global COMPARISON_CHECKPOINT_PATH, WEB_DATA, REV_PATH, UNIVERSE_PATH, _here
+    ROOT = Path(root)
+    _here = ROOT / "tools"
+    INCOMING_DIR = ROOT / "data" / "incoming"
+    SNAP_DIR = ROOT / "data" / "snapshots"
+    QUARANTINE_DIR = SNAP_DIR / "quarantine"
+    STAGING_DIR = ROOT / "data" / "staging"
+    GENERATIONS_DIR = ROOT / "data" / "generations"
+    CURRENT_POINTER = ROOT / "data" / "CURRENT.json"
+    DAILY_DIR = ROOT / "data" / "daily_eps_snapshots"
+    ALERTS_PATH = ROOT / "data" / "alerts" / "index.json"
+    COMPARISON_CHECKPOINT_PATH = ROOT / "data" / "comparison_checkpoint.json"
+    WEB_DATA = ROOT / "web" / "data"
+    REV_PATH = ROOT / "data" / "revisions" / "history.jsonl"
+    UNIVERSE_PATH = ROOT / "data" / "universe.json"
 
 
 def utc_timestamp_filename(snap_utc: str | None = None) -> str:
@@ -262,7 +276,6 @@ def generate_revision_events(
         prior_td = lkg.get(tu) or lkg.get(t) or {}
         prior_eps = (prior_td or {}).get("eps") or {} if isinstance(prior_td, dict) else {}
         prior_by_fiscal: dict[str, tuple] = {}
-        prior_by_slot: dict[str, tuple] = {}
         if isinstance(prior_eps, dict):
             for slot, row in prior_eps.items():
                 if not isinstance(row, dict):
@@ -271,7 +284,7 @@ def generate_revision_events(
                 cons = _consensus_of_row(row)
                 if fiscal:
                     prior_by_fiscal[fiscal] = (cons, row, slot)
-                prior_by_slot[slot] = (cons, row, slot)
+                # Mapped slot is UI display only — NEVER a revision identity fallback
 
         cur_eps = td.get("eps") or {}
         if not isinstance(cur_eps, dict):
@@ -286,7 +299,8 @@ def generate_revision_events(
             if not fiscal:
                 continue
             align = _calendar_of_row(row, fiscal)
-            prev_tuple = prior_by_fiscal.get(fiscal) or prior_by_slot.get(slot)
+            # Identity: ticker + Reported Fiscal Period Ending ONLY
+            prev_tuple = prior_by_fiscal.get(fiscal)
             if prev_tuple is None and (tu, fiscal) in hist_last_eps:
                 prev_tuple = (hist_last_eps[(tu, fiscal)], {}, slot)
             if prev_tuple is None:
@@ -472,51 +486,677 @@ def _write_run_status(stage_dir: Path, status: str, extra: dict | None = None) -
     atomic_write_json(run_path, existing)
 
 
+def _backup_path(path: Path) -> bytes | None:
+    if path.exists():
+        return path.read_bytes()
+    return None
+
+
+def _restore_backup(path: Path, data: bytes | None) -> None:
+    if data is None:
+        if path.exists():
+            try:
+                path.unlink()
+            except OSError:
+                pass
+        return
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(data)
+
+
+def _sha_file(path: Path) -> str:
+    h = hashlib.sha256()
+    h.update(path.read_bytes())
+    return h.hexdigest()
+
+
+def list_index_local_assets(index_html: Path) -> list[str]:
+    """Parse index.html for local relative src=/href= assets (no http/https/data/)."""
+    if not index_html.exists():
+        return []
+    body = index_html.read_text(encoding="utf-8")
+    refs = re.findall(r"(?:src|href)=[\"']([^\"']+)[\"']", body, flags=re.I)
+    out = []
+    for ref in refs:
+        ref = ref.strip()
+        if not ref or ref.startswith(("#", "data:", "mailto:")):
+            continue
+        if re.match(r"^[a-zA-Z][a-zA-Z0-9+.-]*:", ref):
+            continue  # absolute URI
+        # strip query/hash for filesystem path
+        path_part = ref.split("?", 1)[0].split("#", 1)[0]
+        if path_part.startswith("./"):
+            path_part = path_part[2:]
+        if path_part.startswith("/"):
+            path_part = path_part.lstrip("/")
+        if path_part and path_part not in out:
+            out.append(path_part)
+    return out
+
+
+def iter_frontend_static_files(web_root: Path) -> list[Path]:
+    """Full frontend static dependency tree for versioning/publish."""
+    root = Path(web_root)
+    files: list[Path] = []
+    seen: set[str] = set()
+    index = root / "index.html"
+    # Always include shell + every local asset referenced by index
+    candidates = ["index.html"] + list_index_local_assets(index)
+    # Also include entire vendor/ tree (future-proof)
+    vendor = root / "vendor"
+    if vendor.is_dir():
+        for p in sorted(vendor.rglob("*")):
+            if p.is_file():
+                rel = str(p.relative_to(root)).replace("\\", "/")
+                if rel not in seen:
+                    candidates.append(rel)
+    for rel in candidates:
+        rel_n = rel.replace("\\", "/")
+        if rel_n in seen:
+            continue
+        seen.add(rel_n)
+        fp = root / rel_n
+        if fp.is_file():
+            files.append(fp)
+    return files
+
+
+def _canonical_static_bytes(fp: Path) -> bytes:
+    """Asset bytes for appVersion; strip cache-bust ?v= from index.html so stamp order is stable."""
+    data = fp.read_bytes()
+    if fp.name == "index.html":
+        try:
+            text = data.decode("utf-8")
+        except Exception:
+            return data
+        # Strip ?v=<hash> (and lone ?v=) from local asset refs — identity is content, not bust token
+        text = re.sub(r"\?v=[0-9a-fA-F]*", "", text)
+        return text.encode("utf-8")
+    return data
+
+
+def compute_app_version(web_root: Path | None = None) -> str:
+    """appVersion = hash of full frontend static deps (index + app + styles + vendor/**).
+
+    index.html is canonicalized (strip ?v=) so stamp_index_cache_bust does not change identity.
+    Guarantee: meta.appVersion == compute_app_version(final published asset tree).
+    """
+    root = web_root or (ROOT / "web")
+    h = hashlib.sha256()
+    for fp in iter_frontend_static_files(root):
+        rel = str(fp.relative_to(root)).replace("\\", "/")
+        h.update(rel.encode("utf-8"))
+        h.update(b"\0")
+        h.update(_canonical_static_bytes(fp))
+        h.update(b"|")
+    return h.hexdigest()
+
+
+def stamp_index_cache_bust(web_root: Path | None = None) -> str:
+    """Rewrite local src/href in index.html with ?v=<contenthash>; return appVersion."""
+    root = Path(web_root) if web_root else (ROOT / "web")
+    index = root / "index.html"
+    if not index.exists():
+        return compute_app_version(root)
+    body = index.read_text(encoding="utf-8")
+
+    def _hash_for(rel: str) -> str:
+        fp = root / rel
+        if not fp.is_file():
+            return "missing"
+        return hashlib.sha256(fp.read_bytes()).hexdigest()[:12]
+
+    def repl(m: re.Match) -> str:
+        attr, quote, ref = m.group(1), m.group(2), m.group(3)
+        raw = ref.strip()
+        if not raw or raw.startswith(("#", "data:", "mailto:")):
+            return m.group(0)
+        if re.match(r"^[a-zA-Z][a-zA-Z0-9+.-]*:", raw):
+            return m.group(0)
+        path_part = raw.split("?", 1)[0].split("#", 1)[0]
+        rel = path_part[2:] if path_part.startswith("./") else path_part.lstrip("/")
+        hv = _hash_for(rel)
+        prefix = "./" if path_part.startswith("./") else ("" if not path_part.startswith("/") else "/")
+        new_ref = f"{prefix}{rel}?v={hv}"
+        return f"{attr}={quote}{new_ref}{quote}"
+
+    stamped = re.sub(
+        r"(src|href)=([\"'])([^\"']+)\2",
+        repl,
+        body,
+        flags=re.I,
+    )
+    if stamped != body:
+        index.write_text(stamped, encoding="utf-8")
+    return compute_app_version(root)
+
+
+
+
+SCHEMA_VERSION = "1"
+
+
+def compute_release_version(
+    app_version: str,
+    schema_version: str,
+    data_version: str,
+    refresh_version: str,
+) -> str:
+    raw = f"{app_version}|{schema_version}|{data_version}|{refresh_version}"
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+
+def finalize_release_identity(web_root: Path | None = None) -> dict:
+    """Stamp cache-bust THEN recompute/write final appVersion + releaseVersion into meta.
+
+    Call after any index stamp so meta.appVersion == compute_app_version(final tree)
+    and meta.releaseVersion == hash(final appVersion + schema + data + refresh).
+    """
+    root = Path(web_root) if web_root else (ROOT / "web")
+    stamp_index_cache_bust(root)
+    app_v = compute_app_version(root)
+    meta_path = root / "data" / "meta.json"
+    meta: dict = {}
+    if meta_path.exists():
+        try:
+            meta = json.loads(meta_path.read_text(encoding="utf-8")) or {}
+        except Exception:
+            meta = {}
+    schema = str(meta.get("schemaVersion") or SCHEMA_VERSION)
+    data_v = str(meta.get("dataVersion") or "")
+    refresh_v = str(meta.get("refreshVersion") or "")
+    rel_v = compute_release_version(app_v, schema, data_v, refresh_v)
+    meta["appVersion"] = app_v
+    meta["releaseVersion"] = rel_v
+    meta["schemaVersion"] = schema
+    atomic_write_json(meta_path, meta)
+    dash_path = root / "data" / "dashboard.json"
+    if dash_path.exists():
+        try:
+            dash = json.loads(dash_path.read_text(encoding="utf-8")) or {}
+            if isinstance(dash, dict):
+                dm = dict(dash.get("meta") or {})
+                dm["appVersion"] = app_v
+                dm["releaseVersion"] = rel_v
+                dm["schemaVersion"] = schema
+                dash["meta"] = dm
+                atomic_write_json(dash_path, dash)
+        except Exception:
+            pass
+    return meta
+
+
+class CommitAborted(RuntimeError):
+    """Raised when commit_staged_run rolls back after a persistent write failure."""
+
+
+PUBLISH_STATE_NAME = "publish_state.json"
+
+
+def publish_state_path() -> Path:
+    return ROOT / "data" / PUBLISH_STATE_NAME
+
+
+def read_publish_state() -> dict:
+    path = publish_state_path()
+    if not path.exists():
+        return {
+            "publishStatus": "published",
+            "lastPublishAttempt": None,
+            "lastSuccessfulPublish": None,
+            "pendingReleaseVersion": None,
+        }
+    try:
+        obj = json.loads(path.read_text(encoding="utf-8"))
+        return obj if isinstance(obj, dict) else {}
+    except Exception:
+        return {}
+
+
+def write_publish_state(state: dict) -> None:
+    atomic_write_json(publish_state_path(), state)
+
+
+def read_current_pointer() -> dict | None:
+    if not CURRENT_POINTER.exists():
+        return None
+    try:
+        obj = json.loads(CURRENT_POINTER.read_text(encoding="utf-8"))
+        return obj if isinstance(obj, dict) else None
+    except Exception:
+        return None
+
+
+def resolve_current_generation() -> Path | None:
+    cur = read_current_pointer()
+    if not cur:
+        return None
+    g = Path(str(cur.get("generation") or ""))
+    if g.is_dir():
+        return g
+    rid = cur.get("runId")
+    if rid:
+        g2 = GENERATIONS_DIR / str(rid)
+        if g2.is_dir():
+            return g2
+    return None
+
+
+def _copy_file(src: Path, dest: Path) -> None:
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    data = src.read_bytes()
+    atomic_write_bytes = __import__("atomic_io", fromlist=["atomic_write_bytes"]).atomic_write_bytes
+    atomic_write_bytes(dest, data)
+
+
+def materialize_generation(gen_dir: Path) -> None:
+    """Idempotent sync of a committed generation package → live paths.
+
+    Safe to re-run after crash mid-materialize. Live paths are a cache of CURRENT.
+    """
+    import shutil
+
+    gen_dir = Path(gen_dir)
+    # Validated snapshot
+    snap_src_dir = gen_dir / "snapshots"
+    if snap_src_dir.is_dir():
+        SNAP_DIR.mkdir(parents=True, exist_ok=True)
+        for src in snap_src_dir.glob("*.json"):
+            _copy_file(src, SNAP_DIR / src.name)
+    # Revisions (full file)
+    rev_src = gen_dir / "revisions" / "history.jsonl"
+    if rev_src.exists():
+        REV_PATH.parent.mkdir(parents=True, exist_ok=True)
+        _copy_file(rev_src, REV_PATH)
+    # Daily
+    daily_src = gen_dir / "daily_eps_snapshots"
+    if daily_src.is_dir():
+        DAILY_DIR.mkdir(parents=True, exist_ok=True)
+        for src in daily_src.rglob("*"):
+            if src.is_file():
+                rel = src.relative_to(daily_src)
+                _copy_file(src, DAILY_DIR / rel)
+    # Alerts
+    alerts_src = gen_dir / "alerts" / "index.json"
+    if alerts_src.exists():
+        ALERTS_PATH.parent.mkdir(parents=True, exist_ok=True)
+        _copy_file(alerts_src, ALERTS_PATH)
+    # Checkpoint
+    cp_src = gen_dir / "comparison_checkpoint.json"
+    if cp_src.exists():
+        _copy_file(cp_src, COMPARISON_CHECKPOINT_PATH)
+    # Web data
+    web_src = gen_dir / "web" / "data"
+    if web_src.is_dir():
+        WEB_DATA.mkdir(parents=True, exist_ok=True)
+        for src in web_src.glob("*.json"):
+            _copy_file(src, WEB_DATA / src.name)
+    # Marker so ensure_live_matches_current can skip
+    cur = read_current_pointer() or {}
+    marker = ROOT / "data" / ".materialized_run_id"
+    atomic_write_text = __import__("atomic_io", fromlist=["atomic_write_text"]).atomic_write_text
+    atomic_write_text(marker, str(cur.get("runId") or gen_dir.name) + "\n")
+
+
+def ensure_live_matches_current() -> None:
+    """If CURRENT points at a generation not yet materialized, rematerialize."""
+    cur = read_current_pointer()
+    if not cur:
+        return
+    gen = resolve_current_generation()
+    if not gen:
+        return
+    marker = ROOT / "data" / ".materialized_run_id"
+    rid = str(cur.get("runId") or "")
+    if marker.exists() and marker.read_text(encoding="utf-8").strip() == rid:
+        return
+    materialize_generation(gen)
+
+
+def _build_revision_history_bytes(events: list[dict]) -> tuple[bytes, int]:
+    """Return full history.jsonl bytes after appending events (deduped) + append count."""
+    existing_rows = load_revision_history(REV_PATH)
+    existing_ids = known_event_ids(existing_rows)
+    to_write: list[dict] = []
+    for ev in events:
+        if not isinstance(ev, dict):
+            continue
+        eid = ev.get("eventId") or revision_event_id(ev)
+        ev = dict(ev)
+        ev["eventId"] = eid
+        if eid in existing_ids:
+            continue
+        existing_ids.add(eid)
+        to_write.append(ev)
+    if REV_PATH.exists():
+        buf = REV_PATH.read_text(encoding="utf-8")
+        if buf and not buf.endswith("\n"):
+            buf += "\n"
+    else:
+        buf = ""
+    for row in to_write:
+        buf += json.dumps(row, ensure_ascii=False, allow_nan=False) + "\n"
+    return buf.encode("utf-8"), len(to_write)
+
+
 def commit_staged_run(
     stage_dir: Path,
     snap_norm: dict,
     events: list[dict],
     snap_utc: str,
+    *,
+    run_id: str | None = None,
 ) -> Path:
-    """Atomic COMMIT: validated snapshot + revision events → persistent history."""
-    validated_path = immutable_validated_path(snap_norm, snap_utc)
-    SNAP_DIR.mkdir(parents=True, exist_ok=True)
-    if not validated_path.exists():
-        atomic_write_json(validated_path, snap_norm)
+    """Crash-safe COMMIT: build generations/<runId>/ fully, then CURRENT.json sole commit.
+
+    Live paths are materialized ONLY after CURRENT flips. SIGKILL before CURRENT leaves
+    previous generation as the only reader-visible committed state.
+    On exception before CURRENT: no live mutation; runStatus=aborted.
+    After CURRENT successfully flipped: financial commit DONE — materialization failure
+    yields runStatus=committed + materializationStatus=failed (never aborted; no CURRENT rollback).
+    """
+    import shutil
+    from atomic_io import atomic_write_bytes, atomic_write_text
+
+    rid = run_id or stage_dir.name
+    gen_dir = GENERATIONS_DIR / rid
+    gen_dir.mkdir(parents=True, exist_ok=True)
+    validated_path: Path | None = None
+    n_rev = 0
+    current_flipped = False
+
     try:
-        atomic_write_json(SNAP_DIR / "latest.json", snap_norm)
-    except Exception:
-        pass
-    update_snapshot_manifest(validated_path.name, snap_utc)
-    n = append_revision_events(events, REV_PATH)
-    _write_run_status(
-        stage_dir,
-        "committed",
-        {
+        # --- Full generation package (append-only; safe if CURRENT never flips) ---
+        atomic_write_json(gen_dir / "snapshot.json", snap_norm)
+        atomic_write_json(gen_dir / "proposed_revisions.json", {"events": events})
+
+        stage_web = stage_dir / "web"
+        if stage_web.exists():
+            dest_web = gen_dir / "web"
+            if dest_web.exists():
+                shutil.rmtree(dest_web)
+            shutil.copytree(stage_web, dest_web)
+
+        pending_daily = stage_dir / "pending_daily_rows.json"
+        pending_alerts = stage_dir / "pending_alerts.json"
+        pending_checkpoint = stage_dir / "pending_comparison_checkpoint.json"
+        pending_day_summary = stage_dir / "pending_day_summary.json"
+
+        # Choose immutable validated path name (check live + gen collisions)
+        validated_path = immutable_validated_path(snap_norm, snap_utc)
+        gen_snap_dir = gen_dir / "snapshots"
+        gen_snap_dir.mkdir(parents=True, exist_ok=True)
+        atomic_write_json(gen_snap_dir / validated_path.name, snap_norm)
+        atomic_write_json(gen_snap_dir / "latest.json", snap_norm)
+
+        # Manifest for generation (and later live)
+        if os.environ.get("FAULT_INJECT_COMMIT_MANIFEST_FAIL") == "1":
+            raise CommitAborted("FAULT_INJECT_COMMIT_MANIFEST_FAIL")
+        files = []
+        try:
+            files = [p.name for p in sq.list_validated_snapshots(SNAP_DIR)]
+        except Exception:
+            files = sorted(
+                p.name
+                for p in SNAP_DIR.glob("20*.json")
+                if p.name not in {"latest.json", "manifest.json"} and not p.name.startswith("raw_")
+            )
+        if validated_path.name not in files:
+            files.append(validated_path.name)
+            files = sorted(set(files))
+        man_obj = {
+            "latest": validated_path.name,
+            "snapshot_utc": snap_utc,
+            "files": files,
+            "immutable": True,
+        }
+        atomic_write_json(gen_snap_dir / "manifest.json", man_obj)
+
+        # Revisions — full file in generation
+        if os.environ.get("FAULT_INJECT_COMMIT_REVISION_FAIL") == "1":
+            raise CommitAborted("FAULT_INJECT_COMMIT_REVISION_FAIL")
+        rev_bytes, n_rev = _build_revision_history_bytes(events)
+        (gen_dir / "revisions").mkdir(parents=True, exist_ok=True)
+        atomic_write_bytes(gen_dir / "revisions" / "history.jsonl", rev_bytes)
+
+        # Daily — start from live, append pending rows into generation copy
+        daily_gen = gen_dir / "daily_eps_snapshots"
+        daily_gen.mkdir(parents=True, exist_ok=True)
+        live_jsonl = DAILY_DIR / "daily.jsonl"
+        daily_buf = live_jsonl.read_text(encoding="utf-8") if live_jsonl.exists() else ""
+        if daily_buf and not daily_buf.endswith("\n"):
+            daily_buf += "\n"
+        if pending_daily.exists():
+            try:
+                payload = json.loads(pending_daily.read_text(encoding="utf-8"))
+                rows = payload.get("rows") or []
+            except Exception:
+                rows = []
+            for row in rows:
+                daily_buf += json.dumps(row, ensure_ascii=False, allow_nan=False) + "\n"
+        atomic_write_text(daily_gen / "daily.jsonl", daily_buf)
+        if pending_day_summary.exists():
+            try:
+                day = json.loads(pending_day_summary.read_text(encoding="utf-8"))
+                day_name = day.get("date") or str(snap_utc)[:10]
+                atomic_write_json(daily_gen / f"{day_name}.json", day)
+            except Exception as day_exc:
+                raise CommitAborted(f"day_summary:{day_exc}") from day_exc
+        # Preserve other day JSON files from live
+        if DAILY_DIR.exists():
+            for src in DAILY_DIR.glob("*.json"):
+                dest = daily_gen / src.name
+                if not dest.exists():
+                    _copy_file(src, dest)
+
+        # Alerts
+        if pending_alerts.exists():
+            try:
+                alerts_obj = json.loads(pending_alerts.read_text(encoding="utf-8"))
+            except Exception as aexc:
+                raise CommitAborted(f"alerts_payload:{aexc}") from aexc
+            (gen_dir / "alerts").mkdir(parents=True, exist_ok=True)
+            atomic_write_json(gen_dir / "alerts" / "index.json", alerts_obj)
+        elif ALERTS_PATH.exists():
+            (gen_dir / "alerts").mkdir(parents=True, exist_ok=True)
+            _copy_file(ALERTS_PATH, gen_dir / "alerts" / "index.json")
+
+        # Checkpoint
+        if pending_checkpoint.exists():
+            try:
+                cp = json.loads(pending_checkpoint.read_text(encoding="utf-8"))
+            except Exception as cexc:
+                raise CommitAborted(f"checkpoint:{cexc}") from cexc
+            atomic_write_json(gen_dir / "comparison_checkpoint.json", cp)
+        elif COMPARISON_CHECKPOINT_PATH.exists():
+            _copy_file(COMPARISON_CHECKPOINT_PATH, gen_dir / "comparison_checkpoint.json")
+
+        # Web data already copied from stage_web; if missing, copy live
+        if not (gen_dir / "web" / "data").exists() and WEB_DATA.exists():
+            shutil.copytree(WEB_DATA, gen_dir / "web" / "data")
+
+        atomic_write_json(
+            gen_dir / "generation_meta.json",
+            {
+                "runId": rid,
+                "snapshot_utc": snap_utc,
+                "validatedName": validated_path.name,
+                "revisionEventsAppended": n_rev,
+                "schemaVersion": SCHEMA_VERSION,
+            },
+        )
+
+        # Fault after generation package complete but before CURRENT pointer
+        if os.environ.get("FAULT_INJECT_COMMIT_FAIL") == "1":
+            raise CommitAborted("FAULT_INJECT_COMMIT_FAIL")
+        if os.environ.get("FAULT_INJECT_SIGKILL_BEFORE_CURRENT") == "1":
+            os.kill(os.getpid(), 9)  # SIGKILL — no rollback, CURRENT unchanged
+
+        # Sole commit point: atomic CURRENT.json pointer
+        current_payload = {
+            "runId": rid,
+            "generation": str(gen_dir),
             "validatedPath": str(validated_path),
-            "revisionEventsAppended": n,
+            "validatedName": validated_path.name,
+            "snapshot_utc": snap_utc,
             "committedAt": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-        },
-    )
-    return validated_path
+            "schemaVersion": SCHEMA_VERSION,
+            "crashAtomic": True,
+        }
+        atomic_write_json(CURRENT_POINTER, current_payload)
+        current_flipped = True
+
+        # Materialize live cache from committed generation.
+        # Post-CURRENT failure: financial commit is DONE — never mark aborted / never rollback CURRENT.
+        mat_status = "success"
+        mat_err = None
+        try:
+            if os.environ.get("FAULT_INJECT_MATERIALIZE_FAIL") == "1":
+                raise OSError("FAULT_INJECT_MATERIALIZE_FAIL")
+            materialize_generation(gen_dir)
+        except Exception as mex:
+            mat_status = "failed"
+            mat_err = f"{type(mex).__name__}: {mex}"
+            print(
+                f"WARNING: post-CURRENT materialization failed — runStatus=committed "
+                f"materializationStatus=failed ({mat_err})",
+                file=sys.stderr,
+            )
+
+        _write_run_status(
+            stage_dir,
+            "committed",
+            {
+                "validatedPath": str(validated_path),
+                "revisionEventsAppended": n_rev,
+                "generation": str(gen_dir),
+                "committedAt": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+                "materializationStatus": mat_status,
+                "materializationError": mat_err,
+            },
+        )
+        # Persist materialization status on generation meta
+        try:
+            gmeta_path = gen_dir / "generation_meta.json"
+            gmeta = {}
+            if gmeta_path.exists():
+                gmeta = json.loads(gmeta_path.read_text(encoding="utf-8")) or {}
+            gmeta["materializationStatus"] = mat_status
+            gmeta["materializationError"] = mat_err
+            atomic_write_json(gmeta_path, gmeta)
+        except Exception:
+            pass
+        return validated_path
+    except CommitAborted:
+        abort_staged_run(stage_dir, "commit_aborted_before_CURRENT")
+        raise
+    except Exception as exc:
+        if type(exc).__name__ == "CommitAborted" or isinstance(exc, CommitAborted):
+            abort_staged_run(stage_dir, f"commit_aborted:{exc}")
+            raise
+        # If CURRENT already flipped, never abort/rollback — treat as committed + mat failure
+        if current_flipped:
+            mat_err = f"{type(exc).__name__}: {exc}"
+            _write_run_status(
+                stage_dir,
+                "committed",
+                {
+                    "validatedPath": str(validated_path) if validated_path else None,
+                    "revisionEventsAppended": n_rev,
+                    "generation": str(gen_dir),
+                    "materializationStatus": "failed",
+                    "materializationError": mat_err,
+                },
+            )
+            print(
+                f"WARNING: post-CURRENT error — committed, no abort ({mat_err})",
+                file=sys.stderr,
+            )
+            return validated_path
+        abort_staged_run(stage_dir, f"commit_error:{type(exc).__name__}:{exc}")
+        print(f"ERROR: commit aborted before CURRENT — live state untouched ({exc})", file=sys.stderr)
+        raise CommitAborted(str(exc)) from exc
 
 
 def abort_staged_run(stage_dir: Path, reason: str) -> None:
     _write_run_status(stage_dir, "aborted", {"abortReason": reason})
 
+def publish_prebuilt_site(*, release_version: str | None = None) -> int:
+    """Publish already-exported web/ without recomputing EPS/history/alerts.
 
-def publish_prebuilt_site() -> int:
-    """Publish already-exported web/ without recomputing EPS/history/alerts."""
+    Financial commit success + GitHub push fail must NOT rollback financial state.
+    Persists publishStatus pending/published/failed for scheduler retry.
+    Prefer CURRENT generation web/ as source of truth when available.
+    """
+    ensure_live_matches_current()
+    gen = resolve_current_generation()
+    if gen is not None:
+        gen_web = gen / "web" / "data"
+        if gen_web.is_dir():
+            # Prefer publish from committed generation package web/
+            try:
+                materialize_generation(gen)
+            except Exception as mex:
+                print(f"WARNING: rematerialize before publish: {mex}", file=sys.stderr)
+    # Stamp then finalize release identity so meta matches final asset tree
+    finalize_release_identity(ROOT / "web")
+    now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    meta_path = WEB_DATA / "meta.json"
+    rv = release_version
+    if rv is None and meta_path.exists():
+        try:
+            rv = (json.loads(meta_path.read_text(encoding="utf-8")) or {}).get("releaseVersion")
+        except Exception:
+            rv = None
+    state = read_publish_state()
+    state["publishStatus"] = "pending"
+    state["lastPublishAttempt"] = now
+    state["pendingReleaseVersion"] = rv
+    write_publish_state(state)
+
     env = os.environ.copy()
     env["PIPELINE_LOCK_HELD"] = env.get("PIPELINE_LOCK_HELD", "1")
     env["SKIP_EXPORT"] = "1"
     env["PUBLISH_PREBUILT"] = "1"
-    env.update(export_root_env(ROOT))
-    return subprocess.call(
+    env["AI_EPS_ROOT"] = str(ROOT)
+    rc = subprocess.call(
         ["bash", str(_here / "publish_github_pages.sh")],
         cwd=str(ROOT),
         env=env,
     )
+    state = read_publish_state()
+    state["lastPublishAttempt"] = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    if rc == 0:
+        state["publishStatus"] = "published"
+        state["lastSuccessfulPublish"] = state["lastPublishAttempt"]
+        state["pendingReleaseVersion"] = None
+    else:
+        # Do NOT rollback financial state — leave pending/failed for retry
+        state["publishStatus"] = "failed" if rc not in (0,) else "pending"
+        # keep pendingReleaseVersion for retry
+        state["pendingReleaseVersion"] = rv
+    write_publish_state(state)
+    return rc
+
+
+def retry_pending_publish_if_needed() -> int | None:
+    """If publishStatus is pending/failed, retry publish before new collection.
+
+    MUST reconcile live cache to CURRENT before publish (else stale web publish).
+    Prefer publish directly from CURRENT generation web/.
+    Returns publish rc, or None if no pending publish.
+    """
+    # Reconcile FIRST — before any publish of live/web cache
+    ensure_live_matches_current()
+    state = read_publish_state()
+    status = str(state.get("publishStatus") or "")
+    if status not in {"pending", "failed"}:
+        return None
+    if not state.get("pendingReleaseVersion") and status != "pending":
+        # failed without pending version still retry once if web looks publishable
+        pass
+    print(f"pending publish retry status={status} release={state.get('pendingReleaseVersion')}")
+    return publish_prebuilt_site(release_version=state.get("pendingReleaseVersion"))
 
 
 def ingest_and_build(
@@ -525,8 +1165,11 @@ def ingest_and_build(
     expected_tickers: list[str] | None = None,
     run_export: bool = True,
     run_publish: bool = False,
+    validate_only: bool = False,
+    backfill: bool = False,
 ) -> dict:
     """Process one incoming raw JSON through transactional staged→commit pipeline."""
+    ensure_live_matches_current()
     expected = expected_tickers or load_watchlist()
     raw = json.loads(incoming_path.read_text(encoding="utf-8"))
     if not isinstance(raw, dict):
@@ -547,8 +1190,6 @@ def ingest_and_build(
         "quarantinePath": None,
         "stageDir": str(stage_dir),
         "ok": False,
-        "committed": False,
-        "materializationStatus": None,
     }
 
     _write_run_status(
@@ -570,6 +1211,7 @@ def ingest_and_build(
         expected_tickers=expected,
         lkg_by_ticker=lkg,
         root=ROOT,
+        backfill=backfill,
     )
     snap_norm = gate.get("normalizedSnapshot") or raw
     snap_norm = dict(snap_norm)
@@ -594,7 +1236,7 @@ def ingest_and_build(
     QUARANTINE_DIR.mkdir(parents=True, exist_ok=True)
 
     if gate.get("publishable") is not True:
-        qpath = QUARANTINE_DIR / f"{tentative_name}.quarantine"
+        qpath = sq.immutable_quarantine_path(QUARANTINE_DIR, tentative_name, snap_norm)
         quarantine = dict(snap_norm)
         quarantine["qualityGate"] = gate
         quarantine["status"] = gate.get("status")
@@ -609,10 +1251,7 @@ def ingest_and_build(
         )
         return result
 
-    # STAGE into a work root — live canonical trees are not mutated until CURRENT
-    import transaction as txn
-
-    work = txn.prepare_work_root(ROOT, stage_dir)
+    # STAGE only — do NOT write validated / revisions / mark incoming yet
     stage_snap = stage_dir / "snapshot.json"
     atomic_write_json(stage_snap, snap_norm)
     events = generate_revision_events(
@@ -627,31 +1266,37 @@ def ingest_and_build(
         encoding="utf-8",
     )
 
-    work_snap_dir = work / "data" / "snapshots"
-    work_snap_dir.mkdir(parents=True, exist_ok=True)
-    work_validated = work_snap_dir / tentative_name
-    if not work_validated.exists():
-        atomic_write_json(work_validated, snap_norm)
-    try:
-        atomic_write_json(work_snap_dir / "latest.json", snap_norm)
-    except Exception:
-        pass
-    work_rev = work / "data" / "revisions" / "history.jsonl"
-    append_revision_events(events, work_rev)
+    if validate_only:
+        # Gate + stage only — MUST NOT commit persistent state
+        _write_run_status(stage_dir, "validated_only", {"note": "no commit"})
+        result["runStatus"] = "validated_only"
+        result["ok"] = True
+        result["validatedPath"] = None
+        print(f"VALIDATE-ONLY OK status={gate.get('status')} stage={stage_dir} (no commit)")
+        return result
 
     if run_export:
         env = os.environ.copy()
         env["PIPELINE_LOCK_HELD"] = env.get("PIPELINE_LOCK_HELD", "1")
-        env.update(export_root_env(work))
-        env["INGEST_GATED_SNAPSHOT"] = str(work_validated)
+        env["INGEST_GATED_SNAPSHOT"] = str(stage_snap)
         env["INGEST_SNAPSHOT_UTC"] = snap_utc
         env["INGEST_REVISIONS_DONE"] = "1"
         env["INGEST_COLLECTION_RUN_ID"] = run_id
-        env["LEGACY_MUTATE"] = "1"  # ingest is the sole writer; persist into work root
-        # FAULT_INJECT at export start still aborts before CURRENT.
+        env["INGEST_STAGE_DIR"] = str(stage_dir)
+        # Pure-build: no formal persistent DB mutation before COMMIT
+        stage_web = stage_dir / "web"
+        stage_web.mkdir(parents=True, exist_ok=True)
         rc = subprocess.call(
-            [sys.executable, str(_here / "export_web_data.py"), "--legacy-mutate"],
-            cwd=str(work),
+            [
+                sys.executable,
+                str(_here / "export_web_data.py"),
+                "--no-persistent-mutation",
+                "--output-root",
+                str(stage_web),
+                "--stage-dir",
+                str(stage_dir),
+            ],
+            cwd=str(ROOT),
             env=env,
         )
         result["exportRc"] = rc
@@ -661,51 +1306,34 @@ def ingest_and_build(
             result["ok"] = False
             print(
                 f"ERROR: export_web_data.py exited {rc} — ABORT staged run "
-                f"(CURRENT not flipped; validated/revisions/incoming untouched)",
+                f"(validated/revisions/incoming/daily/alerts/web untouched)",
                 file=sys.stderr,
             )
             return result
 
-    # COMMIT: generation snapshot + atomic CURRENT pointer, then materialize.
-    # After CURRENT, materialization failure is committed (never aborted).
+    # COMMIT after successful export (or when export skipped after gate)
     try:
-        commit_info = txn.commit_work(ROOT, work, gen_id=run_id)
-    except Exception as exc:
-        abort_staged_run(stage_dir, f"commit_failed:{exc}")
+        validated_path = commit_staged_run(
+            stage_dir, snap_norm, events, snap_utc, run_id=run_id
+        )
+    except CommitAborted as ca:
         result["runStatus"] = "aborted"
         result["ok"] = False
-        result["committed"] = False
-        print(f"ERROR: COMMIT failed before CURRENT — aborted ({exc})", file=sys.stderr)
-        return result
-
-    gen_id = commit_info.get("generationId") or run_id
-    mat_status = commit_info.get("materializationStatus") or "ok"
-    result["generationId"] = gen_id
-    result["materializationStatus"] = mat_status
-    result["committed"] = True
-
-    validated_path = SNAP_DIR / tentative_name
-    if not validated_path.exists() and mat_status == "ok":
-        validated_path = commit_staged_run(stage_dir, snap_norm, events, snap_utc)
-    else:
-        _write_run_status(
-            stage_dir,
-            "committed",
-            {
-                "validatedPath": str(validated_path) if validated_path.exists() else None,
-                "revisionEventsAppended": len(events),
-                "generationId": gen_id,
-                "materializationStatus": mat_status,
-                "committedAt": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-            },
+        result["validatedPath"] = None
+        result["commitError"] = str(ca)
+        print(
+            f"ERROR: commit aborted/rolled back — persistent state unchanged ({ca})",
+            file=sys.stderr,
         )
-    result["validatedPath"] = str(validated_path) if validated_path.exists() else None
+        return result
+    result["validatedPath"] = str(validated_path)
     try:
         run_meta = json.loads((stage_dir / "run.json").read_text(encoding="utf-8"))
-        result["revisionEventsAppended"] = int(run_meta.get("revisionEventsAppended") or len(events))
+        result["revisionEventsAppended"] = int(run_meta.get("revisionEventsAppended") or 0)
     except Exception:
-        result["revisionEventsAppended"] = len(events)
+        result["revisionEventsAppended"] = 0
 
+    # Mark processed incoming ONLY after successful commit
     try:
         processed = incoming_path.with_suffix(incoming_path.suffix + ".processed")
         if incoming_path.exists():
@@ -715,20 +1343,14 @@ def ingest_and_build(
         print(f"WARNING: could not mark incoming processed: {rename_exc}", file=sys.stderr)
 
     result["runStatus"] = "committed"
-    result["ok"] = mat_status == "ok"
+    result["ok"] = True
     print(
-        f"INGEST OK status={gate.get('status')} validated={result['validatedPath']} "
-        f"revisions=+{result['revisionEventsAppended']} runId={run_id} gen={gen_id} "
-        f"materialization={mat_status}"
+        f"INGEST OK status={gate.get('status')} validated={validated_path} "
+        f"revisions=+{result['revisionEventsAppended']} runId={run_id}"
     )
-    if mat_status != "ok":
-        print(
-            f"WARNING: CURRENT flipped but materializationStatus={mat_status} — "
-            "retry with --materialize-current (never aborted)",
-            file=sys.stderr,
-        )
 
-    if run_publish and mat_status == "ok":
+    if run_publish:
+        # Publish prebuilt site — must NOT re-export / recompute revisions
         rc = publish_prebuilt_site()
         result["publishRc"] = rc
         if rc not in (0,):
@@ -750,24 +1372,33 @@ def ingest_latest_incoming(**kwargs) -> dict:
 
 
 def main(argv: list[str] | None = None) -> int:
-    ap = argparse.ArgumentParser(description="Deterministic transactional ingest entrypoint (sole writer)")
+    ap = argparse.ArgumentParser(description="Deterministic transactional ingest entrypoint")
     ap.add_argument(
         "incoming",
         nargs="?",
         help="Path to incoming raw JSON (default: latest under data/incoming/)",
     )
-    ap.add_argument("--no-export", action="store_true", help="Skip web export / alerts")
+    ap.add_argument(
+        "--validate-only",
+        action="store_true",
+        help="Gate + stage only; does NOT commit persistent financial state",
+    )
+    ap.add_argument(
+        "--no-export",
+        action="store_true",
+        help="DEPRECATED unsafe — use --validate-only (refuses to commit without export)",
+    )
     ap.add_argument(
         "--publish",
         action="store_true",
         help="After single export+commit, publish_prebuilt_site (no second export)",
     )
-    ap.add_argument("--write-incoming", help="Write given snapshot JSON path into data/incoming/ only")
     ap.add_argument(
-        "--materialize-current",
+        "--backfill",
         action="store_true",
-        help="Retry live materialization from CURRENT (post-commit; never aborts)",
+        help="Allow historical/old snapshot timestamps (explicit backfill mode)",
     )
+    ap.add_argument("--write-incoming", help="Write given snapshot JSON path into data/incoming/ only")
     args = ap.parse_args(argv)
 
     if args.write_incoming:
@@ -789,25 +1420,28 @@ def main(argv: list[str] | None = None) -> int:
             print(RUN_IN_PROGRESS_MSG, flush=True)
             return 2
     try:
-        if args.materialize_current:
-            import transaction as txn
-            info = txn.materialize_from_current(ROOT)
+        # Scheduler: pending publish must retry before new collection
+        try:
+            retry_pending_publish_if_needed()
+        except Exception as pub_exc:
+            print(f"WARNING: pending publish retry error: {pub_exc}", file=sys.stderr)
+        if args.no_export and not args.validate_only:
             print(
-                f"MATERIALIZE CURRENT gen={info.get('generationId')} "
-                f"status={info.get('materializationStatus')} committed={info.get('committed')}"
+                "ERROR: --no-export is banned for production ingest "
+                "(unsafe no-export commit). Use --validate-only (no commit).",
+                file=sys.stderr,
             )
-            return 0 if info.get("materializationStatus") == "ok" else 1
+            return 2
+        kwargs = dict(
+            run_export=not args.validate_only,
+            run_publish=args.publish and not args.validate_only,
+            validate_only=args.validate_only,
+            backfill=args.backfill,
+        )
         if args.incoming:
-            result = ingest_and_build(
-                Path(args.incoming),
-                run_export=not args.no_export,
-                run_publish=args.publish,
-            )
+            result = ingest_and_build(Path(args.incoming), **kwargs)
         else:
-            result = ingest_latest_incoming(
-                run_export=not args.no_export,
-                run_publish=args.publish,
-            )
+            result = ingest_latest_incoming(**kwargs)
         return 0 if result.get("ok") else 1
     finally:
         if lock_cm is not None:

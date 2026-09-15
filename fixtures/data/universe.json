@@ -1,10 +1,86 @@
 {
   "name": "AI Investment EPS & Earnings Monitor",
   "created_utc": "2026-09-15T01:36:00Z",
-  "tickers": ["NVDA", "AVGO", "TSM", "MSFT", "BE", "KEYS"],
-  "years_of_interest": ["2026E", "2027E", "2028E", "2029E"],
-  "primary_sources": ["company_ir", "10-Q", "10-K", "8-K", "earnings_presentation", "official_transcript"],
-  "secondary_sources": ["seeking_alpha_estimates", "seeking_alpha_transcript", "seeking_alpha_revisions"],
-  "tertiary_sources": ["bloomberg", "reuters", "wsj", "cnbc", "mgmt_interview"],
-  "quaternary_sources": ["x", "analyst_posts", "supply_chain_rumors"]
+  "tickers": [
+    "NVDA",
+    "AVGO",
+    "TSM",
+    "MSFT",
+    "BE",
+    "KEYS"
+  ],
+  "years_of_interest": [
+    "2026E",
+    "2027E",
+    "2028E",
+    "2029E"
+  ],
+  "fiscalEndMonthByTicker": {
+    "NVDA": 1,
+    "AVGO": 10,
+    "TSM": 12,
+    "MSFT": 6,
+    "BE": 12,
+    "KEYS": 10
+  },
+  "fiscalEndNoteByTicker": {
+    "NVDA": "Late January",
+    "AVGO": "Late October / early November (use Oct)",
+    "TSM": "Calendar year (Dec)",
+    "MSFT": "June 30",
+    "BE": "Calendar year (Dec)",
+    "KEYS": "October 31"
+  },
+  "primary_sources": [
+    "company_ir",
+    "10-Q",
+    "10-K",
+    "8-K",
+    "earnings_presentation",
+    "official_transcript"
+  ],
+  "secondary_sources": [
+    "seeking_alpha_estimates",
+    "seeking_alpha_transcript",
+    "seeking_alpha_revisions"
+  ],
+  "tertiary_sources": [
+    "bloomberg",
+    "reuters",
+    "wsj",
+    "cnbc",
+    "mgmt_interview"
+  ],
+  "quaternary_sources": [
+    "x",
+    "analyst_posts",
+    "supply_chain_rumors"
+  ],
+  "officialDomainsByTicker": {
+    "NVDA": [
+      "investor.nvidia.com",
+      "nvidianews.nvidia.com",
+      "www.nvidia.com"
+    ],
+    "AVGO": [
+      "investors.broadcom.com",
+      "www.broadcom.com"
+    ],
+    "TSM": [
+      "investor.tsmc.com",
+      "www.tsmc.com"
+    ],
+    "MSFT": [
+      "www.microsoft.com",
+      "microsoft.com"
+    ],
+    "BE": [
+      "investors.bloomenergy.com",
+      "www.bloomenergy.com"
+    ],
+    "KEYS": [
+      "investor.keysight.com",
+      "www.keysight.com"
+    ]
+  }
 }
