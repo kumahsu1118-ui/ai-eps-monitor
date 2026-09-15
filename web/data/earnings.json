@@ -5,7 +5,7 @@
     "reportDate": "2026-08-26",
     "periodLabel": "Q2 2027 (fiscal 2027)",
     "lastEarnings": "8/26/2026",
-    "nextEarnings": "Nov 25, 2026 · Estimated",
+    "nextEarnings": "Nov 25, 2026 · Post-Market · Estimated",
     "revenue": [
       {
         "label": "Revenue",
@@ -326,13 +326,19 @@
       "grossMargin": "75% GAAP and non-GAAP",
       "sourceUrl": "https://investor.nvidia.com/news/press-release-details/2026/NVIDIA-Announces-Financial-Results-for-Second-Quarter-Fiscal-2027/default.aspx",
       "secUrl": "https://www.sec.gov/Archives/edgar/data/1045810/000104581026000073/nvda-20260826.htm",
-      "sourceTier": 1
+      "sourceTier": 1,
+      "metrics": {
+        "eps": "$2.22",
+        "revenue": "$96.22B",
+        "grossMargin": "75% GAAP and non-GAAP"
+      }
     },
     "consensusComparison": {
       "vsConsensus": "Above",
+      "beatMiss": "Above",
       "sourceUrl": "https://seekingalpha.com/article/4940563-nvidia-corporation-nvda-q2-2027-earnings-call-transcript",
       "sourceTier": 4,
-      "note": "Beat/miss vs consensus attributed to Seeking Alpha summary (Tier 4), not Company IR actuals"
+      "note": "Beat/miss vs consensus attributed to Seeking Alpha / secondary summary (not Company IR actuals Tier 1)"
     },
     "nextEarningsRaw": "11/25/2026 (Post-Market)"
   },
@@ -342,7 +348,7 @@
     "reportDate": "2026-09-02",
     "periodLabel": "Q3 2026 (fiscal 2026)",
     "lastEarnings": "9/2/2026",
-    "nextEarnings": "Dec 10, 2026 · Estimated",
+    "nextEarnings": "Dec 10, 2026 · Post-Market · Estimated",
     "revenue": [
       {
         "label": "Revenue",
@@ -644,6 +650,28 @@
     "nextEarningsSource": "Seeking Alpha",
     "resultsVsConsensus": "Above",
     "guidanceVsConsensus": "unknown",
+    "actuals": {
+      "metrics": {
+        "eps": "$3.32",
+        "revenue": "$29.6B",
+        "grossMargin": "75% consolidated; semiconductor solutions approximately 67% (corrected on Q&A)",
+        "operatingMargin": "67.9%",
+        "fcf": "$13.7B (46% of revenue)"
+      },
+      "eps": "$3.32",
+      "revenue": "$29.6B",
+      "grossMargin": "75% consolidated; semiconductor solutions approximately 67% (corrected on Q&A)",
+      "sourceUrl": "https://investors.broadcom.com/news-releases/news-release-details/broadcom-inc-announces-third-quarter-fiscal-year-2026-financial",
+      "secUrl": "https://www.sec.gov/Archives/edgar/data/1730168/000173016826000076/avgo-20260902.htm",
+      "sourceTier": 1
+    },
+    "consensusComparison": {
+      "vsConsensus": "Above",
+      "beatMiss": "Above",
+      "sourceUrl": "https://seekingalpha.com/article/4942557-broadcom-inc-avgo-q3-2026-earnings-call-transcript",
+      "sourceTier": 4,
+      "note": "Beat/miss vs consensus attributed to Seeking Alpha / secondary summary (not Company IR actuals Tier 1)"
+    },
     "nextEarningsRaw": "12/10/2026 (Post-Market)"
   },
   "TSM": {
@@ -671,7 +699,7 @@
     "ticker": "MSFT",
     "hasDigest": false,
     "lastEarnings": "7/29/2026",
-    "nextEarnings": "Oct 29, 2026 · Estimated",
+    "nextEarnings": "Oct 29, 2026 · Post-Market · Estimated",
     "nextEarningsRaw": "10/29/2026 (Post-Market)",
     "nextEarningsStatus": "estimated",
     "nextEarningsSource": "Seeking Alpha",
@@ -692,7 +720,7 @@
     "ticker": "BE",
     "hasDigest": false,
     "lastEarnings": "7/28/2026",
-    "nextEarnings": "Oct 29, 2026 · Estimated",
+    "nextEarnings": "Oct 29, 2026 · Post-Market · Estimated",
     "nextEarningsRaw": "10/29/2026 (Post-Market)",
     "nextEarningsStatus": "estimated",
     "nextEarningsSource": "Seeking Alpha",
@@ -729,5 +757,6 @@
     "qa": [],
     "results": [],
     "sources": []
-  }
+  },
+  "_buildId": "7f93184951a93aef15985e40abd73ff0ac5e796069798909ac17b85730a8ba8b"
 }
