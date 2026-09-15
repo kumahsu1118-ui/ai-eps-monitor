@@ -2,7 +2,7 @@
   "lastUpdated": "2026-09-15T01:36:00Z",
   "lastUpdatedDisplay": "Sep 15, 2026 09:36 Taipei Time",
   "primarySource": "Seeking Alpha",
-  "latestSuccessfulRefresh": "Sep 15, 2026 12:18 Taipei Time",
+  "latestSuccessfulRefresh": "Sep 15, 2026 12:22 Taipei Time",
   "snapshotFile": "2026-09-15.json",
   "revisionWindowNote": "Seeking Alpha displayed 1M/3M/6M revision % only; 7D/30D/90D fields = Data unavailable. Dashboard uses 1M as the primary short-window revision proxy (not identical to 30D).",
   "calendarAlignmentRule": "Fiscal period ending Jan-Mar → calendar year = ending year - 1; otherwise calendar year = ending year. Reported labels never overwritten.",
@@ -12,8 +12,8 @@
   "consensusDataAsOfDisplay": "Sep 15, 2026 09:36 Taipei Time",
   "lastSuccessfulCollection": "2026-09-15T01:36:00Z",
   "lastSuccessfulCollectionDisplay": "Sep 15, 2026 09:36 Taipei Time",
-  "sitePublished": "2026-09-15T04:18:45Z",
-  "sitePublishedDisplay": "Sep 15, 2026 12:18 Taipei Time",
+  "sitePublished": "2026-09-15T04:22:25Z",
+  "sitePublishedDisplay": "Sep 15, 2026 12:22 Taipei Time",
   "dataStale": false,
-  "siteRepoCommit": "6d8e208556f97d1498125766741a5d8d40b2790e"
+  "siteRepoCommit": "29f3d27e4de19bb29253b34cba1375f453f69a0f"
 }

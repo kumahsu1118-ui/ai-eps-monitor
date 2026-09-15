@@ -654,6 +654,13 @@ table.data .ticker a:hover {
   justify-content: flex-end;
   margin-top: 0.15rem;
 }
+
+/* hidden must win over .meta-row { display:flex } */
+.meta-stale-row[hidden],
+#meta-stale-row[hidden] {
+  display: none !important;
+}
+
 .summary-grid {
   grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
 }

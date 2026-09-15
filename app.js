@@ -308,8 +308,15 @@
     set("#meta-source", m.primarySource);
     const staleRow = $("#meta-stale-row");
     if (staleRow) {
-      if (m.dataStale) staleRow.removeAttribute("hidden");
-      else staleRow.setAttribute("hidden", "");
+      const stale = m.dataStale === true || m.dataStale === "true";
+      if (stale) {
+        staleRow.removeAttribute("hidden");
+        staleRow.classList.add("is-stale-visible");
+      } else {
+        staleRow.setAttribute("hidden", "");
+        staleRow.classList.remove("is-stale-visible");
+        staleRow.style.display = "none";
+      }
     }
     const fw = $("#footer-watchlist");
     if (fw) fw.textContent = "Watchlist: " + state.watchlist.join(", ");
