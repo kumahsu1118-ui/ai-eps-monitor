@@ -36,3 +36,4 @@ ORIGIN.txt
 site-repo/.git/
 web/overview-verify.png
 web/pages-verify.png
+*.lock
