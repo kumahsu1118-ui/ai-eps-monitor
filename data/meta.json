@@ -2,8 +2,9 @@
   "lastUpdated": "2026-09-15T01:36:00Z",
   "lastUpdatedDisplay": "Sep 15, 2026 09:36 Taipei Time",
   "primarySource": "Seeking Alpha",
-  "latestSuccessfulRefresh": "Sep 15, 2026 09:36 Taipei Time",
+  "latestSuccessfulRefresh": "Sep 15, 2026 10:15 Taipei Time",
   "snapshotFile": "2026-09-15.json",
   "revisionWindowNote": "Seeking Alpha displayed 1M/3M/6M revision % only; 7D/30D/90D fields = Data unavailable. Dashboard uses 1M as the primary short-window revision proxy (not identical to 30D).",
-  "calendarAlignmentRule": "Fiscal period ending Jan-Mar → calendar year = ending year - 1; otherwise calendar year = ending year. Reported labels never overwritten."
+  "calendarAlignmentRule": "Fiscal period ending Jan-Mar → calendar year = ending year - 1; otherwise calendar year = ending year. Reported labels never overwritten.",
+  "syncTestMarker": "2026-09-15 10:15:58 Taipei Time"
 }
