@@ -1498,7 +1498,6 @@
       }
       kv(y + " 1M Rev", revCell(e.rev1M));
     });
-    const years = chartYearKeys();
     const y1 = years[1];
     const y2 = years[2];
     const peY1 = pe(px, ((c.eps || {})[y1] || {}).consensus);
