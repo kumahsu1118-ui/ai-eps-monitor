@@ -1,0 +1,673 @@
+{
+  "NVDA": {
+    "ticker": "NVDA",
+    "price": 210.96,
+    "priceAsOf": "4:00 PM 09/14/26; post-market $212.04 at 7:59 PM",
+    "lastEarnings": "8/26/2026",
+    "nextEarnings": "11/25/2026 (Post-Market)",
+    "fyNote": "Annual view; table column shown as 'Fiscal Period Ending'.",
+    "momentum": "Positive",
+    "eps": {
+      "2026E": {
+        "consensus": 9.31,
+        "high": 10.1,
+        "low": 9.01,
+        "analysts": 50.0,
+        "rev1M": 0.13,
+        "rev3M": 4.13,
+        "rev6M": 12.19,
+        "reportedFiscalLabel": "Jan 2027",
+        "calendarAlignment": "CY2026"
+      },
+      "2027E": {
+        "consensus": 15.61,
+        "high": 18.75,
+        "low": 9.8,
+        "analysts": 53.0,
+        "rev1M": 1.37,
+        "rev3M": 22.85,
+        "rev6M": 40.57,
+        "reportedFiscalLabel": "Jan 2028",
+        "calendarAlignment": "CY2027"
+      },
+      "2028E": {
+        "consensus": 21.06,
+        "high": 26.45,
+        "low": 14.43,
+        "analysts": 32.0,
+        "rev1M": 2.98,
+        "rev3M": 33.93,
+        "rev6M": 58.53,
+        "reportedFiscalLabel": "Jan 2029",
+        "calendarAlignment": "CY2028"
+      },
+      "2029E": {
+        "consensus": 23.4,
+        "high": 30.37,
+        "low": 17.9,
+        "analysts": 4.0,
+        "rev1M": 11.02,
+        "rev3M": 33.74,
+        "rev6M": 54.8,
+        "reportedFiscalLabel": "Jan 2030",
+        "calendarAlignment": "CY2029"
+      }
+    },
+    "sourceUrl": "https://seekingalpha.com/symbol/NVDA/earnings/estimates",
+    "updateTime": "2026-09-15T01:36:00Z",
+    "source": "Seeking Alpha",
+    "dataGaps": [
+      "7-day, 30-day and 90-day revision fields and absolute changes were not visible; only 1M/3M/6M percentage trends were shown.",
+      "Fiscal/calendar distinction beyond the 'Fiscal Period Ending' header was not stated."
+    ],
+    "drivers": {
+      "ticker": "NVDA",
+      "updated": "2026-09-15T01:36:00Z",
+      "status": "Baseline — not yet scored vs prior earnings",
+      "drivers": [
+        {
+          "name": "GPU shipment",
+          "status": "unchanged",
+          "note": "Awaiting first post-setup earnings refresh"
+        },
+        {
+          "name": "ASP",
+          "status": "unchanged",
+          "note": "Awaiting first post-setup earnings refresh"
+        },
+        {
+          "name": "Rubin / Rubin Ultra",
+          "status": "unchanged",
+          "note": "Awaiting first post-setup earnings refresh"
+        },
+        {
+          "name": "inference demand",
+          "status": "unchanged",
+          "note": "Awaiting first post-setup earnings refresh"
+        },
+        {
+          "name": "HBM supply",
+          "status": "unchanged",
+          "note": "Awaiting first post-setup earnings refresh"
+        },
+        {
+          "name": "TSMC capacity",
+          "status": "unchanged",
+          "note": "Awaiting first post-setup earnings refresh"
+        },
+        {
+          "name": "CoWoS / advanced packaging",
+          "status": "unchanged",
+          "note": "Awaiting first post-setup earnings refresh"
+        },
+        {
+          "name": "networking",
+          "status": "unchanged",
+          "note": "Awaiting first post-setup earnings refresh"
+        },
+        {
+          "name": "gross margin",
+          "status": "unchanged",
+          "note": "Awaiting first post-setup earnings refresh"
+        }
+      ]
+    }
+  },
+  "AVGO": {
+    "ticker": "AVGO",
+    "price": 344.72,
+    "priceAsOf": "4:00 PM 09/14/26; post-market $346.22 at 7:59 PM",
+    "lastEarnings": "9/2/2026",
+    "nextEarnings": "12/10/2026 (Post-Market)",
+    "fyNote": "Annual view; table column shown as 'Fiscal Period Ending'.",
+    "momentum": "Neutral",
+    "eps": {
+      "2026E": {
+        "consensus": 11.66,
+        "high": 12.38,
+        "low": 11.35,
+        "analysts": 46.0,
+        "rev1M": 0.23,
+        "rev3M": 0.29,
+        "rev6M": 2.48,
+        "reportedFiscalLabel": "Oct 2026",
+        "calendarAlignment": "CY2026"
+      },
+      "2027E": {
+        "consensus": 19.38,
+        "high": 22.44,
+        "low": 17.47,
+        "analysts": 47.0,
+        "rev1M": -0.97,
+        "rev3M": -0.4,
+        "rev6M": 8.66,
+        "reportedFiscalLabel": "Oct 2027",
+        "calendarAlignment": "CY2027"
+      },
+      "2028E": {
+        "consensus": 30.56,
+        "high": 34.25,
+        "low": 25.22,
+        "analysts": 33.0,
+        "rev1M": 15.7,
+        "rev3M": 18.76,
+        "rev6M": 37.83,
+        "reportedFiscalLabel": "Oct 2028",
+        "calendarAlignment": "CY2028"
+      },
+      "2029E": {
+        "consensus": 40.66,
+        "high": 50.5,
+        "low": 30.54,
+        "analysts": 4.0,
+        "rev1M": 26.48,
+        "rev3M": 30.45,
+        "rev6M": 53.56,
+        "reportedFiscalLabel": "Oct 2029",
+        "calendarAlignment": "CY2029"
+      }
+    },
+    "sourceUrl": "https://seekingalpha.com/symbol/AVGO/earnings/estimates",
+    "updateTime": "2026-09-15T01:36:00Z",
+    "source": "Seeking Alpha",
+    "dataGaps": [
+      "7-day, 30-day and 90-day revision fields and absolute changes were not visible; only 1M/3M/6M percentage trends were shown.",
+      "Fiscal/calendar distinction beyond the 'Fiscal Period Ending' header was not stated."
+    ],
+    "drivers": {
+      "ticker": "AVGO",
+      "updated": "2026-09-15T01:36:00Z",
+      "status": "Baseline — not yet scored vs prior earnings",
+      "drivers": [
+        {
+          "name": "AI ASIC",
+          "status": "unchanged",
+          "note": "Awaiting first post-setup earnings refresh"
+        },
+        {
+          "name": "hyperscaler customers",
+          "status": "unchanged",
+          "note": "Awaiting first post-setup earnings refresh"
+        },
+        {
+          "name": "AI networking",
+          "status": "unchanged",
+          "note": "Awaiting first post-setup earnings refresh"
+        },
+        {
+          "name": "Tomahawk",
+          "status": "unchanged",
+          "note": "Awaiting first post-setup earnings refresh"
+        },
+        {
+          "name": "Jericho",
+          "status": "unchanged",
+          "note": "Awaiting first post-setup earnings refresh"
+        },
+        {
+          "name": "VMware",
+          "status": "unchanged",
+          "note": "Awaiting first post-setup earnings refresh"
+        },
+        {
+          "name": "gross margin",
+          "status": "unchanged",
+          "note": "Awaiting first post-setup earnings refresh"
+        },
+        {
+          "name": "FCF",
+          "status": "unchanged",
+          "note": "Awaiting first post-setup earnings refresh"
+        }
+      ]
+    }
+  },
+  "TSM": {
+    "ticker": "TSM",
+    "price": 418.01,
+    "priceAsOf": "4:00 PM 09/14/26; post-market $419.63 at 7:59 PM",
+    "lastEarnings": "7/16/2026",
+    "nextEarnings": "10/16/2026 (Estimated)",
+    "fyNote": "Annual view; table column shown as 'Fiscal Period Ending'.",
+    "momentum": "Neutral",
+    "eps": {
+      "2026E": {
+        "consensus": 16.93,
+        "high": 17.8,
+        "low": 15.23,
+        "analysts": 13.0,
+        "rev1M": 0.21,
+        "rev3M": 6.99,
+        "rev6M": 17.26,
+        "reportedFiscalLabel": "Dec 2026",
+        "calendarAlignment": "CY2026"
+      },
+      "2027E": {
+        "consensus": 21.93,
+        "high": 24.62,
+        "low": 19.58,
+        "analysts": 13.0,
+        "rev1M": 0.66,
+        "rev3M": 8.9,
+        "rev6M": 22.49,
+        "reportedFiscalLabel": "Dec 2027",
+        "calendarAlignment": "CY2027"
+      },
+      "2028E": {
+        "consensus": 28.33,
+        "high": 33.4,
+        "low": 24.27,
+        "analysts": 8.0,
+        "rev1M": 0.25,
+        "rev3M": 8.15,
+        "rev6M": null,
+        "reportedFiscalLabel": "Dec 2028",
+        "calendarAlignment": "CY2028"
+      },
+      "2029E": {
+        "consensus": null,
+        "high": null,
+        "low": null,
+        "analysts": null,
+        "rev1M": null,
+        "rev3M": null,
+        "rev6M": null,
+        "reportedFiscalLabel": null,
+        "calendarAlignment": "CY2029"
+      }
+    },
+    "sourceUrl": "https://seekingalpha.com/symbol/TSM/earnings/estimates",
+    "updateTime": "2026-09-15T01:36:00Z",
+    "source": "Seeking Alpha",
+    "dataGaps": [
+      "7-day, 30-day and 90-day revision fields and absolute changes were not visible; only 1M/3M/6M percentage trends were shown.",
+      "EPS table did not show an EPS estimate for Dec 2029; no 2029 EPS value was inferred from the revenue table.",
+      "Fiscal/calendar distinction beyond the 'Fiscal Period Ending' header was not stated."
+    ],
+    "drivers": {
+      "ticker": "TSM",
+      "updated": "2026-09-15T01:36:00Z",
+      "status": "Baseline — not yet scored vs prior earnings",
+      "drivers": [
+        {
+          "name": "N2",
+          "status": "unchanged",
+          "note": "Awaiting first post-setup earnings refresh"
+        },
+        {
+          "name": "A16",
+          "status": "unchanged",
+          "note": "Awaiting first post-setup earnings refresh"
+        },
+        {
+          "name": "advanced packaging",
+          "status": "unchanged",
+          "note": "Awaiting first post-setup earnings refresh"
+        },
+        {
+          "name": "CoWoS",
+          "status": "unchanged",
+          "note": "Awaiting first post-setup earnings refresh"
+        },
+        {
+          "name": "AI accelerator demand",
+          "status": "unchanged",
+          "note": "Awaiting first post-setup earnings refresh"
+        },
+        {
+          "name": "HPC revenue",
+          "status": "unchanged",
+          "note": "Awaiting first post-setup earnings refresh"
+        },
+        {
+          "name": "utilization",
+          "status": "unchanged",
+          "note": "Awaiting first post-setup earnings refresh"
+        },
+        {
+          "name": "gross margin",
+          "status": "unchanged",
+          "note": "Awaiting first post-setup earnings refresh"
+        },
+        {
+          "name": "CapEx",
+          "status": "unchanged",
+          "note": "Awaiting first post-setup earnings refresh"
+        }
+      ]
+    }
+  },
+  "MSFT": {
+    "ticker": "MSFT",
+    "price": 505.41,
+    "priceAsOf": "4:00 PM 09/14/26; post-market $504.23 at 7:59 PM",
+    "lastEarnings": "7/29/2026",
+    "nextEarnings": "10/29/2026 (Post-Market)",
+    "fyNote": "Annual view; table column shown as 'Fiscal Period Ending'.",
+    "momentum": "Neutral",
+    "eps": {
+      "2026E": {
+        "consensus": null,
+        "high": null,
+        "low": null,
+        "analysts": null,
+        "rev1M": null,
+        "rev3M": null,
+        "rev6M": null,
+        "reportedFiscalLabel": null,
+        "calendarAlignment": "CY2026"
+      },
+      "2027E": {
+        "consensus": 19.75,
+        "high": 20.7,
+        "low": 19.21,
+        "analysts": 33.0,
+        "rev1M": 0.0,
+        "rev3M": 1.83,
+        "rev6M": 4.9,
+        "reportedFiscalLabel": "Jun 2027",
+        "calendarAlignment": "CY2027"
+      },
+      "2028E": {
+        "consensus": 23.57,
+        "high": 26.0,
+        "low": 20.93,
+        "analysts": 33.0,
+        "rev1M": -0.0,
+        "rev3M": 4.18,
+        "rev6M": 5.87,
+        "reportedFiscalLabel": "Jun 2028",
+        "calendarAlignment": "CY2028"
+      },
+      "2029E": {
+        "consensus": 28.73,
+        "high": 32.47,
+        "low": 26.7,
+        "analysts": 15.0,
+        "rev1M": 0.0,
+        "rev3M": 5.02,
+        "rev6M": 5.16,
+        "reportedFiscalLabel": "Jun 2029",
+        "calendarAlignment": "CY2029"
+      }
+    },
+    "sourceUrl": "https://seekingalpha.com/symbol/MSFT/earnings/estimates",
+    "updateTime": "2026-09-15T01:36:00Z",
+    "source": "Seeking Alpha",
+    "dataGaps": [
+      "7-day, 30-day and 90-day revision fields and absolute changes were not visible; only 1M/3M/6M percentage trends were shown.",
+      "Fiscal/calendar distinction beyond the 'Fiscal Period Ending' header was not stated."
+    ],
+    "drivers": {
+      "ticker": "MSFT",
+      "updated": "2026-09-15T01:36:00Z",
+      "status": "Baseline — not yet scored vs prior earnings",
+      "drivers": [
+        {
+          "name": "Azure growth",
+          "status": "unchanged",
+          "note": "Awaiting first post-setup earnings refresh"
+        },
+        {
+          "name": "AI revenue",
+          "status": "unchanged",
+          "note": "Awaiting first post-setup earnings refresh"
+        },
+        {
+          "name": "Copilot",
+          "status": "unchanged",
+          "note": "Awaiting first post-setup earnings refresh"
+        },
+        {
+          "name": "M365",
+          "status": "unchanged",
+          "note": "Awaiting first post-setup earnings refresh"
+        },
+        {
+          "name": "OpenAI / external models",
+          "status": "unchanged",
+          "note": "Awaiting first post-setup earnings refresh"
+        },
+        {
+          "name": "AI capacity",
+          "status": "unchanged",
+          "note": "Awaiting first post-setup earnings refresh"
+        },
+        {
+          "name": "CapEx",
+          "status": "unchanged",
+          "note": "Awaiting first post-setup earnings refresh"
+        },
+        {
+          "name": "depreciation",
+          "status": "unchanged",
+          "note": "Awaiting first post-setup earnings refresh"
+        },
+        {
+          "name": "gross margin",
+          "status": "unchanged",
+          "note": "Awaiting first post-setup earnings refresh"
+        },
+        {
+          "name": "FCF",
+          "status": "unchanged",
+          "note": "Awaiting first post-setup earnings refresh"
+        }
+      ]
+    }
+  },
+  "BE": {
+    "ticker": "BE",
+    "price": 257.05,
+    "priceAsOf": "4:00 PM 09/14/26; post-market $258.15 at 7:59 PM",
+    "lastEarnings": "7/28/2026",
+    "nextEarnings": "10/29/2026 (Post-Market)",
+    "fyNote": "Annual view; table column shown as 'Fiscal Period Ending'.",
+    "momentum": "Neutral",
+    "eps": {
+      "2026E": {
+        "consensus": 2.71,
+        "high": 3.08,
+        "low": 2.42,
+        "analysts": 26.0,
+        "rev1M": -0.01,
+        "rev3M": 26.52,
+        "rev6M": 94.08,
+        "reportedFiscalLabel": "Dec 2026",
+        "calendarAlignment": "CY2026"
+      },
+      "2027E": {
+        "consensus": 4.93,
+        "high": 7.01,
+        "low": 2.95,
+        "analysts": 28.0,
+        "rev1M": 0.17,
+        "rev3M": 12.95,
+        "rev6M": 67.59,
+        "reportedFiscalLabel": "Dec 2027",
+        "calendarAlignment": "CY2027"
+      },
+      "2028E": {
+        "consensus": 7.79,
+        "high": 15.15,
+        "low": 4.02,
+        "analysts": 23.0,
+        "rev1M": 0.65,
+        "rev3M": 9.3,
+        "rev6M": 65.19,
+        "reportedFiscalLabel": "Dec 2028",
+        "calendarAlignment": "CY2028"
+      },
+      "2029E": {
+        "consensus": 10.36,
+        "high": 17.46,
+        "low": 7.4,
+        "analysts": 7.0,
+        "rev1M": -2.28,
+        "rev3M": 9.51,
+        "rev6M": 99.93,
+        "reportedFiscalLabel": "Dec 2029",
+        "calendarAlignment": "CY2029"
+      }
+    },
+    "sourceUrl": "https://seekingalpha.com/symbol/BE/earnings/estimates",
+    "updateTime": "2026-09-15T01:36:00Z",
+    "source": "Seeking Alpha",
+    "dataGaps": [
+      "7-day, 30-day and 90-day revision fields and absolute changes were not visible; only 1M/3M/6M percentage trends were shown.",
+      "Fiscal/calendar distinction beyond the 'Fiscal Period Ending' header was not stated."
+    ],
+    "drivers": {
+      "ticker": "BE",
+      "updated": "2026-09-15T01:36:00Z",
+      "status": "Baseline — not yet scored vs prior earnings",
+      "drivers": [
+        {
+          "name": "GW capacity",
+          "status": "unchanged",
+          "note": "Awaiting first post-setup earnings refresh"
+        },
+        {
+          "name": "data center demand",
+          "status": "unchanged",
+          "note": "Awaiting first post-setup earnings refresh"
+        },
+        {
+          "name": "ASP",
+          "status": "unchanged",
+          "note": "Awaiting first post-setup earnings refresh"
+        },
+        {
+          "name": "manufacturing capacity",
+          "status": "unchanged",
+          "note": "Awaiting first post-setup earnings refresh"
+        },
+        {
+          "name": "gross margin",
+          "status": "unchanged",
+          "note": "Awaiting first post-setup earnings refresh"
+        },
+        {
+          "name": "backlog",
+          "status": "unchanged",
+          "note": "Awaiting first post-setup earnings refresh"
+        },
+        {
+          "name": "CSP customers",
+          "status": "unchanged",
+          "note": "Awaiting first post-setup earnings refresh"
+        },
+        {
+          "name": "power availability",
+          "status": "unchanged",
+          "note": "Awaiting first post-setup earnings refresh"
+        }
+      ]
+    }
+  },
+  "KEYS": {
+    "ticker": "KEYS",
+    "price": 314.96,
+    "priceAsOf": "4:00 PM 09/14/26; post-market $320.56 at 7:58 PM",
+    "lastEarnings": "8/18/2026",
+    "nextEarnings": null,
+    "fyNote": "Annual view; table column shown as 'Fiscal Period Ending'.",
+    "momentum": "Positive",
+    "eps": {
+      "2026E": {
+        "consensus": 11.47,
+        "high": 11.64,
+        "low": 11.19,
+        "analysts": 12.0,
+        "rev1M": -0.22,
+        "rev3M": 12.07,
+        "rev6M": 29.28,
+        "reportedFiscalLabel": "Oct 2026",
+        "calendarAlignment": "CY2026"
+      },
+      "2027E": {
+        "consensus": 13.87,
+        "high": 15.76,
+        "low": 12.77,
+        "analysts": 12.0,
+        "rev1M": 1.62,
+        "rev3M": 17.0,
+        "rev6M": 35.14,
+        "reportedFiscalLabel": "Oct 2027",
+        "calendarAlignment": "CY2027"
+      },
+      "2028E": {
+        "consensus": 15.69,
+        "high": 19.51,
+        "low": 14.04,
+        "analysts": 10.0,
+        "rev1M": 16.31,
+        "rev3M": 36.09,
+        "rev6M": 52.09,
+        "reportedFiscalLabel": "Oct 2028",
+        "calendarAlignment": "CY2028"
+      },
+      "2029E": {
+        "consensus": 21.99,
+        "high": 21.99,
+        "low": 21.99,
+        "analysts": 1.0,
+        "rev1M": 35.49,
+        "rev3M": 48.78,
+        "rev6M": 75.92,
+        "reportedFiscalLabel": "Oct 2029",
+        "calendarAlignment": "CY2029"
+      }
+    },
+    "sourceUrl": "https://seekingalpha.com/symbol/KEYS/earnings/estimates",
+    "updateTime": "2026-09-15T01:36:00Z",
+    "source": "Seeking Alpha",
+    "dataGaps": [
+      "Next earnings announce date was '-' on the earnings page, so it is Data unavailable.",
+      "7-day, 30-day and 90-day revision fields and absolute changes were not visible; only 1M/3M/6M percentage trends were shown.",
+      "Fiscal/calendar distinction beyond the 'Fiscal Period Ending' header was not stated."
+    ],
+    "drivers": {
+      "ticker": "KEYS",
+      "updated": "2026-09-15T01:36:00Z",
+      "status": "Baseline — not yet scored vs prior earnings",
+      "drivers": [
+        {
+          "name": "AI / data center testing",
+          "status": "unchanged",
+          "note": "Awaiting first post-setup earnings refresh"
+        },
+        {
+          "name": "semiconductor test",
+          "status": "unchanged",
+          "note": "Awaiting first post-setup earnings refresh"
+        },
+        {
+          "name": "networking",
+          "status": "unchanged",
+          "note": "Awaiting first post-setup earnings refresh"
+        },
+        {
+          "name": "800G / 1.6T",
+          "status": "unchanged",
+          "note": "Awaiting first post-setup earnings refresh"
+        },
+        {
+          "name": "R&D demand",
+          "status": "unchanged",
+          "note": "Awaiting first post-setup earnings refresh"
+        },
+        {
+          "name": "order growth",
+          "status": "unchanged",
+          "note": "Awaiting first post-setup earnings refresh"
+        },
+        {
+          "name": "gross margin",
+          "status": "unchanged",
+          "note": "Awaiting first post-setup earnings refresh"
+        }
+      ]
+    }
+  }
+}
