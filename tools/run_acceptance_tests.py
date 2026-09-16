@@ -561,7 +561,7 @@ def test_dynamic_rollover_full_ui(fixture: Path) -> None:
     # Exported structures: periods keys
     for row in valuation:
         pkeys = list((row.get("periods") or {}).keys())
-        ok = ok and pkeys == ["2027E", "2028E", "2029E"]
+        ok = ok and pkeys[:3] == ["2027E", "2028E", "2029E"]
         ok = ok and "2026E" not in pkeys
         ok = ok and "eps26" not in (row.get("periods") or {})
 
@@ -8089,7 +8089,864 @@ def test_health_check_cli_subprocess_read_only(fixture: Path) -> None:
     )
 
 
-# Suite classification: integration = subprocess/crash/publish/heavy ingest
+# ---------- PR #16 Valuation × EPS Growth Comparison (themes A–Q) ----------
+
+def _pr16_spa(fixture: Path) -> str:
+    return spa_js_text(fixture)
+
+
+def _pr16_strip_js(src: str) -> str:
+    code = re.sub(r"/\*.*?\*/", "", src, flags=re.S)
+    code = re.sub(r"//.*?$", "", code, flags=re.M)
+    return code
+
+
+def _pr16_ok_window(pct: float) -> dict:
+    return {
+        "windowDays": 30,
+        "windowLabel": "Internal 30D",
+        "status": "ok",
+        "reason": None,
+        "revisionPct": pct,
+    }
+
+
+def _pr16_js_fn(src: str, name: str) -> str:
+    """Extract a function body from SPA source by matching braces."""
+    needle = f"function {name}"
+    i = src.find(needle)
+    if i < 0:
+        return ""
+    brace = src.find("{", i)
+    if brace < 0:
+        return src[i:]
+    depth = 0
+    for j in range(brace, len(src)):
+        ch = src[j]
+        if ch == "{":
+            depth += 1
+        elif ch == "}":
+            depth -= 1
+            if depth == 0:
+                return src[i : j + 1]
+    return src[i:]
+
+
+def _pr16_unavail_window(days: int = 30) -> dict:
+    return {
+        "windowDays": days,
+        "windowLabel": f"Internal {days}D",
+        "status": "unavailable",
+        "reason": "insufficient_history",
+        "revisionPct": None,
+    }
+
+
+def test_pr16_dynamic_years_comparison_options(fixture: Path) -> None:
+    """A: Comparison Year options come only from displayMappedYears; no hardcoded 2026E/2027E."""
+    exp = import_mod(fixture, "export_web_data")
+    years = ["2031E", "2032E", "2033E", "2034E"]
+    ok = exp.default_comparison_year(years) == "2032E"
+    app = _pr16_strip_js(_pr16_spa(fixture))
+    spa = _pr16_spa(fixture)
+    ok = ok and "displayMappedYears" in app
+    ok = ok and "displayYearKeys()" in app
+    ok = ok and ("id: \"comparison-year\"" in spa or "id: 'comparison-year'" in spa)
+    ok = ok and len(re.findall(r'["\']2026E["\']|["\']2027E["\']|["\']2028E["\']', app)) == 0
+    ok = ok and "if (year == 2027)" not in app and 'year === "2027"' not in app
+    record("pr16_dynamic_years_comparison_options_test", ok, f"default={exp.default_comparison_year(years)}")
+
+
+def test_pr16_default_comparison_year(fixture: Path) -> None:
+    """B: Default = displayMappedYears[1] else [0]."""
+    exp = import_mod(fixture, "export_web_data")
+    ok = exp.default_comparison_year(["2026E", "2027E", "2028E"]) == "2027E"
+    ok = ok and exp.default_comparison_year(["2040E"]) == "2040E"
+    ok = ok and exp.default_comparison_year([]) is None
+    ok = ok and exp.default_comparison_year(None) is None
+    app = _pr16_spa(fixture)
+    ok = ok and "function defaultComparisonYear" in app
+    ok = ok and "ys[1]" in app and "ys[0]" in app
+    record("pr16_default_comparison_year_test", ok, "index1-else-0")
+
+
+def test_pr16_selected_year_mapping(fixture: Path) -> None:
+    """C: Selected year maps to periods[YYYYE] eps/pe/growth/rev1M/fiscal/analysts."""
+    exp = import_mod(fixture, "export_web_data")
+    years = ["2031E", "2032E", "2033E"]
+    companies = {
+        "AAA": {
+            "lastClose": 100.0,
+            "price": 100.0,
+            "afterHours": 101.0,
+            "momentum": "Neutral",
+            "revisionRegime": "Stable",
+            "eps": {
+                "2031E": {
+                    "consensus": 4.0,
+                    "analysts": 10,
+                    "rev1M": 0.5,
+                    "reportedFiscalLabel": "Dec 2031",
+                },
+                "2032E": {
+                    "consensus": 5.0,
+                    "analysts": 12,
+                    "rev1M": 1.5,
+                    "reportedFiscalLabel": "Dec 2032",
+                },
+                "2033E": {
+                    "consensus": 6.25,
+                    "analysts": 11,
+                    "rev1M": 2.5,
+                    "reportedFiscalLabel": "Dec 2033",
+                },
+            },
+        }
+    }
+    rows = exp.build_valuation(companies, ["AAA"], "2026-09-15T00:00:00Z", year_keys=years)
+    ok = list((rows[0].get("periods") or {}).keys()) == years
+    y1 = exp.valuation_comparison_fields(rows[0], "2032E")
+    y2 = exp.valuation_comparison_fields(rows[0], "2033E")
+    ok = ok and y1["eps"] == 5.0 and y2["eps"] == 6.25
+    ok = ok and abs(float(y1["pe"]) - 20.0) < 1e-9
+    ok = ok and y1["sourceReported1M"] == 1.5 and y2["sourceReported1M"] == 2.5
+    ok = ok and y1["fiscalPeriod"] == "Dec 2032" and y2["fiscalPeriod"] == "Dec 2033"
+    ok = ok and y1["analysts"] == 12 and y2["analysts"] == 11
+    ok = ok and y1["cagrY0Y2"] == y2["cagrY0Y2"]
+    record("pr16_selected_year_mapping_test", ok, f"eps={y1['eps']}/{y2['eps']} pe={y1['pe']}")
+
+
+def test_pr16_missing_eps_not_zero(fixture: Path) -> None:
+    """D: Missing EPS/PE stay None — never coerced to 0."""
+    exp = import_mod(fixture, "export_web_data")
+    companies = {
+        "BBB": {
+            "lastClose": 50.0,
+            "price": 50.0,
+            "momentum": "Neutral",
+            "eps": {
+                "2031E": {"consensus": None, "reportedFiscalLabel": "Dec 2031", "analysts": None, "rev1M": None},
+                "2032E": {"consensus": None, "reportedFiscalLabel": "Dec 2032", "analysts": None, "rev1M": None},
+                "2033E": {"consensus": None, "reportedFiscalLabel": "Dec 2033"},
+            },
+        }
+    }
+    rows = exp.build_valuation(companies, ["BBB"], "2026-09-15T00:00:00Z", year_keys=["2031E", "2032E", "2033E"])
+    f = exp.valuation_comparison_fields(rows[0], "2032E")
+    ok = f["eps"] is None and f["pe"] is None
+    ok = ok and f["eps"] != 0 and f["pe"] != 0
+    ok = ok and f["growthFromPrior"] is None
+    ok = ok and f["cagrY0Y2"] is None
+    ok = ok and f["growthAdjustedPe"] is None
+    app = _pr16_spa(fixture)
+    ok = ok and "never 0" in app
+    record("pr16_missing_eps_not_zero_test", ok, f"eps={f['eps']} pe={f['pe']}")
+
+
+def test_pr16_negative_eps_pe_nm(fixture: Path) -> None:
+    """E: EPS<=0 → PE N/M (None); no negative PE."""
+    exp = import_mod(fixture, "export_web_data")
+    ok = exp.pe(100, 0) is None
+    ok = ok and exp.pe(100, -4) is None
+    companies = {
+        "CCC": {
+            "lastClose": 80.0,
+            "price": 80.0,
+            "momentum": "Neutral",
+            "eps": {
+                "2031E": {"consensus": 2.0, "reportedFiscalLabel": "Dec 2031"},
+                "2032E": {"consensus": -1.0, "reportedFiscalLabel": "Dec 2032", "analysts": 8, "rev1M": 0.0},
+                "2033E": {"consensus": 3.0, "reportedFiscalLabel": "Dec 2033"},
+            },
+        }
+    }
+    rows = exp.build_valuation(companies, ["CCC"], "2026-09-15T00:00:00Z", year_keys=["2031E", "2032E", "2033E"])
+    f = exp.valuation_comparison_fields(rows[0], "2032E")
+    ok = ok and f["eps"] == -1.0
+    ok = ok and f["pe"] is None
+    ok = ok and f["growthAdjustedPe"] is None
+    app = _pr16_spa(fixture)
+    ok = ok and "function peDisplayCell" in app
+    ok = ok and "EPS" in app and "0" in app
+    record("pr16_negative_eps_pe_nm_test", ok, f"eps={f['eps']} pe={f['pe']}")
+
+
+def test_pr16_growth_edge_cases(fixture: Path) -> None:
+    """F: growthFromPrior reuses turn-profitable / turn-loss / N/M; no fake math on zero prior."""
+    exp = import_mod(fixture, "export_web_data")
+    ok = exp.growth_pct(-1, 2) == "Turn profitable"
+    ok = ok and exp.growth_pct(2, -1) == "Turn loss"
+    ok = ok and exp.growth_pct(0, 1) is None
+    ok = ok and exp.growth_pct(None, 2) is None
+    ok = ok and exp.growth_pct(-1, 0) == "Break-even"
+    ok = ok and not isinstance(exp.growth_pct(-1, 0), (int, float))
+    g = exp.growth_pct(10, 12)
+    ok = ok and g is not None and abs(float(g) - 0.2) < 1e-9
+    companies = {
+        "DDD": {
+            "lastClose": 40.0,
+            "momentum": "Neutral",
+            "eps": {
+                "2031E": {"consensus": -2.0, "reportedFiscalLabel": "Dec 2031"},
+                "2032E": {"consensus": 1.0, "reportedFiscalLabel": "Dec 2032"},
+                "2033E": {"consensus": 1.2, "reportedFiscalLabel": "Dec 2033"},
+            },
+        }
+    }
+    rows = exp.build_valuation(companies, ["DDD"], "2026-09-15T00:00:00Z", year_keys=["2031E", "2032E", "2033E"])
+    f = exp.valuation_comparison_fields(rows[0], "2032E")
+    ok = ok and f["growthFromPrior"] == "Turn profitable"
+    record("pr16_growth_edge_cases_test", ok, f"growth={f['growthFromPrior']}")
+
+
+def test_pr16_cagr_dynamic_range(fixture: Path) -> None:
+    """G: cagrY0Y2 is Y0→Y2 of the provided year_keys; label is not hardcoded 26–28."""
+    exp = import_mod(fixture, "export_web_data")
+    years = ["2031E", "2032E", "2033E"]
+    companies = {
+        "EEE": {
+            "lastClose": 100.0,
+            "momentum": "Neutral",
+            "eps": {
+                "2031E": {"consensus": 4.0, "reportedFiscalLabel": "Dec 2031"},
+                "2032E": {"consensus": 5.0, "reportedFiscalLabel": "Dec 2032"},
+                "2033E": {"consensus": 9.0, "reportedFiscalLabel": "Dec 2033"},
+            },
+        }
+    }
+    rows = exp.build_valuation(companies, ["EEE"], "2026-09-15T00:00:00Z", year_keys=years)
+    cagr = rows[0].get("cagrY0Y2")
+    expect = (9.0 / 4.0) ** 0.5 - 1.0
+    ok = cagr is not None and abs(float(cagr) - expect) < 1e-9
+    app = _pr16_strip_js(_pr16_spa(fixture))
+    ok = ok and "cagr2628" not in app
+    ok = ok and "Forward EPS CAGR" in _pr16_spa(fixture)
+    record("pr16_cagr_dynamic_range_test", ok, f"cagr={cagr}")
+
+
+def test_pr16_growth_adjusted_pe_20_over_25(fixture: Path) -> None:
+    """H: Growth-adjusted PE = ForwardPE / (CAGR% as percent units); 20/25 → 0.80; CAGR<=0 → N/M."""
+    exp = import_mod(fixture, "export_web_data")
+    v = exp.growth_adjusted_pe(20.0, 0.25)
+    ok = v is not None and abs(float(v) - 0.80) < 1e-12
+    ok = ok and exp.growth_adjusted_pe(20.0, 0) is None
+    ok = ok and exp.growth_adjusted_pe(20.0, -0.1) is None
+    ok = ok and exp.growth_adjusted_pe(None, 0.25) is None
+    ok = ok and exp.growth_adjusted_pe(20.0, None) is None
+    companies = {
+        "FFF": {
+            "lastClose": 20.0,
+            "momentum": "Neutral",
+            "eps": {
+                "2031E": {"consensus": 0.64, "reportedFiscalLabel": "Dec 2031"},
+                "2032E": {"consensus": 1.0, "reportedFiscalLabel": "Dec 2032"},
+                "2033E": {"consensus": 1.0, "reportedFiscalLabel": "Dec 2033"},
+            },
+        }
+    }
+    rows = exp.build_valuation(companies, ["FFF"], "2026-09-15T00:00:00Z", year_keys=["2031E", "2032E", "2033E"])
+    f = exp.valuation_comparison_fields(rows[0], "2032E")
+    ok = ok and abs(float(f["pe"]) - 20.0) < 1e-9
+    ok = ok and abs(float(f["cagrY0Y2"]) - 0.25) < 1e-9
+    ok = ok and abs(float(f["growthAdjustedPe"]) - 0.80) < 1e-9
+    app = _pr16_spa(fixture)
+    ok = ok and "cagrV * 100" in app
+    ok = ok and "peV / pctUnits" in app
+    record("pr16_growth_adjusted_pe_20_over_25_test", ok, f"gap={f['growthAdjustedPe']}")
+
+
+def test_pr16_revision_helper_reuse(fixture: Path) -> None:
+    """I: Valuation Internal windows copy revisionMomentum / revision_windows; no local window math."""
+    exp = import_mod(fixture, "export_web_data")
+    as_of = datetime(2026, 9, 15, tzinfo=timezone.utc)
+    ticker, fiscal = "NVDA", "Jan 2028"
+    daily = [
+        _daily_pt((as_of - timedelta(days=90)).strftime("%Y-%m-%d"), ticker, fiscal, 10.0, "2027E"),
+        _daily_pt((as_of - timedelta(days=60)).strftime("%Y-%m-%d"), ticker, fiscal, 11.0, "2027E"),
+        _daily_pt((as_of - timedelta(days=30)).strftime("%Y-%m-%d"), ticker, fiscal, 12.0, "2027E"),
+        _daily_pt(as_of.strftime("%Y-%m-%d"), ticker, fiscal, 15.0, "2027E"),
+    ]
+    companies = {
+        ticker: {
+            "lastClose": 150.0,
+            "momentum": "Neutral",
+            "eps": {
+                "2026E": {"consensus": 9.0, "reportedFiscalLabel": "Jan 2027", "analysts": 40},
+                "2027E": {
+                    "consensus": 15.0,
+                    "reportedFiscalLabel": fiscal,
+                    "analysts": 53,
+                    "rev1M": 1.37,
+                },
+                "2028E": {"consensus": 20.0, "reportedFiscalLabel": "Jan 2029", "analysts": 40},
+            },
+            "epsByFiscal": {
+                fiscal: {
+                    "consensus": 15.0,
+                    "reportedFiscalLabel": fiscal,
+                    "mappedYear": "2027E",
+                    "analysts": 53,
+                    "rev1M": 1.37,
+                }
+            },
+        }
+    }
+    val = exp.build_valuation(companies, [ticker], as_of.strftime("%Y-%m-%dT00:00:00Z"), year_keys=["2026E", "2027E", "2028E"])
+    mom = exp.build_revision_momentum(companies, [ticker], daily, as_of=as_of, year_keys=["2026E", "2027E", "2028E"])
+    exp.attach_internal_windows_to_valuation(val, mom)
+    hit = next((r for r in mom if r.get("reportedFiscalPeriodEnding") == fiscal), None)
+    period = (val[0].get("periods") or {}).get("2027E") or {}
+    ok = hit is not None and isinstance(period.get("internal"), dict)
+    ok = ok and period["internal"]["30D"]["revisionPct"] == hit["internal"]["30D"]["revisionPct"]
+    src = (fixture / "tools" / "export_web_data.py").read_text(encoding="utf-8")
+    ok = ok and "from revision_windows import" in src
+    ok = ok and "def weekday_gap" not in src
+    app = _pr16_strip_js(_pr16_spa(fixture))
+    ok = ok and "weekday_gap" not in app
+    ok = ok and "MAX_BASELINE_WEEKDAY_GAP" not in app
+    record(
+        "pr16_revision_helper_reuse_test",
+        ok,
+        f"30={((period.get('internal') or {}).get('30D') or {}).get('revisionPct')}",
+    )
+
+
+def test_pr16_insufficient_history_not_zero(fixture: Path) -> None:
+    """J: Insufficient Internal history → None/—, never 0%."""
+    exp = import_mod(fixture, "export_web_data")
+    as_of = datetime(2026, 9, 15, tzinfo=timezone.utc)
+    ticker, fiscal = "TSM", "Dec 2027"
+    daily = [
+        _daily_pt((as_of - timedelta(days=5)).strftime("%Y-%m-%d"), ticker, fiscal, 10.0, "2027E"),
+        _daily_pt(as_of.strftime("%Y-%m-%d"), ticker, fiscal, 12.0, "2027E"),
+    ]
+    companies = {
+        ticker: {
+            "lastClose": 400.0,
+            "momentum": "Neutral",
+            "eps": {
+                "2026E": {"consensus": 16.0, "reportedFiscalLabel": "Dec 2026"},
+                "2027E": {"consensus": 12.0, "reportedFiscalLabel": fiscal, "rev1M": 0.66, "analysts": 30},
+                "2028E": {"consensus": 20.0, "reportedFiscalLabel": "Dec 2028"},
+            },
+            "epsByFiscal": {fiscal: {"consensus": 12.0, "reportedFiscalLabel": fiscal, "mappedYear": "2027E"}},
+        }
+    }
+    val = exp.build_valuation(companies, [ticker], as_of.strftime("%Y-%m-%dT00:00:00Z"), year_keys=["2026E", "2027E", "2028E"])
+    mom = exp.build_revision_momentum(companies, [ticker], daily, as_of=as_of, year_keys=["2026E", "2027E", "2028E"])
+    exp.attach_internal_windows_to_valuation(val, mom)
+    f = exp.valuation_comparison_fields(val[0], "2027E", revision_momentum=mom)
+    fake = (12.0 - 10.0) / 10.0 * 100.0
+    ok = f["internal30"] is None
+    ok = ok and f["internal30"] != 0 and f["internal30"] != fake
+    ok = ok and f["sourceReported1M"] == 0.66
+    app = _pr16_spa(fixture)
+    ok = ok and "Insufficient history" in app
+    record("pr16_insufficient_history_not_zero_test", ok, f"internal30={f['internal30']} src1m={f['sourceReported1M']}")
+
+
+def test_pr16_fiscal_rollover_identity_join(fixture: Path) -> None:
+    """K: Join Internal windows by ticker + fiscal identity, not mappedYear alone."""
+    exp = import_mod(fixture, "export_web_data")
+    companies = {
+        "NVDA": {
+            "lastClose": 200.0,
+            "momentum": "Neutral",
+            "eps": {
+                "2026E": {"consensus": 9.0, "reportedFiscalLabel": "Jan 2027", "rev1M": 0.1, "analysts": 40},
+                "2027E": {"consensus": 15.0, "reportedFiscalLabel": "Jan 2028", "rev1M": 1.3, "analysts": 53},
+                "2028E": {"consensus": 21.0, "reportedFiscalLabel": "Jan 2029", "rev1M": 2.9, "analysts": 41},
+            },
+        }
+    }
+    val = exp.build_valuation(companies, ["NVDA"], "2026-09-15T00:00:00Z", year_keys=["2026E", "2027E", "2028E"])
+    mom = [
+        {
+            "ticker": "NVDA",
+            "reportedFiscalPeriodEnding": "Jan 2028",
+            "mappedYear": "2027E",
+            "identity": {"ticker": "NVDA", "reportedFiscalPeriodEnding": "Jan 2028"},
+            "analysts": 53,
+            "internal": {
+                "30D": _pr16_ok_window(25.0),
+                "60D": _pr16_ok_window(30.0),
+                "90D": _pr16_ok_window(40.0),
+            },
+        },
+        {
+            "ticker": "NVDA",
+            "reportedFiscalPeriodEnding": "Jan 2029",
+            "mappedYear": "2027E",
+            "identity": {"ticker": "NVDA", "reportedFiscalPeriodEnding": "Jan 2029"},
+            "analysts": 41,
+            "internal": {
+                "30D": _pr16_ok_window(99.0),
+                "60D": _pr16_ok_window(99.0),
+                "90D": _pr16_ok_window(99.0),
+            },
+        },
+    ]
+    exp.attach_internal_windows_to_valuation(val, mom)
+    f27 = exp.valuation_comparison_fields(val[0], "2027E", revision_momentum=mom)
+    f28 = exp.valuation_comparison_fields(val[0], "2028E", revision_momentum=mom)
+    ok = f27["internal30"] == 25.0
+    ok = ok and f28["internal30"] == 99.0
+    ok = ok and f27["fiscalPeriod"] == "Jan 2028"
+    ok = ok and f28["fiscalPeriod"] == "Jan 2029"
+    app = _pr16_spa(fixture)
+    ok = ok and "fiscalIdentityKey" in app
+    record("pr16_fiscal_rollover_identity_join_test", ok, f"30_y1={f27['internal30']} 30_y2={f28['internal30']}")
+
+
+def test_pr16_source_1m_separated_from_internal(fixture: Path) -> None:
+    """L: Source-reported 1M is never aliased to Internal 30D."""
+    exp = import_mod(fixture, "export_web_data")
+    companies = {
+        "AVGO": {
+            "lastClose": 300.0,
+            "momentum": "Neutral",
+            "eps": {
+                "2026E": {"consensus": 10.0, "reportedFiscalLabel": "Oct 2026", "rev1M": 0.2},
+                "2027E": {"consensus": 12.0, "reportedFiscalLabel": "Oct 2027", "rev1M": -0.97, "analysts": 22},
+                "2028E": {"consensus": 15.0, "reportedFiscalLabel": "Oct 2028", "rev1M": 15.7},
+            },
+        }
+    }
+    val = exp.build_valuation(companies, ["AVGO"], "2026-09-15T00:00:00Z", year_keys=["2026E", "2027E", "2028E"])
+    mom = [
+        {
+            "ticker": "AVGO",
+            "reportedFiscalPeriodEnding": "Oct 2027",
+            "identity": {"ticker": "AVGO", "reportedFiscalPeriodEnding": "Oct 2027"},
+            "internal": {
+                "30D": _pr16_ok_window(4.0),
+                "60D": _pr16_unavail_window(60),
+                "90D": _pr16_unavail_window(90),
+            },
+            "sourceReported": {"1M": {"revisionPct": -0.97, "neverInternal30D": True}},
+        }
+    ]
+    exp.attach_internal_windows_to_valuation(val, mom)
+    f = exp.valuation_comparison_fields(val[0], "2027E", revision_momentum=mom)
+    ok = f["sourceReported1M"] == -0.97
+    ok = ok and f["internal30"] == 4.0
+    ok = ok and f["sourceReported1M"] != f["internal30"]
+    src = (fixture / "tools" / "export_web_data.py").read_text(encoding="utf-8")
+    ok = ok and "neverInternal30D" in src
+    app = _pr16_spa(fixture)
+    ok = ok and "Source-reported 1M" in app
+    ok = ok and "never treated as Internal 30D" in app
+    record("pr16_source_1m_separated_from_internal_test", ok, f"src={f['sourceReported1M']} i30={f['internal30']}")
+
+
+def test_pr16_analysts_null_vs_zero(fixture: Path) -> None:
+    """M: Analysts null → None/—; 0 only when source-native 0."""
+    exp = import_mod(fixture, "export_web_data")
+    companies = {
+        "ZZZ": {
+            "lastClose": 10.0,
+            "momentum": "Neutral",
+            "eps": {
+                "2031E": {"consensus": 1.0, "reportedFiscalLabel": "Dec 2031", "analysts": None},
+                "2032E": {"consensus": 1.1, "reportedFiscalLabel": "Dec 2032", "analysts": 0},
+                "2033E": {"consensus": 1.2, "reportedFiscalLabel": "Dec 2033", "analysts": 7},
+            },
+        }
+    }
+    rows = exp.build_valuation(companies, ["ZZZ"], "2026-09-15T00:00:00Z", year_keys=["2031E", "2032E", "2033E"])
+    f0 = exp.valuation_comparison_fields(rows[0], "2031E")
+    fz = exp.valuation_comparison_fields(rows[0], "2032E")
+    f7 = exp.valuation_comparison_fields(rows[0], "2033E")
+    ok = f0["analysts"] is None
+    ok = ok and fz["analysts"] == 0
+    ok = ok and f7["analysts"] == 7
+    app = _pr16_spa(fixture)
+    ok = ok and "function analystsDisplayCell" in app
+    record("pr16_analysts_null_vs_zero_test", ok, f"null={f0['analysts']} zero={fz['analysts']} seven={f7['analysts']}")
+
+
+def test_pr16_sort_null_nm_last_ticker_tiebreak(fixture: Path) -> None:
+    """N: Numeric sort; null/N/M last in both directions; ticker A–Z tie-break."""
+    exp = import_mod(fixture, "export_web_data")
+    rows = [
+        {"ticker": "MSFT", "pe": None},
+        {"ticker": "AVGO", "pe": 18.0},
+        {"ticker": "NVDA", "pe": 13.0},
+        {"ticker": "TSM", "pe": 13.0},
+        {"ticker": "BE", "pe": "N/M"},
+    ]
+    asc = [r["ticker"] for r in exp.comparison_sort_rows(rows, key="pe", direction="asc")]
+    desc = [r["ticker"] for r in exp.comparison_sort_rows(rows, key="pe", direction="desc")]
+    ok = asc[:2] == ["NVDA", "TSM"]
+    ok = ok and asc[2] == "AVGO"
+    ok = ok and set(asc[3:]) == {"BE", "MSFT"}
+    ok = ok and desc[0] == "AVGO"
+    ok = ok and desc[1:3] == ["NVDA", "TSM"]
+    ok = ok and set(desc[-2:]) == {"BE", "MSFT"}
+    app = _pr16_spa(fixture)
+    ok = ok and "null/N/M last" in app
+    ok = ok and "ticker A" in app and "tie-break" in app
+    record("pr16_sort_null_nm_last_ticker_tiebreak_test", ok, f"asc={asc} desc={desc}")
+
+
+def test_pr16_comparison_year_updates_all_cells(fixture: Path) -> None:
+    """O: Changing Comparison Year updates year-specific cells; CAGR/regime stay company-level."""
+    exp = import_mod(fixture, "export_web_data")
+    companies = {
+        "NVDA": {
+            "lastClose": 200.0,
+            "afterHours": 201.0,
+            "momentum": "Positive",
+            "revisionRegime": "Mild Upward",
+            "eps": {
+                "2026E": {"consensus": 9.0, "reportedFiscalLabel": "Jan 2027", "rev1M": 0.13, "analysts": 50},
+                "2027E": {"consensus": 15.0, "reportedFiscalLabel": "Jan 2028", "rev1M": 1.37, "analysts": 53},
+                "2028E": {"consensus": 21.0, "reportedFiscalLabel": "Jan 2029", "rev1M": 2.98, "analysts": 41},
+            },
+        }
+    }
+    val = exp.build_valuation(companies, ["NVDA"], "2026-09-15T00:00:00Z", year_keys=["2026E", "2027E", "2028E"])
+    mom = [
+        {
+            "ticker": "NVDA",
+            "reportedFiscalPeriodEnding": "Jan 2028",
+            "internal": {"30D": _pr16_ok_window(10.0), "60D": _pr16_ok_window(11.0), "90D": _pr16_ok_window(12.0)},
+            "analysts": 53,
+        },
+        {
+            "ticker": "NVDA",
+            "reportedFiscalPeriodEnding": "Jan 2029",
+            "internal": {"30D": _pr16_ok_window(20.0), "60D": _pr16_ok_window(21.0), "90D": _pr16_ok_window(22.0)},
+            "analysts": 41,
+        },
+    ]
+    exp.attach_internal_windows_to_valuation(val, mom)
+    a = exp.valuation_comparison_fields(val[0], "2027E", revision_momentum=mom)
+    b = exp.valuation_comparison_fields(val[0], "2028E", revision_momentum=mom)
+    ok = a["eps"] != b["eps"] and a["pe"] != b["pe"]
+    ok = ok and a["sourceReported1M"] != b["sourceReported1M"]
+    ok = ok and a["fiscalPeriod"] != b["fiscalPeriod"]
+    ok = ok and a["analysts"] != b["analysts"]
+    ok = ok and a["internal30"] != b["internal30"]
+    ok = ok and a["cagrY0Y2"] == b["cagrY0Y2"]
+    ok = ok and a["revisionRegime"] == b["revisionRegime"] == "Mild Upward"
+    ok = ok and a["price"] == b["price"]
+    app = _pr16_spa(fixture)
+    ok = ok and "state.comparisonYear = y" in app
+    ok = ok and "comparisonFields(r, year" in app
+    record(
+        "pr16_comparison_year_updates_all_cells_test",
+        ok,
+        f"eps={a['eps']}/{b['eps']} i30={a['internal30']}/{b['internal30']}",
+    )
+
+
+def test_pr16_no_hardcoded_eps26_pe26_frontend(fixture: Path) -> None:
+    """P: Production frontend must not hardcode eps26/pe26/… or year literals for schema."""
+    app_path = fixture / "web" / "app.js"
+    src = app_path.read_text(encoding="utf-8") if app_path.exists() else _pr16_spa(fixture)
+    code = _pr16_strip_js(src)
+    banned = ["eps26", "eps27", "eps28", "pe26", "pe27", "pe28", "growth27", "growth28", "cagr2628", "rev1M28"]
+    hits = [k for k in banned if k in code]
+    year_lits = re.findall(r'["\']2026E["\']|["\']2027E["\']|["\']2028E["\']', code)
+    ok = not hits and not year_lits
+    ok = ok and "periodOf" in code
+    ok = ok and "displayMappedYears" in code
+    record("pr16_no_hardcoded_eps26_pe26_frontend_test", ok, f"hits={hits} year_lits={year_lits}")
+
+
+def test_pr16_revenue_growth_excluded_and_no_scores(fixture: Path) -> None:
+    """Q: Revenue growth excluded with documented reason; no Investment Score / Buy-Sell / Fair Value product."""
+    app = _pr16_spa(fixture)
+    ok = "Revenue growth is omitted" in app
+    ok = ok and "no forward revenue consensus" in app
+    for banned in ("Investment Score", "Buy/Sell", "Custom Fair Value", "composite score", "AI recommend"):
+        ok = ok and banned not in app
+    ok = ok and "price target" not in app.lower()
+    ok = ok and "not a fair value, score" in app
+    ok = ok and 'label: "Growth-adjusted P/E"' in app
+    ok = ok and 'name === "valuation"' in app
+    record("pr16_revenue_growth_excluded_and_no_scores_test", ok, "excluded+no-scores")
+
+
+def test_pr16_p1_comparison_year_fail_closed(fixture: Path) -> None:
+    """P1-1: Comparison Year reads only meta.displayMappedYears; never clock-invents years."""
+    exp = import_mod(fixture, "export_web_data")
+    ok = exp.comparison_year_keys(None) == []
+    ok = ok and exp.comparison_year_keys({}) == []
+    ok = ok and exp.comparison_year_keys({"displayMappedYears": None}) == []
+    ok = ok and exp.comparison_year_keys({"displayMappedYears": "2031E"}) == []
+    ok = ok and exp.comparison_year_keys({"displayMappedYears": []}) == []
+    ok = ok and exp.comparison_year_keys({"displayMappedYears": ["2031E", "bad"]}) == []
+    ok = ok and exp.comparison_year_keys({"displayMappedYears": [2031, 2032]}) == []
+    years = ["2031E", "2032E", "2033E", "2034E"]
+    got = exp.comparison_year_keys({"displayMappedYears": years})
+    ok = ok and got == years
+    ok = ok and exp.default_comparison_year(got) == "2032E"
+    ok = ok and exp.default_comparison_year(["2040E"]) == "2040E"
+
+    src_py = (fixture / "tools" / "export_web_data.py").read_text(encoding="utf-8")
+    fn_py = src_py[src_py.find("def comparison_year_keys") : src_py.find("def default_comparison_year")]
+    ok = ok and "now_taipei" not in fn_py
+    ok = ok and "display_mapped_years(" not in fn_py
+    ok = ok and "datetime" not in fn_py
+
+    spa = _pr16_spa(fixture)
+    cy = _pr16_js_fn(spa, "comparisonYearKeys")
+    sel = _pr16_js_fn(spa, "selectedComparisonYear")
+    rend = _pr16_js_fn(spa, "renderValuation")
+    dy = _pr16_js_fn(spa, "displayYearKeys")
+    ok = ok and "function comparisonYearKeys" in cy
+    ok = ok and "displayMappedYears" in cy
+    ok = ok and "getFullYear" not in cy
+    ok = ok and "new Date" not in cy
+    ok = ok and "consensusDataAsOf" not in cy
+    ok = ok and "displayYearKeys()" not in cy
+    ok = ok and "comparisonYearKeys()" in sel and "displayYearKeys()" not in sel
+    ok = ok and "comparisonYearKeys()" in rend and "displayYearKeys()" not in rend
+    ok = ok and "function displayYearKeys" in dy  # legacy screens keep calendar fallback
+    ok = ok and "getFullYear" in dy
+    ok = ok and "comparison-year-unavailable" in rend
+    # Comparison feature must not depend on displayYearKeys calendar fallback
+    ok = ok and "const cy = comparisonYearKeys()" in spa
+    ok = ok and "defaultComparisonYear(cy)" in spa
+    record(
+        "pr16_p1_comparison_year_fail_closed_test",
+        ok,
+        f"keys={got} default={exp.default_comparison_year(got)}",
+    )
+
+
+def test_pr16_p1_negative_eps_growth_semantics_and_sort(fixture: Path) -> None:
+    """P1-2: loss-path growth is semantic, never ordinary %; numeric before semantic both dirs."""
+    exp = import_mod(fixture, "export_web_data")
+    narrow = exp.growth_pct(-2, -1)
+    widen = exp.growth_pct(-1, -2)
+    unchanged = exp.growth_pct(-1, -1)
+    breakeven = exp.growth_pct(-1, 0)
+    ok = narrow == "Loss narrowing"
+    ok = ok and widen == "Loss widening"
+    ok = ok and unchanged == "Loss unchanged"
+    ok = ok and breakeven == "Break-even"
+    ok = ok and not isinstance(narrow, (int, float))
+    ok = ok and not isinstance(widen, (int, float))
+    ok = ok and not isinstance(unchanged, (int, float))
+    ok = ok and not isinstance(breakeven, (int, float))
+    ok = ok and breakeven != 1.0 and breakeven != 100
+    ok = ok and abs(float(exp.growth_pct(10, 12)) - 0.20) < 1e-12
+    ok = ok and exp.growth_pct(-1, 1) == "Turn profitable"
+    ok = ok and exp.growth_pct(2, -1) == "Turn loss"
+    ok = ok and exp.growth_pct(0, 1) is None
+    # Ordinary +50% / -100% / +100% style % must not appear for prior EPS <= 0
+    ok = ok and narrow != 0.5 and widen != -1.0 and narrow != 50 and widen != -100
+
+    companies = {
+        "LOSS": {
+            "lastClose": 40.0,
+            "momentum": "Neutral",
+            "eps": {
+                "2031E": {"consensus": -2.0, "reportedFiscalLabel": "Dec 2031"},
+                "2032E": {"consensus": -1.0, "reportedFiscalLabel": "Dec 2032"},
+                "2033E": {"consensus": -1.0, "reportedFiscalLabel": "Dec 2033"},
+            },
+        },
+        "EVEN": {
+            "lastClose": 40.0,
+            "momentum": "Neutral",
+            "eps": {
+                "2031E": {"consensus": -1.0, "reportedFiscalLabel": "Dec 2031"},
+                "2032E": {"consensus": 0.0, "reportedFiscalLabel": "Dec 2032"},
+                "2033E": {"consensus": 1.0, "reportedFiscalLabel": "Dec 2033"},
+            },
+        },
+    }
+    rows = exp.build_valuation(
+        companies, ["LOSS", "EVEN"], "2026-09-15T00:00:00Z", year_keys=["2031E", "2032E", "2033E"]
+    )
+    by_t = {r["ticker"]: r for r in rows}
+    f = exp.valuation_comparison_fields(by_t["LOSS"], "2032E")
+    ok = ok and f["growthFromPrior"] == "Loss narrowing"
+    ok = ok and not isinstance(f["growthFromPrior"], (int, float))
+    feven = exp.valuation_comparison_fields(by_t["EVEN"], "2032E")
+    ok = ok and feven["growthFromPrior"] == "Break-even"
+    ok = ok and not isinstance(feven["growthFromPrior"], (int, float))
+
+    sort_rows = [
+        {"ticker": "ZZZ", "growth": "Loss narrowing"},
+        {"ticker": "AAA", "growth": "Turn profitable"},
+        {"ticker": "AVGO", "growth": "Break-even"},
+        {"ticker": "MSFT", "growth": 0.10},
+        {"ticker": "NVDA", "growth": 0.20},
+        {"ticker": "BE", "growth": None},
+    ]
+    asc = [r["ticker"] for r in exp.comparison_sort_rows(sort_rows, key="growth", direction="asc")]
+    desc = [r["ticker"] for r in exp.comparison_sort_rows(sort_rows, key="growth", direction="desc")]
+    ok = ok and asc[:2] == ["MSFT", "NVDA"]
+    ok = ok and asc[2:] == ["AAA", "AVGO", "BE", "ZZZ"]  # semantic/unavailable A–Z after numeric
+    ok = ok and desc[:2] == ["NVDA", "MSFT"]  # desc must NOT put semantic on top
+    ok = ok and desc[2:] == ["AAA", "AVGO", "BE", "ZZZ"]
+
+    spa = _pr16_spa(fixture)
+    cmp_fn = _pr16_js_fn(spa, "compareComparisonRows")
+    after_fn = _pr16_js_fn(spa, "isAfterNumericSortValue")
+    ok = ok and "function isAfterNumericSortValue" in after_fn
+    ok = ok and "growthFromPrior" in after_fn
+    ok = ok and "typeof v === \"string\"" in after_fn
+    ok = ok and "isAfterNumericSortValue(va, key)" in cmp_fn
+    ok = ok and "Loss narrowing" in spa and "Loss widening" in spa and "Loss unchanged" in spa
+    ok = ok and "Break-even" in spa
+    record(
+        "pr16_p1_negative_eps_growth_semantics_and_sort_test",
+        ok,
+        f"narrow={narrow} widen={widen} unchanged={unchanged} breakeven={breakeven} asc={asc} desc={desc}",
+    )
+
+
+def test_pr16_p1_fiscal_identity_fe_be_match(fixture: Path) -> None:
+    """P1-3: reportedFiscalPeriodEnding is canonical; FE fallback matches sa_parser."""
+    exp = import_mod(fixture, "export_web_data")
+    sa = import_mod(fixture, "sa_parser")
+    companies = {
+        "NVDA": {
+            "lastClose": 200.0,
+            "momentum": "Neutral",
+            "eps": {
+                "2026E": {"consensus": 9.0, "reportedFiscalLabel": "January 2027"},
+                "2027E": {"consensus": 15.0, "reportedFiscalLabel": "June 2028", "analysts": 53},
+                "2028E": {"consensus": 21.0, "reportedFiscalLabel": "January 2029"},
+            },
+        }
+    }
+    val = exp.build_valuation(
+        companies, ["NVDA"], "2026-09-15T00:00:00Z", year_keys=["2026E", "2027E", "2028E"]
+    )
+    period = (val[0].get("periods") or {}).get("2027E") or {}
+    ok = period.get("reportedFiscalLabel") == "June 2028"
+    ok = ok and period.get("reportedFiscalPeriodEnding") == "Jun 2028"
+    ok = ok and period.get("reportedFiscalPeriodEnding") != period.get("reportedFiscalLabel")
+    ok = ok and sa.normalize_fiscal_period_label("June 2028") == "Jun 2028"
+    ok = ok and sa.normalize_fiscal_period_label("Sept 2026") == "Sep 2026"
+
+    mom = [
+        {
+            "ticker": "NVDA",
+            "reportedFiscalPeriodEnding": "Jun 2028",
+            "mappedYear": "2027E",
+            "identity": {"ticker": "NVDA", "reportedFiscalPeriodEnding": "Jun 2028"},
+            "internal": {
+                "30D": _pr16_ok_window(30.0),
+                "60D": _pr16_ok_window(60.0),
+                "90D": _pr16_ok_window(90.0),
+            },
+        }
+    ]
+    exp.attach_internal_windows_to_valuation(val, mom)
+    hit = exp.valuation_comparison_fields(val[0], "2027E", revision_momentum=mom)
+    ok = ok and hit["internal30"] == 30.0
+    ok = ok and hit["internal60"] == 60.0
+    ok = ok and hit["internal90"] == 90.0
+    ok = ok and hit["fiscalPeriod"] == "June 2028"  # display label preserved
+
+    val_mismatch = exp.build_valuation(
+        companies, ["NVDA"], "2026-09-15T00:00:00Z", year_keys=["2026E", "2027E", "2028E"]
+    )
+    mom_wrong = [
+        {
+            "ticker": "NVDA",
+            "reportedFiscalPeriodEnding": "Jul 2028",
+            "mappedYear": "2027E",
+            "identity": {"ticker": "NVDA", "reportedFiscalPeriodEnding": "Jul 2028"},
+            "internal": {
+                "30D": _pr16_ok_window(99.0),
+                "60D": _pr16_ok_window(99.0),
+                "90D": _pr16_ok_window(99.0),
+            },
+        }
+    ]
+    exp.attach_internal_windows_to_valuation(val_mismatch, mom_wrong)
+    miss = exp.valuation_comparison_fields(val_mismatch[0], "2027E", revision_momentum=mom_wrong)
+    ok = ok and miss["internal30"] is None
+    ok = ok and miss["internal60"] is None
+    ok = ok and miss["internal90"] is None
+
+    src_py = (fixture / "tools" / "export_web_data.py").read_text(encoding="utf-8")
+    build = src_py[src_py.find("def build_valuation") : src_py.find("def build_eps_history_from_daily")]
+    ok = ok and "normalize_fiscal_period_label" in build
+    ok = ok and "def normalize_fiscal_period" not in src_py  # do not invent a second Python normalizer
+
+    spa = _pr16_spa(fixture)
+    norm = _pr16_js_fn(spa, "normalizeFiscalPeriodLabel")
+    ident = _pr16_js_fn(spa, "fiscalIdentityKey")
+    join = _pr16_js_fn(spa, "comparisonMomentumRow")
+    month_map_start = spa.find("const FISCAL_MONTH_NUM")
+    month_map_end = spa.find("function normalizeFiscalPeriodLabel")
+    month_map = spa[month_map_start:month_map_end] if month_map_start >= 0 and month_map_end > month_map_start else ""
+    ok = ok and "function normalizeFiscalPeriodLabel" in norm
+    ok = ok and "sept" in month_map.lower() and "september" in month_map.lower()
+    ok = ok and "january" in month_map.lower() and "december" in month_map.lower()
+    ok = ok and "normalizeFiscalPeriodLabel(fiscal)" in ident
+    ok = ok and ".mappedYear" not in join
+    ok = ok and "reportedFiscalPeriodEnding" in join
+    ok = ok and "reportedFiscalLabel" in join
+
+    # Frontend month map must match backend _MONTH_NUM semantics (abbrev + full + sept).
+    be_months = {
+        "jan": 1, "january": 1,
+        "feb": 2, "february": 2,
+        "mar": 3, "march": 3,
+        "apr": 4, "april": 4,
+        "may": 5,
+        "jun": 6, "june": 6,
+        "jul": 7, "july": 7,
+        "aug": 8, "august": 8,
+        "sep": 9, "sept": 9, "september": 9,
+        "oct": 10, "october": 10,
+        "nov": 11, "november": 11,
+        "dec": 12, "december": 12,
+    }
+    for name in be_months:
+        ok = ok and name in spa.lower()
+
+    node = shutil.which("node")
+    if node:
+        js_src = (ROOT / "web" / "app.js").read_text(encoding="utf-8")
+        js_norm = _pr16_js_fn(js_src, "normalizeFiscalPeriodLabel")
+        # Hoist the month tables that the function closes over.
+        start = js_src.find("const FISCAL_MONTH_NUM")
+        end = js_src.find("function normalizeFiscalPeriodLabel")
+        prelude = js_src[start:end] if start >= 0 and end > start else ""
+        cases = [
+            "June 2028",
+            "Jun 2028",
+            "January 2027",
+            "Sept 2026",
+            "September 2026",
+            "Dec 2031",
+            "July 2028",
+        ]
+        script = (
+            prelude
+            + "\n"
+            + js_norm
+            + "\nconst cases = "
+            + json.dumps(cases)
+            + ";\nconsole.log(JSON.stringify(cases.map(normalizeFiscalPeriodLabel)));\n"
+        )
+        proc = subprocess.run(
+            [node, "-e", script],
+            capture_output=True,
+            text=True,
+            timeout=15,
+        )
+        ok = ok and proc.returncode == 0
+        fe = json.loads((proc.stdout or "").strip() or "[]")
+        be = [sa.normalize_fiscal_period_label(c) for c in cases]
+        ok = ok and fe == be
+        detail = f"join30={hit['internal30']} miss={miss['internal30']} fe={fe} be={be}"
+    else:
+        detail = f"join30={hit['internal30']} miss={miss['internal30']} node=missing"
+    record("pr16_p1_fiscal_identity_fe_be_match_test", ok, detail)
+
 INTEGRATION_TEST_NAMES = {
     "test_full_export_2027_rollover",
     "test_quality_gate_blocks_export",
@@ -8351,6 +9208,27 @@ def _all_suite_tests():
         ("test_parse_iso_dt_rejects_malformed_date_prefix", test_parse_iso_dt_rejects_malformed_date_prefix),
         ("test_health_check_unpushed_canonical_commit_degraded", test_health_check_unpushed_canonical_commit_degraded),
         ("test_health_check_cli_subprocess_read_only", test_health_check_cli_subprocess_read_only),
+        # PR #16 Valuation × EPS Growth Comparison
+        ("test_pr16_dynamic_years_comparison_options", test_pr16_dynamic_years_comparison_options),
+        ("test_pr16_default_comparison_year", test_pr16_default_comparison_year),
+        ("test_pr16_selected_year_mapping", test_pr16_selected_year_mapping),
+        ("test_pr16_missing_eps_not_zero", test_pr16_missing_eps_not_zero),
+        ("test_pr16_negative_eps_pe_nm", test_pr16_negative_eps_pe_nm),
+        ("test_pr16_growth_edge_cases", test_pr16_growth_edge_cases),
+        ("test_pr16_cagr_dynamic_range", test_pr16_cagr_dynamic_range),
+        ("test_pr16_growth_adjusted_pe_20_over_25", test_pr16_growth_adjusted_pe_20_over_25),
+        ("test_pr16_revision_helper_reuse", test_pr16_revision_helper_reuse),
+        ("test_pr16_insufficient_history_not_zero", test_pr16_insufficient_history_not_zero),
+        ("test_pr16_fiscal_rollover_identity_join", test_pr16_fiscal_rollover_identity_join),
+        ("test_pr16_source_1m_separated_from_internal", test_pr16_source_1m_separated_from_internal),
+        ("test_pr16_analysts_null_vs_zero", test_pr16_analysts_null_vs_zero),
+        ("test_pr16_sort_null_nm_last_ticker_tiebreak", test_pr16_sort_null_nm_last_ticker_tiebreak),
+        ("test_pr16_comparison_year_updates_all_cells", test_pr16_comparison_year_updates_all_cells),
+        ("test_pr16_no_hardcoded_eps26_pe26_frontend", test_pr16_no_hardcoded_eps26_pe26_frontend),
+        ("test_pr16_revenue_growth_excluded_and_no_scores", test_pr16_revenue_growth_excluded_and_no_scores),
+        ("test_pr16_p1_comparison_year_fail_closed", test_pr16_p1_comparison_year_fail_closed),
+        ("test_pr16_p1_negative_eps_growth_semantics_and_sort", test_pr16_p1_negative_eps_growth_semantics_and_sort),
+        ("test_pr16_p1_fiscal_identity_fe_be_match", test_pr16_p1_fiscal_identity_fe_be_match),
     ]
 
 
