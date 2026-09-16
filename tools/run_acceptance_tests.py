@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -142,6 +143,8 @@ def build_fixture(dest: Path) -> Path:
         "snapshot_quality.py",
         "ingest_snapshot.py",
         "canonical_eps_history.py",
+        "migrate_eps_history.py",
+        "rebuild_daily_history.py",
         "publish_github_pages.sh",
         "build_review_zip.sh",
     ):
@@ -6815,6 +6818,747 @@ def test_corrupt_pending_daily_rows_aborts_before_current(fixture: Path) -> None
     )
 
 
+# ---------------------------------------------------------------------------
+# PR #13 — Production EPS History Migration, Backfill & Disaster Recovery
+# ---------------------------------------------------------------------------
+
+
+def _mig_write_jsonl(path: Path, rows: list[dict]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        "".join(json.dumps(r, ensure_ascii=False) + "\n" for r in rows),
+        encoding="utf-8",
+    )
+
+
+def _mig_obs(
+    *,
+    date: str = "2026-09-15",
+    ticker: str = "NVDA",
+    fiscal: str = "Jan 2028",
+    consensus: float = 15.0,
+    analysts=40,
+    updateTime: str | None = "2026-09-15T08:00:00Z",
+    source: str = "daily_export",
+    extra: dict | None = None,
+) -> dict:
+    row = {
+        "date": date,
+        "ticker": ticker,
+        "slot": "2027E",
+        "mappedYear": "2027E",
+        "reportedFiscalLabel": fiscal,
+        "consensus": consensus,
+        "analysts": analysts,
+        "source": source,
+        "calendarAlignment": "CY2027",
+    }
+    if updateTime is not None:
+        row["updateTime"] = updateTime
+    if extra:
+        row.update(extra)
+    return row
+
+
+def _mig_write_current(fixture: Path, run_id: str) -> None:
+    payload = {
+        "runId": run_id,
+        "generation": str(fixture / "data" / "generations" / run_id),
+        "schemaVersion": "1",
+        "crashAtomic": True,
+    }
+    (fixture / "data" / "CURRENT.json").write_text(
+        json.dumps(payload, indent=2) + "\n", encoding="utf-8"
+    )
+
+
+def _mig_write_generation(
+    fixture: Path,
+    run_id: str,
+    daily_rows: list[dict] | None = None,
+    *,
+    aborted: bool = False,
+    committed: bool = True,
+    current: bool = False,
+    canonical_rows: list[dict] | None = None,
+) -> Path:
+    g = fixture / "data" / "generations" / run_id
+    (g / "daily_eps_snapshots").mkdir(parents=True, exist_ok=True)
+    if daily_rows is not None:
+        _mig_write_jsonl(g / "daily_eps_snapshots" / "daily.jsonl", daily_rows)
+    meta: dict = {"runId": run_id}
+    if aborted:
+        meta["runStatus"] = "aborted"
+        meta["abortReason"] = "test_abort"
+    elif committed:
+        meta["runStatus"] = "committed"
+        meta["materializationStatus"] = "success"
+    (g / "generation_meta.json").write_text(json.dumps(meta, indent=2) + "\n", encoding="utf-8")
+    if canonical_rows:
+        ceh = import_mod(fixture, "canonical_eps_history")
+        admitted = ceh.admitted_observations(canonical_rows)
+        payloads: dict[str, list[dict]] = {}
+        for obs in admitted:
+            mk = ceh.month_key_from_date(obs["date"])
+            if mk:
+                payloads.setdefault(mk, []).append(obs)
+        dest = g / "history" / "eps_daily"
+        dest.mkdir(parents=True, exist_ok=True)
+        for mk, month_rows in payloads.items():
+            _mig_write_jsonl(dest / f"{mk}.jsonl", month_rows)
+    if current:
+        _mig_write_current(fixture, run_id)
+    return g
+
+
+def _mig_reset(fixture: Path) -> None:
+    _reset_canonical(fixture)
+    for rel in (
+        "data/daily_eps_snapshots/daily.jsonl",
+        "data/CURRENT.json",
+        "data/eps_history.json",
+        "web/data/eps_history.json",
+    ):
+        p = fixture / rel
+        if p.exists():
+            p.unlink()
+    gens = fixture / "data" / "generations"
+    if gens.exists():
+        shutil.rmtree(gens)
+    gens.mkdir(parents=True, exist_ok=True)
+    (fixture / "data" / "daily_eps_snapshots").mkdir(parents=True, exist_ok=True)
+
+
+def _mig_ident_set(rows: list[dict]) -> set[tuple]:
+    out = set()
+    for r in rows:
+        out.add(
+            (
+                r.get("ticker"),
+                r.get("reportedFiscalPeriodEnding") or r.get("reportedFiscalLabel"),
+                r.get("date"),
+                r.get("updateTime"),
+                r.get("consensus"),
+                r.get("analysts"),
+            )
+        )
+    return out
+
+
+def test_migration_audit_is_read_only(fixture: Path) -> None:
+    _mig_reset(fixture)
+    mig = import_mod(fixture, "migrate_eps_history")
+    rows = [_mig_obs(), _mig_obs(ticker="AVGO", fiscal="Oct 2027", consensus=19.38)]
+    _mig_write_jsonl(fixture / "data" / "daily_eps_snapshots" / "daily.jsonl", rows)
+    _mig_write_generation(fixture, "run_current", rows, current=True, committed=True)
+    before = mig.fingerprint_workspace(fixture)
+    current_before = (fixture / "data" / "CURRENT.json").read_bytes()
+    plan = mig.plan_migration(fixture)
+    rc = mig.main(["--audit", "--root", str(fixture), "--json"])
+    after = mig.fingerprint_workspace(fixture)
+    ok = rc == 0
+    ok = ok and before == after
+    ok = ok and (fixture / "data" / "CURRENT.json").read_bytes() == current_before
+    ok = ok and not ceh_month_files(fixture)
+    ok = ok and plan["counts"]["new"] >= 1
+    record(
+        "migration_audit_is_read_only_test",
+        ok,
+        f"rc={rc} fp_same={before==after} new={plan['counts']['new']}",
+    )
+
+
+def ceh_month_files(fixture: Path) -> list[Path]:
+    hist = fixture / "data" / "history" / "eps_daily"
+    if not hist.is_dir():
+        return []
+    return [p for p in hist.glob("*.jsonl") if p.is_file()]
+
+
+def test_migration_exact_duplicates_idempotent(fixture: Path) -> None:
+    _mig_reset(fixture)
+    mig = import_mod(fixture, "migrate_eps_history")
+    ceh = import_mod(fixture, "canonical_eps_history")
+    row = _mig_obs()
+    _mig_write_jsonl(fixture / "data" / "daily_eps_snapshots" / "daily.jsonl", [row, dict(row)])
+    _mig_write_generation(fixture, "run_current", [row], current=True)
+    r1 = mig.apply_migration(fixture)
+    n1 = len(ceh.load_all_canonical_rows(fixture))
+    files1 = {p.name: p.read_bytes() for p in ceh.list_month_files(fixture)}
+    r2 = mig.apply_migration(fixture)
+    n2 = len(ceh.load_all_canonical_rows(fixture))
+    files2 = {p.name: p.read_bytes() for p in ceh.list_month_files(fixture)}
+    ok = r1.get("ok") and r2.get("ok")
+    ok = ok and n1 == 1 and n2 == 1
+    ok = ok and files1 == files2
+    ok = ok and r2.get("noop") is True
+    record(
+        "migration_exact_duplicates_idempotent_test",
+        ok,
+        f"n={n1} noop={r2.get('noop')} written={r1.get('written')}",
+    )
+
+
+def test_migration_existing_canonical_preserved(fixture: Path) -> None:
+    _mig_reset(fixture)
+    mig = import_mod(fixture, "migrate_eps_history")
+    ceh = import_mod(fixture, "canonical_eps_history")
+    existing = _mig_obs(consensus=10.0, updateTime="2026-09-15T08:00:00Z")
+    incoming = _mig_obs(ticker="MSFT", fiscal="Jun 2027", consensus=5.0, extra={"slot": "2026E", "mappedYear": "2026E"})
+    _write_canonical_rows(fixture, [existing])
+    before = ceh.load_all_canonical_rows(fixture)
+    _mig_write_jsonl(fixture / "data" / "daily_eps_snapshots" / "daily.jsonl", [existing, incoming])
+    result = mig.apply_migration(fixture)
+    after = ceh.load_all_canonical_rows(fixture)
+    nvda = [r for r in after if r["ticker"] == "NVDA"]
+    msft = [r for r in after if r["ticker"] == "MSFT"]
+    ok = result.get("ok") is True
+    ok = ok and len(nvda) == 1 and nvda[0]["consensus"] == 10.0
+    ok = ok and nvda[0]["updateTime"] == "2026-09-15T08:00:00Z"
+    ok = ok and len(msft) == 1 and msft[0]["consensus"] == 5.0
+    ok = ok and len(before) == 1
+    record(
+        "migration_existing_canonical_preserved_test",
+        ok,
+        f"n={len(after)} nvda={nvda[0]['consensus'] if nvda else None} new={result.get('counts', {}).get('new')}",
+    )
+
+
+def test_migration_conflicting_identity_aborts_atomically(fixture: Path) -> None:
+    _mig_reset(fixture)
+    mig = import_mod(fixture, "migrate_eps_history")
+    ceh = import_mod(fixture, "canonical_eps_history")
+    existing = _mig_obs(consensus=10.0)
+    conflict = _mig_obs(consensus=12.0)  # same identity, different EPS
+    extra = _mig_obs(date="2026-10-01", updateTime="2026-10-01T08:00:00Z", consensus=16.0)
+    _write_canonical_rows(fixture, [existing])
+    before_files = {p.name: p.read_bytes() for p in ceh.list_month_files(fixture)}
+    _mig_write_jsonl(fixture / "data" / "daily_eps_snapshots" / "daily.jsonl", [conflict, extra])
+    result = mig.apply_migration(fixture)
+    after_files = {p.name: p.read_bytes() for p in ceh.list_month_files(fixture)}
+    octo = fixture / "data" / "history" / "eps_daily" / "2026-10.jsonl"
+    ok = result.get("ok") is False
+    ok = ok and (result.get("counts") or {}).get("conflicts", 0) >= 1
+    ok = ok and after_files == before_files
+    ok = ok and not octo.exists()
+    live = ceh.load_all_canonical_rows(fixture)
+    ok = ok and len(live) == 1 and live[0]["consensus"] == 10.0
+    record(
+        "migration_conflicting_identity_aborts_atomically_test",
+        ok,
+        f"ok={result.get('ok')} conflicts={result.get('counts', {}).get('conflicts')} octo={octo.exists()}",
+    )
+
+
+def test_migration_opposite_source_order_same_result(fixture: Path) -> None:
+    _mig_reset(fixture)
+    mig = import_mod(fixture, "migrate_eps_history")
+    a = _mig_obs(ticker="NVDA", consensus=15.0)
+    b = _mig_obs(ticker="AVGO", fiscal="Oct 2027", consensus=19.38, extra={"slot": "2027E"})
+    c = _mig_obs(ticker="BE", fiscal="Dec 2026", consensus=2.71, extra={"slot": "2026E", "mappedYear": "2026E"})
+    _mig_write_jsonl(fixture / "data" / "daily_eps_snapshots" / "daily.jsonl", [a, b])
+    _mig_write_generation(fixture, "run_old", [b, c], committed=True, current=False)
+    _mig_write_generation(fixture, "run_cur", [a, c], committed=True, current=True)
+    p1 = mig.plan_migration(fixture, source_order="priority")
+    p2 = mig.plan_migration(fixture, source_order="reverse")
+    ids1 = {(x["ticker"], x["reportedFiscalPeriodEnding"], x["date"], x["updateTime"], x["consensus"]) for x in p1["proposedIdentities"]}
+    ids2 = {(x["ticker"], x["reportedFiscalPeriodEnding"], x["date"], x["updateTime"], x["consensus"]) for x in p2["proposedIdentities"]}
+    ok = ids1 == ids2
+    ok = ok and p1["counts"]["new"] == p2["counts"]["new"] == 3
+    ok = ok and p1["counts"]["conflicts"] == p2["counts"]["conflicts"] == 0
+    record(
+        "migration_opposite_source_order_same_result_test",
+        ok,
+        f"n1={len(ids1)} n2={len(ids2)} new={p1['counts']['new']}",
+    )
+
+
+def test_migration_aborted_generation_not_imported(fixture: Path) -> None:
+    _mig_reset(fixture)
+    mig = import_mod(fixture, "migrate_eps_history")
+    ceh = import_mod(fixture, "canonical_eps_history")
+    trusted = _mig_obs(ticker="NVDA", consensus=15.0)
+    aborted_only = _mig_obs(ticker="KEYS", fiscal="Oct 2027", consensus=99.0, extra={"slot": "2027E"})
+    _mig_write_jsonl(fixture / "data" / "daily_eps_snapshots" / "daily.jsonl", [trusted])
+    _mig_write_generation(fixture, "run_cur", [trusted], current=True, committed=True)
+    _mig_write_generation(fixture, "run_abort", [aborted_only], aborted=True, committed=False, current=False)
+    result = mig.apply_migration(fixture)
+    rows = ceh.load_all_canonical_rows(fixture)
+    tickers = {r["ticker"] for r in rows}
+    plan = mig.plan_migration(fixture)
+    skipped = [s for s in plan["sources"] if s.get("runId") == "run_abort" or "run_abort" in str(s.get("name"))]
+    ok = result.get("ok") is True
+    ok = ok and "NVDA" in tickers
+    ok = ok and "KEYS" not in tickers
+    ok = ok and any(s.get("trusted") is False for s in skipped)
+    record(
+        "migration_aborted_generation_not_imported_test",
+        ok,
+        f"tickers={tickers} skipped={[(s.get('name'), s.get('trusted')) for s in skipped]}",
+    )
+
+
+def test_migration_invalid_rows_rejected(fixture: Path) -> None:
+    _mig_reset(fixture)
+    mig = import_mod(fixture, "migrate_eps_history")
+    ceh = import_mod(fixture, "canonical_eps_history")
+    good = _mig_obs()
+    rows = [
+        good,
+        _mig_obs(source="seed_from_revision_history", consensus=1.0, ticker="TSM", fiscal="Dec 2026"),
+        _mig_obs(consensus=None, ticker="MSFT", fiscal="Jun 2027"),  # type: ignore[arg-type]
+        {
+            "date": "2026-09-15",
+            "ticker": "BE",
+            "slot": "2026E",
+            "mappedYear": "2026E",
+            "reportedFiscalLabel": None,
+            "consensus": 2.71,
+            "updateTime": "2026-09-15T08:00:00Z",
+            "source": "daily_export",
+        },
+        {
+            "date": "not-a-date",
+            "ticker": "AVGO",
+            "reportedFiscalLabel": "Oct 2027",
+            "consensus": 1.0,
+            "updateTime": "2026-09-15T08:00:00Z",
+            "source": "daily_export",
+        },
+        dict(good, collectionFailed=True, ticker="FAIL"),
+    ]
+    # Fix null consensus row
+    rows[2]["consensus"] = None
+    _mig_write_jsonl(fixture / "data" / "daily_eps_snapshots" / "daily.jsonl", rows)
+    result = mig.apply_migration(fixture)
+    loaded = ceh.load_all_canonical_rows(fixture)
+    ok = result.get("ok") is True
+    ok = ok and len(loaded) == 1
+    ok = ok and loaded[0]["ticker"] == "NVDA"
+    ok = ok and result["counts"]["rejected"] >= 5
+    reasons = result.get("rejectedReasons") or {}
+    ok = ok and "seed_from_revision_history" in reasons
+    ok = ok and "invalid_consensus" in reasons
+    record(
+        "migration_invalid_rows_rejected_test",
+        ok,
+        f"n={len(loaded)} rejected={result['counts']['rejected']} reasons={reasons}",
+    )
+
+
+def test_migration_mapped_year_not_identity(fixture: Path) -> None:
+    _mig_reset(fixture)
+    mig = import_mod(fixture, "migrate_eps_history")
+    ceh = import_mod(fixture, "canonical_eps_history")
+    # Same mappedYear/slot, two real fiscals → two identities.
+    a = _mig_obs(fiscal="Jan 2028", consensus=15.0)
+    b = _mig_obs(ticker="NVDA", fiscal="Jan 2029", consensus=21.0, extra={"slot": "2027E", "mappedYear": "2027E"})
+    slot_only = {
+        "date": "2026-09-15",
+        "ticker": "NVDA",
+        "slot": "2027E",
+        "mappedYear": "2027E",
+        "consensus": 99.0,
+        "updateTime": "2026-09-15T08:00:00Z",
+        "source": "daily_export",
+    }
+    slot_as_fiscal = {
+        "date": "2026-09-15",
+        "ticker": "AVGO",
+        "reportedFiscalLabel": "2027E",
+        "mappedYear": "2027E",
+        "slot": "2027E",
+        "consensus": 11.0,
+        "updateTime": "2026-09-15T08:00:00Z",
+        "source": "daily_export",
+    }
+    _mig_write_jsonl(
+        fixture / "data" / "daily_eps_snapshots" / "daily.jsonl",
+        [a, b, slot_only, slot_as_fiscal],
+    )
+    result = mig.apply_migration(fixture)
+    loaded = ceh.load_all_canonical_rows(fixture)
+    fiscals = {(r["ticker"], r["reportedFiscalPeriodEnding"]) for r in loaded}
+    ok = result.get("ok") is True
+    ok = ok and fiscals == {("NVDA", "Jan 2028"), ("NVDA", "Jan 2029")}
+    ok = ok and all(r.get("consensus") != 99.0 for r in loaded)
+    ok = ok and all(r["ticker"] != "AVGO" for r in loaded)
+    reasons = result.get("rejectedReasons") or {}
+    ok = ok and reasons.get("mapped_year_not_identity", 0) >= 2
+    record(
+        "migration_mapped_year_not_identity_test",
+        ok,
+        f"fiscals={fiscals} reasons={reasons}",
+    )
+
+
+def test_migration_missing_updatetime_uses_deterministic_fallback(fixture: Path) -> None:
+    _mig_reset(fixture)
+    mig = import_mod(fixture, "migrate_eps_history")
+    ceh = import_mod(fixture, "canonical_eps_history")
+    row = _mig_obs()
+    del row["updateTime"]
+    _mig_write_jsonl(fixture / "data" / "daily_eps_snapshots" / "daily.jsonl", [row])
+    result = mig.apply_migration(fixture)
+    loaded = ceh.load_all_canonical_rows(fixture)
+    ok = result.get("ok") is True
+    ok = ok and len(loaded) == 1
+    ok = ok and loaded[0]["updateTime"] == "2026-09-15T00:00:00Z"
+    ok = ok and result["counts"]["missingUpdateTimeFallback"] >= 1
+    # Real timestamp must not be replaced with midnight.
+    _mig_reset(fixture)
+    real = _mig_obs(updateTime="2026-09-15T18:00:00Z")
+    _mig_write_jsonl(fixture / "data" / "daily_eps_snapshots" / "daily.jsonl", [real])
+    mig.apply_migration(fixture)
+    loaded2 = ceh.load_all_canonical_rows(fixture)
+    ok = ok and loaded2[0]["updateTime"] == "2026-09-15T18:00:00Z"
+    record(
+        "migration_missing_updatetime_uses_deterministic_fallback_test",
+        ok,
+        f"fallback={loaded[0]['updateTime'] if loaded else None} real={loaded2[0]['updateTime'] if loaded2 else None}",
+    )
+
+
+def test_migration_multiple_generations_deduplicate(fixture: Path) -> None:
+    _mig_reset(fixture)
+    mig = import_mod(fixture, "migrate_eps_history")
+    ceh = import_mod(fixture, "canonical_eps_history")
+    shared = _mig_obs(consensus=15.0)
+    only_old = _mig_obs(ticker="TSM", fiscal="Dec 2026", consensus=2.0, extra={"slot": "2026E", "mappedYear": "2026E"})
+    only_new = _mig_obs(ticker="BE", fiscal="Dec 2026", consensus=2.71, extra={"slot": "2026E", "mappedYear": "2026E"})
+    _mig_write_generation(fixture, "run_old", [shared, only_old], committed=True, current=False)
+    _mig_write_generation(fixture, "run_cur", [shared, only_new], committed=True, current=True)
+    result = mig.apply_migration(fixture)
+    loaded = ceh.load_all_canonical_rows(fixture)
+    tickers = sorted({r["ticker"] for r in loaded})
+    nvda = [r for r in loaded if r["ticker"] == "NVDA"]
+    ok = result.get("ok") is True
+    ok = ok and len(nvda) == 1
+    ok = ok and tickers == ["BE", "NVDA", "TSM"]
+    ok = ok and len(loaded) == 3
+    record(
+        "migration_multiple_generations_deduplicate_test",
+        ok,
+        f"n={len(loaded)} tickers={tickers} dupes={result['counts']['exactDupesSkipped']}",
+    )
+
+
+def test_migration_month_rollover(fixture: Path) -> None:
+    _mig_reset(fixture)
+    mig = import_mod(fixture, "migrate_eps_history")
+    ceh = import_mod(fixture, "canonical_eps_history")
+    sep = _mig_obs(date="2026-09-30", updateTime="2026-09-30T08:00:00Z")
+    octo = _mig_obs(date="2026-10-01", updateTime="2026-10-01T08:00:00Z", consensus=16.0)
+    _mig_write_jsonl(fixture / "data" / "daily_eps_snapshots" / "daily.jsonl", [sep, octo])
+    result = mig.apply_migration(fixture)
+    names = sorted(p.name for p in ceh.list_month_files(fixture))
+    sep_rows = ceh.load_jsonl_rows(ceh.month_file_path(fixture, "2026-09"))
+    oct_rows = ceh.load_jsonl_rows(ceh.month_file_path(fixture, "2026-10"))
+    ok = result.get("ok") is True
+    ok = ok and names == ["2026-09.jsonl", "2026-10.jsonl"]
+    ok = ok and len(sep_rows) == 1 and sep_rows[0]["date"] == "2026-09-30"
+    ok = ok and len(oct_rows) == 1 and oct_rows[0]["date"] == "2026-10-01"
+    record("migration_month_rollover_test", ok, f"files={names}")
+
+
+def test_migration_second_run_is_noop(fixture: Path) -> None:
+    _mig_reset(fixture)
+    mig = import_mod(fixture, "migrate_eps_history")
+    rows = [_mig_obs(), _mig_obs(ticker="AVGO", fiscal="Oct 2027", consensus=19.0)]
+    _mig_write_jsonl(fixture / "data" / "daily_eps_snapshots" / "daily.jsonl", rows)
+    r1 = mig.apply_migration(fixture)
+    files1 = {p.name: p.read_bytes() for p in (fixture / "data" / "history" / "eps_daily").glob("*.jsonl")}
+    r2 = mig.apply_migration(fixture)
+    files2 = {p.name: p.read_bytes() for p in (fixture / "data" / "history" / "eps_daily").glob("*.jsonl")}
+    ok = r1.get("ok") and r2.get("ok")
+    ok = ok and r1.get("counts", {}).get("new") == 2
+    ok = ok and r2.get("counts", {}).get("new") == 0
+    ok = ok and r2.get("noop") is True
+    ok = ok and files1 == files2
+    record(
+        "migration_second_run_is_noop_test",
+        ok,
+        f"new1={r1.get('counts', {}).get('new')} new2={r2.get('counts', {}).get('new')} noop={r2.get('noop')}",
+    )
+
+
+def test_fresh_clone_after_backfill_reconstructs_runtime(fixture: Path) -> None:
+    """PRIMARY: migrate realistic sources, wipe runtime/gens, rebuild from Git canonical."""
+    _mig_reset(fixture)
+    mig = import_mod(fixture, "migrate_eps_history")
+    ceh = import_mod(fixture, "canonical_eps_history")
+    seed, as_of = _fresh_clone_seed_rows()
+    # Partial canonical + runtime remainder + extra committed gen + same-day multi + rollover.
+    partial = seed[:2]
+    rest = seed[2:]
+    same_day = {
+        "date": as_of.strftime("%Y-%m-%d"),
+        "ticker": "NVDA",
+        "reportedFiscalPeriodEnding": "Jan 2028",
+        "reportedFiscalLabel": "Jan 2028",
+        "consensus": 15.2,
+        "analysts": 44,
+        "updateTime": as_of.strftime("%Y-%m-%dT18:00:00Z"),
+        "source": "daily_export",
+    }
+    rollover = _mig_obs(date="2026-10-01", ticker="AVGO", fiscal="Oct 2027", consensus=19.5, updateTime="2026-10-01T08:00:00Z")
+    _write_canonical_rows(fixture, partial)
+    _mig_write_jsonl(fixture / "data" / "daily_eps_snapshots" / "daily.jsonl", rest + [same_day])
+    _mig_write_generation(fixture, "run_old", [rollover], committed=True, current=False)
+    _mig_write_generation(fixture, "run_cur", rest + [same_day], committed=True, current=True)
+    pre_current = (fixture / "data" / "CURRENT.json").read_bytes()
+    result = mig.apply_migration(fixture)
+    ok = result.get("ok") is True
+    ok = ok and (fixture / "data" / "CURRENT.json").read_bytes() == pre_current
+
+    # Git-track canonical only, simulate fresh clone.
+    clone = fixture / "_fresh_clone_pr13"
+    if clone.exists():
+        shutil.rmtree(clone)
+    (clone / "tools").mkdir(parents=True)
+    for name in (
+        "canonical_eps_history.py",
+        "migrate_eps_history.py",
+        "rebuild_daily_history.py",
+        "revision_windows.py",
+        "sa_parser.py",
+        "atomic_io.py",
+    ):
+        shutil.copy2(fixture / "tools" / name, clone / "tools" / name)
+    hist_src = fixture / "data" / "history" / "eps_daily"
+    hist_dst = clone / "data" / "history" / "eps_daily"
+    hist_dst.mkdir(parents=True, exist_ok=True)
+    for p in hist_src.glob("*.jsonl"):
+        shutil.copy2(p, hist_dst / p.name)
+    subprocess.run(["git", "init"], cwd=str(clone), check=True, capture_output=True)
+    subprocess.run(["git", "add", "--", "data/history/eps_daily", "tools"], cwd=str(clone), check=True, capture_output=True)
+    subprocess.run(
+        ["git", "-c", "user.email=test@example.com", "-c", "user.name=test", "commit", "-m", "canonical after backfill"],
+        cwd=str(clone),
+        check=True,
+        capture_output=True,
+    )
+    for rel in ("data/daily_eps_snapshots", "data/generations", "data/CURRENT.json"):
+        p = clone / rel
+        if p.is_dir():
+            shutil.rmtree(p)
+        elif p.is_file():
+            p.unlink()
+    subprocess.run(["git", "clean", "-fdx", "-e", ".git"], cwd=str(clone), check=True, capture_output=True)
+    tracked = subprocess.run(["git", "ls-files"], cwd=str(clone), check=True, capture_output=True, text=True).stdout
+    ok = ok and "data/history/eps_daily/" in tracked
+    ok = ok and "daily.jsonl" not in tracked
+    ok = ok and not (clone / "data" / "daily_eps_snapshots").exists()
+    ok = ok and not (clone / "data" / "generations").exists()
+
+    rc = subprocess.run(
+        [sys.executable, str(clone / "tools" / "rebuild_daily_history.py"), "--root", str(clone)],
+        cwd=str(clone),
+        capture_output=True,
+        text=True,
+    )
+    ok = ok and rc.returncode == 0
+    rebuilt = ceh.load_jsonl_rows(clone / "data" / "daily_eps_snapshots" / "daily.jsonl")
+    orig = ceh.load_all_canonical_rows(fixture)
+    ok = ok and _mig_ident_set(rebuilt) == _mig_ident_set(orig)
+    ok = ok and len(rebuilt) >= 6  # 4 seed + same-day + rollover
+    record(
+        "fresh_clone_after_backfill_reconstructs_runtime_test",
+        ok,
+        f"rc={rc.returncode} n={len(rebuilt)} new={result.get('counts', {}).get('new')}",
+    )
+
+
+def test_recovered_30_60_90_windows_match_pre_migration_history(fixture: Path) -> None:
+    _mig_reset(fixture)
+    mig = import_mod(fixture, "migrate_eps_history")
+    ceh = import_mod(fixture, "canonical_eps_history")
+    rw = import_mod(fixture, "revision_windows")
+    seed, as_of = _fresh_clone_seed_rows()
+    _mig_write_jsonl(fixture / "data" / "daily_eps_snapshots" / "daily.jsonl", seed)
+    _mig_write_generation(fixture, "run_cur", seed, current=True, committed=True)
+    pre_rows = list(seed)
+    pre_windows = _compute_internal_windows(fixture, pre_rows, as_of)
+    key = rw.fiscal_identity_key("NVDA", "Jan 2028")
+    expected = {n: _window_cmp_fields(pre_windows[key][n]) for n in (30, 60, 90)}
+    result = mig.apply_migration(fixture)
+    # Destroy runtime + generations (disaster). CURRENT is not a history SoT.
+    shutil.rmtree(fixture / "data" / "daily_eps_snapshots")
+    shutil.rmtree(fixture / "data" / "generations")
+    rebuild = import_mod(fixture, "rebuild_daily_history")
+    rc = rebuild.main(["--root", str(fixture)])
+    rebuilt = ceh.load_jsonl_rows(ceh.runtime_daily_path(fixture))
+    after = _compute_internal_windows(fixture, rebuilt, as_of)
+    ok = result.get("ok") is True and rc == 0
+    ok = ok and key in after
+    for n in (30, 60, 90):
+        ok = ok and after[key][n].get("status") == "ok"
+        ok = ok and _window_cmp_fields(after[key][n]) == expected[n]
+    record(
+        "recovered_30_60_90_windows_match_pre_migration_history_test",
+        ok,
+        f"expected={expected} got={ {n: _window_cmp_fields(after.get(key, {}).get(n) or {}) for n in (30, 60, 90)} }",
+    )
+
+
+def test_migration_does_not_change_current_pointer(fixture: Path) -> None:
+    _mig_reset(fixture)
+    mig = import_mod(fixture, "migrate_eps_history")
+    rows = [_mig_obs()]
+    _mig_write_jsonl(fixture / "data" / "daily_eps_snapshots" / "daily.jsonl", rows)
+    _mig_write_generation(fixture, "run_cur", rows, current=True)
+    path = fixture / "data" / "CURRENT.json"
+    before = path.read_bytes()
+    daily_before = (fixture / "data" / "daily_eps_snapshots" / "daily.jsonl").read_bytes()
+    gen_before = {
+        str(p.relative_to(fixture)): p.read_bytes()
+        for p in (fixture / "data" / "generations").rglob("*")
+        if p.is_file()
+    }
+    result = mig.apply_migration(fixture)
+    ok = result.get("ok") is True
+    ok = ok and path.read_bytes() == before
+    ok = ok and (fixture / "data" / "daily_eps_snapshots" / "daily.jsonl").read_bytes() == daily_before
+    gen_after = {
+        str(p.relative_to(fixture)): p.read_bytes()
+        for p in (fixture / "data" / "generations").rglob("*")
+        if p.is_file()
+    }
+    ok = ok and gen_after == gen_before
+    record(
+        "migration_does_not_change_current_pointer_test",
+        ok,
+        f"current_same={path.read_bytes()==before} applied={result.get('applied')}",
+    )
+
+
+def test_migration_failure_does_not_partially_write_canonical(fixture: Path) -> None:
+    _mig_reset(fixture)
+    mig = import_mod(fixture, "migrate_eps_history")
+    ceh = import_mod(fixture, "canonical_eps_history")
+    existing = _mig_obs(consensus=10.0)
+    _write_canonical_rows(fixture, [existing])
+    hist = fixture / "data" / "history" / "eps_daily"
+    before = {p.name: p.read_bytes() for p in hist.glob("*.jsonl")}
+    keep = (hist / ".gitkeep").read_bytes() if (hist / ".gitkeep").exists() else None
+    conflict = _mig_obs(consensus=99.0)
+    other_month = _mig_obs(date="2026-08-31", updateTime="2026-08-31T08:00:00Z", consensus=8.0)
+    _mig_write_jsonl(fixture / "data" / "daily_eps_snapshots" / "daily.jsonl", [conflict, other_month])
+    result = mig.apply_migration(fixture)
+    after = {p.name: p.read_bytes() for p in hist.glob("*.jsonl")}
+    ok = result.get("ok") is False
+    ok = ok and after == before
+    ok = ok and not (hist / "2026-08.jsonl").exists()
+    if keep is not None:
+        ok = ok and (hist / ".gitkeep").read_bytes() == keep
+    ok = ok and ceh.load_all_canonical_rows(fixture)[0]["consensus"] == 10.0
+    record(
+        "migration_failure_does_not_partially_write_canonical_test",
+        ok,
+        f"ok={result.get('ok')} files={sorted(after)} conflicts={result.get('counts', {}).get('conflicts')}",
+    )
+
+
+def _mig_side_channel(fixture: Path) -> dict:
+    """CURRENT / runtime daily / generations bytes — must stay put during migration failure."""
+    out: dict = {}
+    cur = fixture / "data" / "CURRENT.json"
+    out["current"] = cur.read_bytes() if cur.is_file() else None
+    daily = fixture / "data" / "daily_eps_snapshots" / "daily.jsonl"
+    out["daily"] = daily.read_bytes() if daily.is_file() else None
+    gens: dict[str, bytes] = {}
+    gdir = fixture / "data" / "generations"
+    if gdir.is_dir():
+        for p in sorted(gdir.rglob("*")):
+            if p.is_file():
+                gens[str(p.relative_to(fixture))] = p.read_bytes()
+    out["gens"] = gens
+    return out
+
+
+def test_migration_replace_failure_rolls_back_all_months(fixture: Path) -> None:
+    """Fault-inject: first month replace succeeds, second fails → full rollback."""
+    _mig_reset(fixture)
+    mig = import_mod(fixture, "migrate_eps_history")
+    existing = _mig_obs(date="2026-09-15", consensus=10.0)
+    _write_canonical_rows(fixture, [existing])
+    hist = fixture / "data" / "history" / "eps_daily"
+    sep_before = (hist / "2026-09.jsonl").read_bytes()
+    extra_sep = _mig_obs(date="2026-09-16", updateTime="2026-09-16T08:00:00Z", consensus=11.0)
+    octo = _mig_obs(date="2026-10-01", updateTime="2026-10-01T08:00:00Z", consensus=12.0)
+    daily_rows = [existing, extra_sep, octo]
+    _mig_write_jsonl(fixture / "data" / "daily_eps_snapshots" / "daily.jsonl", daily_rows)
+    _mig_write_generation(fixture, "run_cur", daily_rows, current=True, committed=True)
+    side_before = _mig_side_channel(fixture)
+    names_before = sorted(p.name for p in hist.glob("*.jsonl"))
+    prev = os.environ.get("FAULT_INJECT_MIGRATION_REPLACE_AFTER")
+    os.environ["FAULT_INJECT_MIGRATION_REPLACE_AFTER"] = "2"
+    try:
+        result = mig.apply_migration(fixture)
+    finally:
+        if prev is None:
+            os.environ.pop("FAULT_INJECT_MIGRATION_REPLACE_AFTER", None)
+        else:
+            os.environ["FAULT_INJECT_MIGRATION_REPLACE_AFTER"] = prev
+    sep_after = (hist / "2026-09.jsonl").read_bytes() if (hist / "2026-09.jsonl").is_file() else b""
+    oct_path = hist / "2026-10.jsonl"
+    side_after = _mig_side_channel(fixture)
+    leftover_staging = (hist / ".migration_staging").exists() or (hist / ".migration_backup").exists()
+    ok = result.get("ok") is False
+    ok = ok and result.get("rolledBack") is True
+    ok = ok and sep_after == sep_before
+    ok = ok and not oct_path.exists()
+    ok = ok and sorted(p.name for p in hist.glob("*.jsonl")) == names_before
+    ok = ok and side_after == side_before
+    ok = ok and not leftover_staging
+    record(
+        "migration_replace_failure_rolls_back_all_months_test",
+        ok,
+        f"ok={result.get('ok')} rolledBack={result.get('rolledBack')} "
+        f"sep_same={sep_after==sep_before} octo={oct_path.exists()} "
+        f"side_same={side_after==side_before} err={result.get('error')}",
+    )
+
+
+def test_migration_apply_busy_when_pipeline_locked(fixture: Path) -> None:
+    """Hold global pipeline lock in this process; CLI --apply in another exits busy."""
+    from atomic_io import GlobalPipelineLock, RUN_IN_PROGRESS_MSG, default_pipeline_lock_path
+
+    _mig_reset(fixture)
+    rows = [_mig_obs()]
+    _mig_write_jsonl(fixture / "data" / "daily_eps_snapshots" / "daily.jsonl", rows)
+    _mig_write_generation(fixture, "run_cur", rows, current=True, committed=True)
+    hist = fixture / "data" / "history" / "eps_daily"
+    hist.mkdir(parents=True, exist_ok=True)
+    side_before = _mig_side_channel(fixture)
+    jsonl_before = {p.name: p.read_bytes() for p in hist.glob("*.jsonl")}
+    lock_path = default_pipeline_lock_path(fixture)
+    env = os.environ.copy()
+    env.pop("PIPELINE_LOCK_HELD", None)
+    script = fixture / "tools" / "migrate_eps_history.py"
+    cmd = [sys.executable, str(script), "--apply", "--root", str(fixture), "--json"]
+    with GlobalPipelineLock(lock_path, non_blocking=True):
+        busy = subprocess.run(cmd, cwd=str(fixture), env=env, capture_output=True, text=True, timeout=30)
+    combined = (busy.stdout or "") + (busy.stderr or "")
+    side_busy = _mig_side_channel(fixture)
+    jsonl_busy = {p.name: p.read_bytes() for p in hist.glob("*.jsonl")}
+    ok = busy.returncode != 0
+    ok = ok and RUN_IN_PROGRESS_MSG in combined
+    ok = ok and side_busy == side_before
+    ok = ok and jsonl_busy == jsonl_before
+    ok = ok and not (hist / "2026-09.jsonl").exists()
+    # Lock released — normal apply must succeed.
+    free = subprocess.run(cmd, cwd=str(fixture), env=env, capture_output=True, text=True, timeout=30)
+    ok = ok and free.returncode == 0
+    ok = ok and (hist / "2026-09.jsonl").is_file()
+    record(
+        "migration_apply_busy_when_pipeline_locked_test",
+        ok,
+        f"busy_rc={busy.returncode} free_rc={free.returncode} "
+        f"msg={RUN_IN_PROGRESS_MSG in combined} side_same={side_busy==side_before}",
+    )
+
+
 # Suite classification: integration = subprocess/crash/publish/heavy ingest
 INTEGRATION_TEST_NAMES = {
     "test_full_export_2027_rollover",
@@ -6852,6 +7596,7 @@ INTEGRATION_TEST_NAMES = {
     "test_crash_before_financial_commit_does_not_mutate_canonical_history",
     "test_canonical_git_push_failure_retries_to_remote",
     "test_corrupt_pending_daily_rows_aborts_before_current",
+    "test_migration_apply_busy_when_pipeline_locked",
 }
 
 
@@ -7042,6 +7787,25 @@ def _all_suite_tests():
         ("test_canonical_history_no_mapped_year_identity", test_canonical_history_no_mapped_year_identity),
         ("test_canonical_history_identity_conflict_fail_closed", test_canonical_history_identity_conflict_fail_closed),
         ("test_corrupt_pending_daily_rows_aborts_before_current", test_corrupt_pending_daily_rows_aborts_before_current),
+        # Production EPS History Migration & Disaster Recovery
+        ("test_migration_audit_is_read_only", test_migration_audit_is_read_only),
+        ("test_migration_exact_duplicates_idempotent", test_migration_exact_duplicates_idempotent),
+        ("test_migration_existing_canonical_preserved", test_migration_existing_canonical_preserved),
+        ("test_migration_conflicting_identity_aborts_atomically", test_migration_conflicting_identity_aborts_atomically),
+        ("test_migration_opposite_source_order_same_result", test_migration_opposite_source_order_same_result),
+        ("test_migration_aborted_generation_not_imported", test_migration_aborted_generation_not_imported),
+        ("test_migration_invalid_rows_rejected", test_migration_invalid_rows_rejected),
+        ("test_migration_mapped_year_not_identity", test_migration_mapped_year_not_identity),
+        ("test_migration_missing_updatetime_uses_deterministic_fallback", test_migration_missing_updatetime_uses_deterministic_fallback),
+        ("test_migration_multiple_generations_deduplicate", test_migration_multiple_generations_deduplicate),
+        ("test_migration_month_rollover", test_migration_month_rollover),
+        ("test_migration_second_run_is_noop", test_migration_second_run_is_noop),
+        ("test_fresh_clone_after_backfill_reconstructs_runtime", test_fresh_clone_after_backfill_reconstructs_runtime),
+        ("test_recovered_30_60_90_windows_match_pre_migration_history", test_recovered_30_60_90_windows_match_pre_migration_history),
+        ("test_migration_does_not_change_current_pointer", test_migration_does_not_change_current_pointer),
+        ("test_migration_failure_does_not_partially_write_canonical", test_migration_failure_does_not_partially_write_canonical),
+        ("test_migration_replace_failure_rolls_back_all_months", test_migration_replace_failure_rolls_back_all_months),
+        ("test_migration_apply_busy_when_pipeline_locked", test_migration_apply_busy_when_pipeline_locked),
     ]
 
 
