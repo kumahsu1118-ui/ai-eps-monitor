@@ -933,6 +933,8 @@ def resolve_current_generation() -> Path | None:
     if not cur:
         return None
     g = Path(str(cur.get("generation") or ""))
+    if g and not g.is_absolute():
+        g = ROOT / g
     if g.is_dir():
         return g
     rid = cur.get("runId")
@@ -1254,11 +1256,49 @@ def commit_staged_run(
         if not (gen_dir / "web" / "data").exists() and WEB_DATA.exists():
             shutil.copytree(WEB_DATA, gen_dir / "web" / "data")
 
+        meta_path = gen_dir / "web" / "data" / "meta.json"
+        if meta_path.is_file():
+            try:
+                gweb_meta = json.loads(meta_path.read_text(encoding="utf-8")) or {}
+            except Exception:
+                gweb_meta = {}
+            if isinstance(gweb_meta, dict):
+                gweb_meta["generationRunId"] = rid
+                gweb_meta["schemaVersion"] = str(gweb_meta.get("schemaVersion") or SCHEMA_VERSION)
+                if not str(gweb_meta.get("lastSuccessfulCollection") or "").strip():
+                    gweb_meta["lastSuccessfulCollection"] = snap_utc
+                atomic_write_json(meta_path, gweb_meta)
+                dash_path = gen_dir / "web" / "data" / "dashboard.json"
+                if dash_path.is_file():
+                    try:
+                        dash = json.loads(dash_path.read_text(encoding="utf-8")) or {}
+                    except Exception:
+                        dash = None
+                    if isinstance(dash, dict):
+                        dm = dict(dash.get("meta") or {})
+                        for k in (
+                            "generationRunId",
+                            "schemaVersion",
+                            "lastSuccessfulCollection",
+                            "dataVersion",
+                            "refreshVersion",
+                            "buildId",
+                            "appVersion",
+                            "releaseVersion",
+                        ):
+                            if k in gweb_meta:
+                                dm[k] = gweb_meta[k]
+                        dash["meta"] = dm
+                        if gweb_meta.get("buildId"):
+                            dash["buildId"] = gweb_meta["buildId"]
+                        atomic_write_json(dash_path, dash)
+
         atomic_write_json(
             gen_dir / "generation_meta.json",
             {
                 "runId": rid,
                 "snapshot_utc": snap_utc,
+                "lastSuccessfulCollection": snap_utc,
                 "validatedName": validated_path.name,
                 "revisionEventsAppended": n_rev,
                 "schemaVersion": SCHEMA_VERSION,
@@ -1274,7 +1314,7 @@ def commit_staged_run(
         # Sole commit point: atomic CURRENT.json pointer
         current_payload = {
             "runId": rid,
-            "generation": str(gen_dir),
+            "generation": f"data/generations/{rid}",
             "validatedPath": str(validated_path),
             "validatedName": validated_path.name,
             "snapshot_utc": snap_utc,

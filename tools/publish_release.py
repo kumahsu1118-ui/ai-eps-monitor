@@ -11,6 +11,9 @@ Any required-step failure → non-zero exit, clear ERROR, no .data-version
 advance, no false NO_CHANGES / publish-success marker.
 
 Does not recompute financial history (ingest is the sole writer).
+Publish stamps (meta/dashboard sitePublished, canonicalHeadSha, markers,
+.data-version) are produced in a disposable staging tree first. Live files
+are copied back only after remote verification succeeds.
 """
 from __future__ import annotations
 
@@ -59,9 +62,39 @@ RELEASE_META_KEYS = (
     "schemaVersion",
     "lastSuccessfulCollection",
 )
+META_DASH_SYNC_KEYS = (
+    "sitePublished",
+    "sitePublishedDisplay",
+    "dataVersion",
+    "refreshVersion",
+    "buildId",
+    "lastSuccessfulCollection",
+    "lastSuccessfulCollectionDisplay",
+    "consensusDataAsOf",
+    "consensusDataAsOfDisplay",
+    "collectionStatus",
+    "collectionStatusLabel",
+    "alertEngineStatus",
+    "qualityGate",
+    "appVersion",
+    "releaseVersion",
+    "schemaVersion",
+    "generationRunId",
+    "canonicalHeadSha",
+)
+IDENTITY_MATCH_KEYS = (
+    "generationRunId",
+    "appVersion",
+    "dataVersion",
+    "refreshVersion",
+    "releaseVersion",
+    "schemaVersion",
+    "lastSuccessfulCollection",
+)
 GIT_AUTHOR_NAME = "AI EPS Monitor"
 GIT_AUTHOR_EMAIL = "kumahsu1118-ui@users.noreply.github.com"
 DEFAULT_RETRY_MAX = 3
+CANONICAL_HISTORY_REL = "data/history/eps_daily"
 
 
 class PublishError(RuntimeError):
@@ -96,6 +129,11 @@ def _err(msg: str) -> None:
     print(f"ERROR: {msg}", file=sys.stderr)
 
 
+def _allow_local() -> bool:
+    """Test-only local overlay. Formal publisher never uses this implicitly."""
+    return os.environ.get("PUBLISH_ALLOW_LOCAL") == "1"
+
+
 def _load_json_object(path: Path, *, label: str) -> dict:
     if not path.is_file():
         raise PublishError(f"{label} missing: {path}")
@@ -106,6 +144,10 @@ def _load_json_object(path: Path, *, label: str) -> dict:
     if not isinstance(obj, dict):
         raise PublishError(f"{label} corrupt / schema invalid: not a JSON object")
     return obj
+
+
+def _nonempty(value: Any) -> str:
+    return str(value or "").strip()
 
 
 def load_current_pointer_strict(root: Path) -> dict:
@@ -119,7 +161,7 @@ def load_current_pointer_strict(root: Path) -> dict:
         raise PublishError(f"CURRENT.json corrupt / schema invalid: {exc}") from exc
     if not isinstance(obj, dict):
         raise PublishError("CURRENT.json corrupt / schema invalid: not a JSON object")
-    run_id = str(obj.get("runId") or obj.get("run_id") or "").strip()
+    run_id = _nonempty(obj.get("runId") or obj.get("run_id"))
     if not run_id:
         raise PublishError("CURRENT.json missing generation ID (runId)")
     obj["runId"] = run_id
@@ -127,15 +169,37 @@ def load_current_pointer_strict(root: Path) -> dict:
 
 
 def resolve_generation_dir(root: Path, current: dict) -> Path:
-    raw = Path(str(current.get("generation") or ""))
-    if raw.is_dir():
-        return raw
-    gen = root / "data" / "generations" / str(current["runId"])
-    if gen.is_dir():
-        return gen
-    raise PublishError(
-        f"dangling CURRENT: generation missing for runId={current['runId']}"
-    )
+    """Generation path must resolve to <root>/data/generations/<runId> only."""
+    run_id = _nonempty(current.get("runId"))
+    if not run_id or run_id in {".", ".."} or "/" in run_id or "\\" in run_id:
+        raise PublishError(f"CURRENT runId is not a confined generation id: {run_id!r}")
+    gen_root = (root / "data" / "generations").resolve()
+    expected = (gen_root / run_id).resolve()
+    try:
+        expected.relative_to(gen_root)
+    except ValueError as exc:
+        raise PublishError(
+            f"generation path escapes expected root {gen_root}: {expected}"
+        ) from exc
+    raw = _nonempty(current.get("generation"))
+    if raw:
+        candidate = Path(raw)
+        if not candidate.is_absolute():
+            candidate = (root / candidate)
+        try:
+            candidate = candidate.resolve()
+        except OSError as exc:
+            raise PublishError(f"generation path unreadable: {raw}") from exc
+        if candidate != expected:
+            raise PublishError(
+                "generation path confined to data/generations/<runId> — "
+                f"got {candidate} expected {expected}"
+            )
+    if not expected.is_dir():
+        raise PublishError(
+            f"dangling CURRENT: generation missing for runId={run_id}"
+        )
+    return expected
 
 
 def _generation_missing_files(gen_dir: Path) -> list[str]:
@@ -156,10 +220,128 @@ def _quality_gate_ok(meta: dict) -> tuple[bool, str]:
     )
 
 
-def require_current_generation(root: Path) -> tuple[dict, Path, dict, dict]:
-    """Fail-closed CURRENT + generation package + quality gate.
+def _build_id_of(obj: dict) -> str:
+    return _nonempty(obj.get("buildId") or obj.get("_buildId"))
 
-    Returns (current, gen_dir, generation_meta, generation_web_meta).
+
+def validate_required_web_json(data_dir: Path, *, label: str) -> dict:
+    """Parse every REQUIRED_WEB_JSON file; type/schema/build-identity + meta/dashboard."""
+    loaded: dict[str, dict] = {}
+    for name in REQUIRED_WEB_JSON:
+        loaded[name] = _load_json_object(data_dir / name, label=f"{label} {name}")
+    meta = loaded["meta.json"]
+    qg = meta.get("qualityGate")
+    if not isinstance(qg, dict):
+        raise PublishError(f"{label} meta.json qualityGate missing or not an object")
+    for key in ("schemaVersion", "dataVersion", "refreshVersion", "lastSuccessfulCollection"):
+        if not _nonempty(meta.get(key)):
+            raise PublishError(f"{label} meta.json missing required field {key}")
+    run_id = _nonempty(meta.get("generationRunId") or meta.get("runId"))
+    if not run_id:
+        raise PublishError(f"{label} meta.json missing generationRunId")
+    meta_build = _nonempty(meta.get("buildId") or meta.get("dataVersion"))
+    dash = loaded["dashboard.json"]
+    dash_meta = dash.get("meta")
+    if not isinstance(dash_meta, dict):
+        raise PublishError(f"{label} dashboard.json.meta missing or not an object")
+    for key in (
+        "schemaVersion",
+        "dataVersion",
+        "refreshVersion",
+        "lastSuccessfulCollection",
+        "generationRunId",
+        "appVersion",
+        "releaseVersion",
+        "buildId",
+        "canonicalHeadSha",
+        "sitePublished",
+    ):
+        if key in meta and key in dash_meta:
+            if str(meta.get(key) or "") != str(dash_meta.get(key) or ""):
+                raise PublishError(
+                    f"{label} meta/dashboard consistency failed for {key}: "
+                    f"meta={meta.get(key)!r} dashboard.meta={dash_meta.get(key)!r}"
+                )
+    dash_run = _nonempty(dash_meta.get("generationRunId") or dash_meta.get("runId"))
+    if dash_run and dash_run != run_id:
+        raise PublishError(
+            f"{label} meta/dashboard generationRunId mismatch meta={run_id} dashboard={dash_run}"
+        )
+    if meta_build:
+        dash_build = _build_id_of(dash) or _build_id_of(dash_meta)
+        if dash_build and dash_build != meta_build:
+            raise PublishError(
+                f"{label} build-identity mismatch meta.buildId={meta_build} "
+                f"dashboard.buildId={dash_build}"
+            )
+        for name, obj in loaded.items():
+            file_build = _build_id_of(obj)
+            if file_build and file_build != meta_build:
+                raise PublishError(
+                    f"{label} {name} build-identity mismatch "
+                    f"file={file_build} meta={meta_build}"
+                )
+    return loaded
+
+
+def require_identity_consistency(current: dict, gmeta: dict, gen_web_meta: dict) -> str:
+    """CURRENT / generation_meta / generation web meta: runId+schemaVersion+timestamp."""
+    rid = _nonempty(current.get("runId"))
+    g_rid = _nonempty(gmeta.get("runId"))
+    w_rid = _nonempty(gen_web_meta.get("generationRunId") or gen_web_meta.get("runId"))
+    if not rid or not g_rid or not w_rid:
+        raise PublishError(
+            "missing runId: CURRENT/generation_meta/generation web meta must all present it"
+        )
+    if g_rid != rid or w_rid != rid:
+        raise PublishError(
+            f"inconsistent generationRunId CURRENT={rid} generation_meta={g_rid} "
+            f"generation web meta={w_rid}"
+        )
+    schemas = (
+        ("CURRENT", current.get("schemaVersion")),
+        ("generation_meta", gmeta.get("schemaVersion")),
+        ("generation web meta", gen_web_meta.get("schemaVersion")),
+    )
+    for label, raw in schemas:
+        val = _nonempty(raw)
+        if not val:
+            raise PublishError(f"missing schemaVersion in {label}")
+        if val != str(SCHEMA_VERSION):
+            raise PublishError(
+                f"inconsistent schemaVersion {label}={val} expected={SCHEMA_VERSION}"
+            )
+    ts_specs = (
+        ("CURRENT.snapshot_utc", current.get("snapshot_utc")),
+        (
+            "generation_meta collection timestamp",
+            gmeta.get("lastSuccessfulCollection") or gmeta.get("snapshot_utc"),
+        ),
+        (
+            "generation web meta lastSuccessfulCollection",
+            gen_web_meta.get("lastSuccessfulCollection"),
+        ),
+    )
+    parsed: list[datetime] = []
+    for label, raw in ts_specs:
+        if raw is None or (isinstance(raw, str) and not str(raw).strip()):
+            raise PublishError(f"missing collection timestamp: {label}")
+        parsed.append(parse_collection_timestamp(raw, label=label))
+    a, b, c = parsed
+    def _utc(dt: datetime) -> str:
+        return dt.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    if _utc(a) != _utc(b) or _utc(a) != _utc(c):
+        raise PublishError(
+            "inconsistent collection timestamp "
+            f"CURRENT={_utc(a)} generation_meta={_utc(b)} generation web meta={_utc(c)}"
+        )
+    return _utc(a)
+
+
+def require_current_generation(root: Path) -> tuple[dict, Path, dict, dict, str]:
+    """Fail-closed CURRENT + generation package + quality gate + identity.
+
+    Returns (current, gen_dir, generation_meta, generation_web_meta, collection_iso).
     """
     current = load_current_pointer_strict(root)
     gen_dir = resolve_generation_dir(root, current)
@@ -178,21 +360,15 @@ def require_current_generation(root: Path) -> tuple[dict, Path, dict, dict]:
         raise PublishError(
             f"generation aborted abortReason={gmeta.get('abortReason')} runId={current['runId']}"
         )
-    gen_meta = _load_json_object(gen_dir / "web" / "data" / "meta.json", label="generation web/data/meta.json")
+    validate_required_web_json(gen_dir / "web" / "data", label="generation")
+    gen_meta = _load_json_object(
+        gen_dir / "web" / "data" / "meta.json", label="generation web/data/meta.json"
+    )
     ok, reason = _quality_gate_ok(gen_meta)
     if not ok:
         raise PublishError(f"generation failed quality gate: {reason}")
-    schema = str(gen_meta.get("schemaVersion") or gmeta.get("schemaVersion") or "")
-    if schema and schema != str(SCHEMA_VERSION):
-        raise PublishError(
-            f"inconsistent schemaVersion generation={schema} expected={SCHEMA_VERSION}"
-        )
-    gen_run = str(gmeta.get("runId") or "").strip()
-    if gen_run and gen_run != current["runId"]:
-        raise PublishError(
-            f"inconsistent generationRunId CURRENT={current['runId']} generation_meta={gen_run}"
-        )
-    return current, gen_dir, gmeta, gen_meta
+    collection_iso = require_identity_consistency(current, gmeta, gen_meta)
+    return current, gen_dir, gmeta, gen_meta, collection_iso
 
 
 def rematerialize_current(root: Path, current: dict, gen_dir: Path) -> None:
@@ -216,6 +392,7 @@ def rematerialize_current(root: Path, current: dict, gen_dir: Path) -> None:
     ok, reason = _quality_gate_ok(live_meta)
     if not ok:
         raise PublishError(f"live meta failed quality gate: {reason}")
+    validate_required_web_json(root / "web" / "data", label="live")
     gen_meta = _load_json_object(
         gen_dir / "web" / "data" / "meta.json", label="generation web/data/meta.json"
     )
@@ -266,7 +443,6 @@ def compare_pending_vs_remote_timestamp(
     if not remote_present:
         return
     if remote_raw is None or (isinstance(remote_raw, str) and not str(remote_raw).strip()):
-        # Remote payload exists but timestamp is absent — cannot compare safely.
         raise PublishError("malformed timestamp: remote lastSuccessfulCollection is missing")
     remote_dt = parse_collection_timestamp(remote_raw, label="remote lastSuccessfulCollection")
     if pending < remote_dt:
@@ -278,9 +454,9 @@ def compare_pending_vs_remote_timestamp(
         )
 
 
-def compute_payload_hash(root: Path) -> str:
+def compute_payload_hash(web_root: Path) -> str:
     """Content hash: full static tree + dataVersion + refreshVersion (not sitePublished)."""
-    web = root / "web"
+    web = Path(web_root)
     h = hashlib.sha256()
 
     def feed_bytes(b: bytes) -> None:
@@ -311,16 +487,21 @@ def _stamp_site_published(meta: dict) -> dict:
 
 
 def stamp_release_metadata(
-    root: Path,
+    tree_root: Path,
     *,
     generation_run_id: str,
     canonical_head_sha: str,
     collection_iso: str,
     payload_hash: str,
     stamp_published: bool,
+    write_marker: bool = False,
 ) -> dict:
-    """Write traceable release fields into meta.json and dashboard.json.meta."""
-    web = root / "web"
+    """Write traceable release fields into a tree's meta.json and dashboard.json.meta.
+
+    Default does not write live ``data/.last-publish-web`` (that marker is applied
+    only after remote verification, from the staging tree).
+    """
+    web = tree_root / "web"
     meta_path = web / "data" / "meta.json"
     meta = _load_json_object(meta_path, label="web/data/meta.json")
     meta["generationRunId"] = generation_run_id
@@ -337,34 +518,17 @@ def stamp_release_metadata(
     if dash_path.is_file():
         dash = _load_json_object(dash_path, label="web/data/dashboard.json")
         dash_meta = dict(dash.get("meta") or {})
-        for k in (
-            "sitePublished",
-            "sitePublishedDisplay",
-            "dataVersion",
-            "refreshVersion",
-            "buildId",
-            "lastSuccessfulCollection",
-            "lastSuccessfulCollectionDisplay",
-            "consensusDataAsOf",
-            "consensusDataAsOfDisplay",
-            "collectionStatus",
-            "collectionStatusLabel",
-            "alertEngineStatus",
-            "qualityGate",
-            "appVersion",
-            "releaseVersion",
-            "schemaVersion",
-            "generationRunId",
-            "canonicalHeadSha",
-        ):
+        for k in META_DASH_SYNC_KEYS:
             if k in meta:
                 dash_meta[k] = meta[k]
         dash["meta"] = dash_meta
         if meta.get("buildId"):
             dash["buildId"] = meta["buildId"]
         atomic_write_json(dash_path, dash)
-    marker = root / "data" / ".last-publish-web"
-    atomic_write_text(marker, str((root / "web").resolve()) + "\n")
+    if write_marker:
+        marker = tree_root / "data" / ".last-publish-web"
+        marker.parent.mkdir(parents=True, exist_ok=True)
+        atomic_write_text(marker, str((tree_root / "web").resolve()) + "\n")
     return meta
 
 
@@ -376,20 +540,13 @@ def expected_release_identity(meta: dict, current: dict, collection_iso: str) ->
         "dataVersion": str(meta.get("dataVersion") or ""),
         "refreshVersion": str(meta.get("refreshVersion") or ""),
         "releaseVersion": str(meta.get("releaseVersion") or ""),
-        "schemaVersion": str(meta.get("schemaVersion") or SCHEMA_VERSION),
+        "schemaVersion": str(meta.get("schemaVersion") or ""),
         "lastSuccessfulCollection": str(meta.get("lastSuccessfulCollection") or collection_iso),
     }
 
 
 def _identity_matches(remote_meta: dict, expected: dict, *, require_canonical: bool) -> bool:
-    for key in (
-        "generationRunId",
-        "appVersion",
-        "dataVersion",
-        "refreshVersion",
-        "releaseVersion",
-        "lastSuccessfulCollection",
-    ):
+    for key in IDENTITY_MATCH_KEYS:
         if str(remote_meta.get(key) or "") != str(expected.get(key) or ""):
             return False
     if require_canonical:
@@ -496,6 +653,15 @@ def _is_git_repo(path: Path) -> bool:
     return proc.returncode == 0 and (proc.stdout or "").strip() == "true"
 
 
+def _has_origin_remote(git_base: Path) -> bool:
+    proc = _git(git_base, ["remote", "get-url", "origin"])
+    if proc.returncode == 0 and _nonempty(proc.stdout):
+        return True
+    if _nonempty(os.environ.get("PUBLISH_REMOTE")):
+        return True
+    return False
+
+
 def resolve_git_base(root: Path, site: Path) -> Path | None:
     """Git directory used for fetch/worktree. Prefer source clone, else site-repo."""
     if _is_git_repo(root):
@@ -536,12 +702,16 @@ def origin_head_sha(git_base: Path) -> str:
     return sha
 
 
-def show_origin_file(git_base: Path, relpath: str) -> str | None:
-    branch = _publish_branch()
-    proc = _git(git_base, ["show", f"origin/{branch}:{relpath}"])
+def show_commit_file(git_base: Path, sha: str, relpath: str) -> str | None:
+    proc = _git(git_base, ["show", f"{sha}:{relpath}"])
     if proc.returncode != 0:
         return None
     return proc.stdout or ""
+
+
+def show_origin_file(git_base: Path, relpath: str) -> str | None:
+    branch = _publish_branch()
+    return show_commit_file(git_base, f"origin/{branch}", relpath)
 
 
 def remote_published_meta(git_base: Path) -> tuple[dict | None, str | None]:
@@ -557,6 +727,103 @@ def remote_published_meta(git_base: Path) -> tuple[dict | None, str | None]:
     if not isinstance(obj, dict):
         raise PublishError("remote data/meta.json is not a JSON object")
     return obj, version
+
+
+def generation_canonical_months(gen_dir: Path) -> dict[str, str]:
+    d = gen_dir / "history" / "eps_daily"
+    if not d.is_dir():
+        return {}
+    out: dict[str, str] = {}
+    for p in sorted(d.glob("*.jsonl")):
+        if p.is_file():
+            out[p.name] = p.read_text(encoding="utf-8")
+    return out
+
+
+def prove_canonical_head_sha(git_base: Path, gen_dir: Path) -> str:
+    """canonicalHeadSha is a commit that already contains CURRENT canonical history.
+
+    Latest origin/main is used only after that proof. Missing observations → fail closed.
+    """
+    sha = origin_head_sha(git_base)
+    months = generation_canonical_months(gen_dir)
+    for name, content in months.items():
+        rel = f"{CANONICAL_HISTORY_REL}/{name}"
+        remote = show_commit_file(git_base, sha, rel)
+        if remote is None:
+            raise PublishError(
+                f"remote does not contain CURRENT canonical observations {rel} "
+                f"at {sha} — refusing publish"
+            )
+        for line in content.splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            if line not in remote:
+                raise PublishError(
+                    f"remote missing CURRENT canonical observation in {rel} "
+                    f"at {sha} — refusing publish"
+                )
+    return sha
+
+
+def read_canonical_git_state(root: Path) -> dict:
+    path = root / "data" / "canonical_git_state.json"
+    if not path.is_file():
+        return {"status": "clean", "lastAttempt": None, "lastSuccessful": None, "error": None}
+    try:
+        obj = json.loads(path.read_text(encoding="utf-8"))
+        return obj if isinstance(obj, dict) else {}
+    except Exception as exc:
+        raise PublishError(f"canonical_git_state.json corrupt: {exc}") from exc
+
+
+def require_canonical_git_ready(root: Path, git_base: Path | None, gen_dir: Path) -> str:
+    """Refuse pending/failed canonical git, unpushed commits, dirty tree, missing remote obs."""
+    state = read_canonical_git_state(root)
+    status = str(state.get("status") or "").strip().lower()
+    if status in {"pending", "failed"}:
+        raise PublishError(
+            f"canonical git state {status} — refusing publish until source-git persist succeeds"
+        )
+    if git_base is None:
+        return ""
+    branch = _publish_branch()
+    porcelain = _git(git_base, ["status", "--porcelain", "--", CANONICAL_HISTORY_REL])
+    porc = porcelain.stdout or ""
+    if _nonempty(porc):
+        untracked = any(ln.startswith("??") or ln.startswith("A ") for ln in porc.splitlines())
+        diff_origin = _git(
+            git_base, ["diff", f"origin/{branch}", "--", CANONICAL_HISTORY_REL]
+        )
+        # Lagged clone whose working tree already matches origin/main is safe.
+        # Untracked files or a diff vs origin/main are not.
+        if untracked or _nonempty(diff_origin.stdout):
+            raise PublishError(
+                "canonical working-tree has a diff under data/history/eps_daily — refusing publish"
+            )
+    ahead = _git(git_base, ["rev-list", "--count", f"origin/{branch}..HEAD"])
+    try:
+        n_ahead = int((ahead.stdout or "0").strip() or 0) if ahead.returncode == 0 else 0
+    except ValueError:
+        n_ahead = 1
+    if n_ahead > 0:
+        names = _git(
+            git_base,
+            [
+                "log",
+                "--name-only",
+                "--pretty=format:",
+                f"origin/{branch}..HEAD",
+                "--",
+                CANONICAL_HISTORY_REL,
+            ],
+        )
+        if names.returncode == 0 and _nonempty(names.stdout):
+            raise PublishError(
+                "unpushed canonical commit under data/history/eps_daily — refusing publish"
+            )
+    return prove_canonical_head_sha(git_base, gen_dir)
 
 
 def _cleanup_worktree(git_base: Path, wt: Path) -> None:
@@ -598,8 +865,6 @@ def commit_and_push_worktree(
     _git(wt, ["add", "-A"], check=True)
     cached = _git(wt, ["diff", "--cached", "--quiet"])
     if cached.returncode == 0:
-        # Legitimate only when origin already has this exact release. Never
-        # misclassify a failed commit as "nothing to commit".
         fetch_origin(git_base)
         remote_meta, remote_ver = remote_published_meta(git_base)
         if remote_meta is None or (remote_ver or "").strip() != payload_hash:
@@ -651,7 +916,6 @@ def commit_and_push_worktree(
         )
         err.non_fast_forward = _is_non_fast_forward(push.stderr or "", push.stdout or "") or remote_moved  # type: ignore[attr-defined]
         raise err
-    # Target commit must be on the remote before we report success.
     if os.environ.get("FAULT_INJECT_REMOTE_VERIFY_MISS") == "1":
         raise PublishError(
             f"remote verification failed: target commit {new_sha} not found on remote "
@@ -675,6 +939,7 @@ def commit_and_push_worktree(
             f"expected={ {k: expected.get(k) for k in RELEASE_META_KEYS} } "
             f"remote generationRunId={remote_meta.get('generationRunId')} "
             f"canonicalHeadSha={remote_meta.get('canonicalHeadSha')} "
+            f"schemaVersion={remote_meta.get('schemaVersion')} "
             f"releaseVersion={str(remote_meta.get('releaseVersion') or '')[:16]}"
         )
     if (remote_ver or "").strip() != payload_hash:
@@ -685,11 +950,84 @@ def commit_and_push_worktree(
     return new_sha
 
 
+def _copy_staged_web_to_live(staging: Path, live_root: Path) -> None:
+    """Apply verified staging stamps onto live web/data + marker. Not used on failure."""
+    src_data = staging / "web" / "data"
+    dst_data = live_root / "web" / "data"
+    dst_data.mkdir(parents=True, exist_ok=True)
+    if src_data.is_dir():
+        for src in src_data.rglob("*"):
+            if src.is_file():
+                target = dst_data / src.relative_to(src_data)
+                target.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(src, target)
+    for name in ("index.html", "app.js", "styles.css"):
+        src = staging / "web" / name
+        if src.is_file():
+            shutil.copy2(src, live_root / "web" / name)
+    marker_src = staging / "data" / ".last-publish-web"
+    live_root_data = live_root / "data"
+    live_root_data.mkdir(parents=True, exist_ok=True)
+    atomic_write_text(
+        live_root_data / ".last-publish-web",
+        str((live_root / "web").resolve()) + "\n",
+    )
+    if marker_src.is_file():
+        pass
+
+
+def make_staging_tree(root: Path) -> Path:
+    staging = Path(tempfile.mkdtemp(prefix="ai-eps-publish-stage-"))
+    shutil.copytree(root / "web", staging / "web", dirs_exist_ok=True)
+    (staging / "data").mkdir(parents=True, exist_ok=True)
+    return staging
+
+
+def prepare_staging_release(
+    staging: Path,
+    *,
+    generation_run_id: str,
+    canonical_head_sha: str,
+    collection_iso: str,
+    stamp_published: bool,
+) -> tuple[dict, str, dict]:
+    """Finalize identity + stamp on staging only. Returns (meta, payload_hash, expected)."""
+    try:
+        ing.finalize_release_identity(staging / "web")
+    except Exception as exc:
+        raise PublishError(f"release identity finalization failed: {exc}") from exc
+    meta = stamp_release_metadata(
+        staging,
+        generation_run_id=generation_run_id,
+        canonical_head_sha=canonical_head_sha,
+        collection_iso=collection_iso,
+        payload_hash="",
+        stamp_published=stamp_published,
+        write_marker=False,
+    )
+    try:
+        ing.finalize_release_identity(staging / "web")
+    except Exception as exc:
+        raise PublishError(f"release identity finalization failed: {exc}") from exc
+    meta = _load_json_object(staging / "web" / "data" / "meta.json", label="staging web/data/meta.json")
+    validate_required_web_json(staging / "web" / "data", label="staging")
+    payload_hash = compute_payload_hash(staging / "web")
+    expected = expected_release_identity(meta, {"runId": generation_run_id}, collection_iso)
+    expected["canonicalHeadSha"] = canonical_head_sha
+    if not _nonempty(expected.get("schemaVersion")):
+        raise PublishError("staging meta.json missing schemaVersion after finalize")
+    return meta, payload_hash, expected
+
+
 def publish_via_worktree(
     root: Path,
     git_base: Path,
     site: Path,
+    staging: Path,
     *,
+    gen_dir: Path,
+    generation_run_id: str,
+    collection_iso: str,
     payload_hash: str,
     expected: dict,
 ) -> str:
@@ -698,25 +1036,26 @@ def publish_via_worktree(
     last_err: Exception | None = None
     for attempt in range(1, max_attempts + 1):
         fetch_origin(git_base)
-        base_sha = origin_head_sha(git_base)
+        base_sha = prove_canonical_head_sha(git_base, gen_dir)
         expected = dict(expected)
         expected["canonicalHeadSha"] = base_sha
-        # Re-stamp canonicalHeadSha onto live meta for this attempt, then overlay.
         stamp_release_metadata(
-            root,
-            generation_run_id=str(expected["generationRunId"]),
+            staging,
+            generation_run_id=generation_run_id,
             canonical_head_sha=base_sha,
-            collection_iso=str(expected["lastSuccessfulCollection"]),
+            collection_iso=collection_iso,
             payload_hash=payload_hash,
             stamp_published=True,
+            write_marker=False,
         )
-        # Re-read meta after stamp so remote verification uses exact committed fields.
-        live_meta = _load_json_object(root / "web" / "data" / "meta.json", label="web/data/meta.json")
+        live_meta = _load_json_object(
+            staging / "web" / "data" / "meta.json", label="staging web/data/meta.json"
+        )
         expected = expected_release_identity(
-            live_meta, {"runId": expected["generationRunId"]}, expected["lastSuccessfulCollection"]
+            live_meta, {"runId": generation_run_id}, collection_iso
         )
         expected["canonicalHeadSha"] = base_sha
-        # Stale-data check against the just-fetched remote.
+        validate_required_web_json(staging / "web" / "data", label="staging")
         remote_meta, _remote_ver = remote_published_meta(git_base)
         pending = parse_collection_timestamp(
             expected["lastSuccessfulCollection"], label="pending lastSuccessfulCollection"
@@ -728,7 +1067,6 @@ def publish_via_worktree(
                 remote_present=True,
             )
         wt = Path(tempfile.mkdtemp(prefix="ai-eps-publish-wt-"))
-        # git worktree add refuses a pre-existing non-empty directory.
         shutil.rmtree(wt, ignore_errors=True)
         add = _git(git_base, ["worktree", "add", "--detach", str(wt), base_sha])
         if add.returncode != 0:
@@ -738,7 +1076,7 @@ def publish_via_worktree(
             )
             continue
         try:
-            overlay_public_tree(root / "web", wt)
+            overlay_public_tree(staging / "web", wt)
             atomic_write_text(wt / ".data-version", payload_hash + "\n")
             sha = commit_and_push_worktree(
                 git_base,
@@ -747,9 +1085,9 @@ def publish_via_worktree(
                 expected=expected,
                 base_sha=base_sha,
             )
-            # Success: mirror published tree into site-repo for local inspection.
-            overlay_public_tree(root / "web", site)
+            overlay_public_tree(staging / "web", site)
             atomic_write_text(site / ".data-version", payload_hash + "\n")
+            _copy_staged_web_to_live(staging, root)
             print(f"PUSHED hash={payload_hash[:12]} commit={sha[:12]} attempt={attempt}")
             return sha
         except PublishError as exc:
@@ -777,11 +1115,12 @@ def publish_via_worktree(
     )
 
 
-def publish_local(root: Path, site: Path, *, payload_hash: str) -> None:
-    """Fixture / review path: no git remote. Still fail-closed on CURRENT."""
-    overlay_public_tree(root / "web", site)
+def publish_local(staging: Path, root: Path, site: Path, *, payload_hash: str) -> None:
+    """Test-only local overlay. Formal publisher never takes this path implicitly."""
+    overlay_public_tree(staging / "web", site)
     atomic_write_text(site / ".data-version", payload_hash + "\n")
-    print(f"PUBLISH_LOCAL hash={payload_hash[:12]} (no .git — skipped push)")
+    _copy_staged_web_to_live(staging, root)
+    print(f"PUBLISH_LOCAL hash={payload_hash[:12]} (PUBLISH_ALLOW_LOCAL=1)")
 
 
 def remote_is_same_release(
@@ -795,23 +1134,25 @@ def remote_is_same_release(
         return False
     if (remote_ver or "").strip() != payload_hash:
         return False
-    # Idempotent NO_CHANGES does not require canonicalHeadSha to equal the
-    # current origin/main (that SHA is the previous publish commit).
     return _identity_matches(remote_meta, expected, require_canonical=False)
 
 
 def preflight(root: Path) -> int:
-    """Validate CURRENT + generation without copying, committing, or pushing."""
+    """Read-only CURRENT + generation + canonical git checks. No materialize, no live writes."""
     ing.rebind_paths(root)
-    current, gen_dir, _gmeta, gen_web_meta = require_current_generation(root)
-    rematerialize_current(root, current, gen_dir)
-    live_meta = _load_json_object(root / "web" / "data" / "meta.json", label="web/data/meta.json")
-    pending_collection_timestamp(current, gen_web_meta, live_meta)
+    current, gen_dir, _gmeta, gen_web_meta, _iso = require_current_generation(root)
+    pending_collection_timestamp(current, gen_web_meta, gen_web_meta)
     site = _site_repo(root)
     git_base = resolve_git_base(root, site)
-    if git_base is not None:
+    if git_base is not None and _has_origin_remote(git_base):
         fetch_origin(git_base)
         origin_head_sha(git_base)
+        require_canonical_git_ready(root, git_base, gen_dir)
+    elif git_base is None and not _allow_local():
+        raise PublishError(
+            "no Git repository/remote — formal publisher refuses "
+            "(PUBLISH_ALLOW_LOCAL is test-only)"
+        )
     print("PREFLIGHT_OK")
     return 0
 
@@ -822,72 +1163,67 @@ def publish(root: Path) -> int:
         raise PublishError("ALLOW_PUBLISH_EXPORT is banned — publish must not recompute")
     print("publish-only: no export / no history mutation (ingest_snapshot.py is sole writer)")
 
-    current, gen_dir, _gmeta, gen_web_meta = require_current_generation(root)
+    current, gen_dir, _gmeta, gen_web_meta, collection_iso = require_current_generation(root)
     rematerialize_current(root, current, gen_dir)
 
     web = root / "web"
-    try:
-        ing.finalize_release_identity(web)
-    except Exception as exc:
-        raise PublishError(f"release identity finalization failed: {exc}") from exc
-
     live_meta = _load_json_object(web / "data" / "meta.json", label="web/data/meta.json")
     ok, reason = _quality_gate_ok(live_meta)
     if not ok:
         raise PublishError(f"{reason} — abort publish (no git push)")
     print(f"qualityGate OK status={(live_meta.get('qualityGate') or {}).get('status')} publishable=true")
 
-    collection_iso = collection_timestamp_iso(current, gen_web_meta, live_meta)
-    stamp_release_metadata(
-        root,
-        generation_run_id=current["runId"],
-        canonical_head_sha="",
-        collection_iso=collection_iso,
-        payload_hash="",
-        stamp_published=False,
-    )
-    try:
-        ing.finalize_release_identity(web)
-    except Exception as exc:
-        raise PublishError(f"release identity finalization failed: {exc}") from exc
-    live_meta = _load_json_object(web / "data" / "meta.json", label="web/data/meta.json")
-    payload_hash = compute_payload_hash(root)
-    expected = expected_release_identity(live_meta, current, collection_iso)
-
     site = _site_repo(root)
     git_base = resolve_git_base(root, site)
+    has_remote = git_base is not None and _has_origin_remote(git_base)
 
-    if git_base is None:
-        # Local fixture path. Compare timestamps against site-repo if present.
-        site_meta_path = site / "data" / "meta.json"
-        if site_meta_path.is_file():
-            site_meta = _load_json_object(site_meta_path, label="site-repo data/meta.json")
-            compare_pending_vs_remote_timestamp(
-                parse_collection_timestamp(collection_iso, label="pending lastSuccessfulCollection"),
-                site_meta.get("lastSuccessfulCollection"),
-                remote_present=True,
+    if git_base is None or not has_remote:
+        if not _allow_local():
+            raise PublishError(
+                "no Git repository/remote — formal publisher refuses "
+                "(PUBLISH_ALLOW_LOCAL is test-only)"
             )
-        prev = ""
-        version_file = site / ".data-version"
-        if version_file.is_file():
-            prev = version_file.read_text(encoding="utf-8").strip()
-        if prev and prev == payload_hash:
-            # Local idempotency only when CURRENT still verifies (already done).
-            print("NO_CHANGES")
+        staging = make_staging_tree(root)
+        try:
+            _meta, payload_hash, expected = prepare_staging_release(
+                staging,
+                generation_run_id=current["runId"],
+                canonical_head_sha="local",
+                collection_iso=collection_iso,
+                stamp_published=False,
+            )
+            site_meta_path = site / "data" / "meta.json"
+            if site_meta_path.is_file():
+                site_meta = _load_json_object(site_meta_path, label="site-repo data/meta.json")
+                compare_pending_vs_remote_timestamp(
+                    parse_collection_timestamp(collection_iso, label="pending lastSuccessfulCollection"),
+                    site_meta.get("lastSuccessfulCollection"),
+                    remote_present=True,
+                )
+            prev = ""
+            version_file = site / ".data-version"
+            if version_file.is_file():
+                prev = version_file.read_text(encoding="utf-8").strip()
+            if prev and prev == payload_hash:
+                print("NO_CHANGES")
+                return 0
+            stamp_release_metadata(
+                staging,
+                generation_run_id=current["runId"],
+                canonical_head_sha="local",
+                collection_iso=collection_iso,
+                payload_hash=payload_hash,
+                stamp_published=True,
+                write_marker=False,
+            )
+            print("stamped sitePublished (meta.json + dashboard.json.meta synced)")
+            publish_local(staging, root, site, payload_hash=payload_hash)
             return 0
-        stamp_release_metadata(
-            root,
-            generation_run_id=current["runId"],
-            canonical_head_sha="local",
-            collection_iso=collection_iso,
-            payload_hash=payload_hash,
-            stamp_published=True,
-        )
-        print("stamped sitePublished (meta.json + dashboard.json.meta synced)")
-        publish_local(root, site, payload_hash=payload_hash)
-        return 0
+        finally:
+            shutil.rmtree(staging, ignore_errors=True)
 
     fetch_origin(git_base)
+    require_canonical_git_ready(root, git_base, gen_dir)
     remote_meta, _remote_ver = remote_published_meta(git_base)
     pending_dt = parse_collection_timestamp(
         collection_iso, label="pending lastSuccessfulCollection"
@@ -898,18 +1234,34 @@ def publish(root: Path) -> int:
             remote_meta.get("lastSuccessfulCollection"),
             remote_present=True,
         )
-    if remote_is_same_release(git_base, payload_hash=payload_hash, expected=expected):
-        print("NO_CHANGES")
-        return 0
 
-    publish_via_worktree(
-        root,
-        git_base,
-        site,
-        payload_hash=payload_hash,
-        expected=expected,
-    )
-    return 0
+    proven_sha = prove_canonical_head_sha(git_base, gen_dir)
+    staging = make_staging_tree(root)
+    try:
+        _meta, payload_hash, expected = prepare_staging_release(
+            staging,
+            generation_run_id=current["runId"],
+            canonical_head_sha=proven_sha,
+            collection_iso=collection_iso,
+            stamp_published=False,
+        )
+        if remote_is_same_release(git_base, payload_hash=payload_hash, expected=expected):
+            print("NO_CHANGES")
+            return 0
+        publish_via_worktree(
+            root,
+            git_base,
+            site,
+            staging,
+            gen_dir=gen_dir,
+            generation_run_id=current["runId"],
+            collection_iso=collection_iso,
+            payload_hash=payload_hash,
+            expected=expected,
+        )
+        return 0
+    finally:
+        shutil.rmtree(staging, ignore_errors=True)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -917,7 +1269,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--preflight",
         action="store_true",
-        help="Validate CURRENT + remote fetch without commit/push",
+        help="Validate CURRENT + remote fetch without commit/push/materialize",
     )
     args = parser.parse_args(argv)
     root = _root()
