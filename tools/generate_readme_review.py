@@ -18,9 +18,10 @@ def main() -> int:
     if mp.exists():
         meta = json.loads(mp.read_text(encoding="utf-8"))
 
-    test_results = ROOT / "TEST_RESULTS_COMMIT_SEMANTICS.md"
+    test_results = ROOT / "TEST_RESULTS_CANONICAL_HISTORY.md"
     for cand in (
         test_results,
+        ROOT / "TEST_RESULTS_COMMIT_SEMANTICS.md",
         ROOT / "TEST_RESULTS_IDENTITY_DEPLOY_CRASH.md",
         ROOT / "TEST_RESULTS_INGESTION_INTEGRITY.md",
     ):
