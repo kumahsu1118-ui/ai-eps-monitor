@@ -6,6 +6,8 @@ Fixed flow:
   → STAGE under data/staging/<runId>/ (runStatus=staged)
   → revision/daily/alerts/web build
   → atomic COMMIT to validated persistent history (runStatus=committed)
+    including canonical data/history/eps_daily month files in the generation
+  → (optional) source-git persist of canonical history (no CURRENT rollback on push fail)
   → (optional) publish_prebuilt_site (no second export)
 
 On export failure → ABORT (runStatus=aborted): must NOT become LKG;
@@ -33,6 +35,7 @@ if str(_here) not in sys.path:
     sys.path.insert(0, str(_here))
 
 from atomic_io import append_jsonl_atomic, atomic_write_json  # noqa: E402
+import canonical_eps_history as ceh  # noqa: E402
 import snapshot_quality as sq  # noqa: E402
 
 INCOMING_DIR = ROOT / "data" / "incoming"
@@ -42,18 +45,20 @@ STAGING_DIR = ROOT / "data" / "staging"
 GENERATIONS_DIR = ROOT / "data" / "generations"
 CURRENT_POINTER = ROOT / "data" / "CURRENT.json"
 DAILY_DIR = ROOT / "data" / "daily_eps_snapshots"
+HISTORY_DIR = ROOT / "data" / "history" / "eps_daily"
 ALERTS_PATH = ROOT / "data" / "alerts" / "index.json"
 COMPARISON_CHECKPOINT_PATH = ROOT / "data" / "comparison_checkpoint.json"
 WEB_DATA = ROOT / "web" / "data"
 REV_PATH = ROOT / "data" / "revisions" / "history.jsonl"
 UNIVERSE_PATH = ROOT / "data" / "universe.json"
+CANONICAL_GIT_STATE_NAME = "canonical_git_state.json"
 
 
 
 def rebind_paths(root: Path) -> None:
     """Point module-level paths at an alternate project root (acceptance fixtures)."""
     global ROOT, INCOMING_DIR, SNAP_DIR, QUARANTINE_DIR, STAGING_DIR
-    global GENERATIONS_DIR, CURRENT_POINTER, DAILY_DIR, ALERTS_PATH
+    global GENERATIONS_DIR, CURRENT_POINTER, DAILY_DIR, HISTORY_DIR, ALERTS_PATH
     global COMPARISON_CHECKPOINT_PATH, WEB_DATA, REV_PATH, UNIVERSE_PATH, _here
     ROOT = Path(root)
     _here = ROOT / "tools"
@@ -64,6 +69,7 @@ def rebind_paths(root: Path) -> None:
     GENERATIONS_DIR = ROOT / "data" / "generations"
     CURRENT_POINTER = ROOT / "data" / "CURRENT.json"
     DAILY_DIR = ROOT / "data" / "daily_eps_snapshots"
+    HISTORY_DIR = ROOT / "data" / "history" / "eps_daily"
     ALERTS_PATH = ROOT / "data" / "alerts" / "index.json"
     COMPARISON_CHECKPOINT_PATH = ROOT / "data" / "comparison_checkpoint.json"
     WEB_DATA = ROOT / "web" / "data"
@@ -742,6 +748,176 @@ def write_publish_state(state: dict) -> None:
     atomic_write_json(publish_state_path(), state)
 
 
+def canonical_git_state_path() -> Path:
+    return ROOT / "data" / CANONICAL_GIT_STATE_NAME
+
+
+def read_canonical_git_state() -> dict:
+    path = canonical_git_state_path()
+    if not path.exists():
+        return {"status": "clean", "lastAttempt": None, "lastSuccessful": None, "error": None}
+    try:
+        obj = json.loads(path.read_text(encoding="utf-8"))
+        return obj if isinstance(obj, dict) else {}
+    except Exception:
+        return {}
+
+
+def write_canonical_git_state(state: dict) -> None:
+    atomic_write_json(canonical_git_state_path(), state)
+
+
+def _canonical_git(args: list[str]) -> subprocess.CompletedProcess:
+    return subprocess.run(
+        ["git", *args],
+        cwd=str(ROOT),
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+
+def _canonical_git_unpushed() -> tuple[bool, str]:
+    """Whether HEAD has commits not known to be on the remote.
+
+    Nothing staged ≠ remote is durable. No upstream with a remote configured
+    is treated as unpushed so retry still calls ``git push``.
+    """
+    rem = _canonical_git(["remote"])
+    remotes = [r.strip() for r in (rem.stdout or "").splitlines() if r.strip()]
+    up = _canonical_git(["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"])
+    upstream = (up.stdout or "").strip() if up.returncode == 0 else ""
+    if not upstream:
+        if not remotes:
+            return False, "no_remote"
+        return True, "no_upstream"
+    cnt = _canonical_git(["rev-list", "--count", f"{upstream}..HEAD"])
+    if cnt.returncode != 0:
+        return True, "rev_list_failed"
+    try:
+        n = int((cnt.stdout or "0").strip() or 0)
+    except ValueError:
+        return True, "rev_list_unparseable"
+    return n > 0, f"ahead={n}"
+
+
+def _canonical_git_push() -> subprocess.CompletedProcess:
+    """Push HEAD. If no upstream, ``git push -u origin HEAD``."""
+    pushed = _canonical_git(["push"])
+    if pushed.returncode == 0:
+        return pushed
+    tracked = _canonical_git(["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"])
+    if tracked.returncode != 0:
+        return _canonical_git(["push", "-u", "origin", "HEAD"])
+    return pushed
+
+
+def persist_canonical_history_to_source_git(*, push: bool = True) -> dict:
+    """Commit/push data/history/eps_daily/ only. Never rolls back financial COMMIT.
+
+    Source-repo git persist is separate from Pages publish (site-repo public assets).
+    Failure → status pending/failed for retry; observation already in canonical files.
+
+    A local commit with a failed push leaves state=pending. Retry MUST push that
+    unpushed commit even when the working tree is clean — do not treat
+    ``git diff --cached --quiet`` as "remote is durable".
+    """
+    now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    state = read_canonical_git_state()
+    prior_status = str(state.get("status") or "")
+    state["lastAttempt"] = now
+    if os.environ.get("SKIP_CANONICAL_GIT_PERSIST") == "1":
+        return {"status": "skipped", "lastAttempt": now}
+    git_dir = ROOT / ".git"
+    if not git_dir.exists():
+        state["status"] = "skipped"
+        state["error"] = "not_a_git_repo"
+        write_canonical_git_state(state)
+        return state
+    HISTORY_DIR.mkdir(parents=True, exist_ok=True)
+    rel = "data/history/eps_daily"
+    try:
+        add = _canonical_git(["add", "--", rel])
+        if add.returncode != 0:
+            raise RuntimeError(add.stderr or add.stdout or f"git add rc={add.returncode}")
+        diff = _canonical_git(["diff", "--cached", "--quiet", "--", rel])
+        staged_changes = diff.returncode != 0
+        if staged_changes:
+            msg = f"canonical eps history {now}"
+            commit = _canonical_git(
+                [
+                    "-c",
+                    "user.email=kumahsu1118-ui@users.noreply.github.com",
+                    "-c",
+                    "user.name=AI EPS Monitor",
+                    "-c",
+                    "commit.gpgsign=false",
+                    "commit",
+                    "-m",
+                    msg,
+                    "--",
+                    rel,
+                ]
+            )
+            if commit.returncode != 0:
+                raise RuntimeError(commit.stderr or commit.stdout or f"git commit rc={commit.returncode}")
+
+        do_push = bool(push) and os.environ.get("SKIP_CANONICAL_GIT_PUSH") != "1"
+        unpushed, ahead_reason = _canonical_git_unpushed()
+        # Pending/failed retry or a fresh local commit must still push.
+        must_push = do_push and (
+            unpushed or prior_status in {"pending", "failed"} or staged_changes
+        )
+        if not must_push:
+            # In sync with remote (or push disabled). Never treat "nothing staged"
+            # as durable while commits remain unpushed.
+            state["status"] = "ok" if do_push else "clean"
+            state["error"] = None
+            state["ahead"] = ahead_reason
+            write_canonical_git_state(state)
+            return state
+
+        push_p = _canonical_git_push()
+        if push_p.returncode != 0:
+            state["status"] = "pending"
+            state["error"] = (push_p.stderr or push_p.stdout or f"git push rc={push_p.returncode}")[-500:]
+            state["ahead"] = ahead_reason
+            write_canonical_git_state(state)
+            print(
+                "WARNING: canonical source-git push failed — financial commit intact; "
+                "retry will push the unpushed local commit (no duplicate observations)",
+                file=sys.stderr,
+            )
+            return state
+        state["status"] = "ok"
+        state["lastSuccessful"] = now
+        state["error"] = None
+        state["ahead"] = "in_sync"
+        write_canonical_git_state(state)
+        return state
+    except Exception as exc:
+        state["status"] = "failed"
+        state["error"] = f"{type(exc).__name__}: {exc}"
+        try:
+            write_canonical_git_state(state)
+        except Exception:
+            pass
+        print(
+            f"WARNING: canonical source-git persist failed — financial commit intact ({exc})",
+            file=sys.stderr,
+        )
+        return state
+
+
+def retry_pending_canonical_git_if_needed() -> dict | None:
+    """Retry source-git persist of canonical history after a prior push/commit failure."""
+    state = read_canonical_git_state()
+    if str(state.get("status") or "") not in {"pending", "failed"}:
+        return None
+    print(f"pending canonical source-git retry status={state.get('status')}")
+    return persist_canonical_history_to_source_git()
+
+
 def read_current_pointer() -> dict | None:
     if not CURRENT_POINTER.exists():
         return None
@@ -793,7 +969,8 @@ def materialize_generation(gen_dir: Path) -> None:
     if rev_src.exists():
         REV_PATH.parent.mkdir(parents=True, exist_ok=True)
         _copy_file(rev_src, REV_PATH)
-    # Daily
+    # Daily (runtime cache — still copied from generation so un-backfilled
+    # workspace history is not wiped by empty canonical; PR #13 backfill)
     daily_src = gen_dir / "daily_eps_snapshots"
     if daily_src.is_dir():
         DAILY_DIR.mkdir(parents=True, exist_ok=True)
@@ -801,6 +978,13 @@ def materialize_generation(gen_dir: Path) -> None:
             if src.is_file():
                 rel = src.relative_to(daily_src)
                 _copy_file(src, DAILY_DIR / rel)
+    # Canonical Git-tracked EPS history (only months this generation updated)
+    hist_src = gen_dir / "history" / "eps_daily"
+    if hist_src.is_dir():
+        HISTORY_DIR.mkdir(parents=True, exist_ok=True)
+        for src in hist_src.glob("*.jsonl"):
+            if src.is_file():
+                _copy_file(src, HISTORY_DIR / src.name)
     # Alerts
     alerts_src = gen_dir / "alerts" / "index.json"
     if alerts_src.exists():
@@ -838,6 +1022,10 @@ def _required_live_artifact_pairs(gen_dir: Path) -> list[tuple[Path, Path]]:
     if daily_src.is_dir():
         for src in sorted(p for p in daily_src.rglob("*") if p.is_file()):
             pairs.append((src, DAILY_DIR / src.relative_to(daily_src)))
+    hist_src = gen_dir / "history" / "eps_daily"
+    if hist_src.is_dir():
+        for src in sorted(p for p in hist_src.glob("*.jsonl") if p.is_file()):
+            pairs.append((src, HISTORY_DIR / src.name))
     alerts_src = gen_dir / "alerts" / "index.json"
     if alerts_src.exists():
         pairs.append((alerts_src, ALERTS_PATH))
@@ -998,21 +1186,22 @@ def commit_staged_run(
         (gen_dir / "revisions").mkdir(parents=True, exist_ok=True)
         atomic_write_bytes(gen_dir / "revisions" / "history.jsonl", rev_bytes)
 
-        # Daily — start from live, append pending rows into generation copy
+        # Parse pending daily once. Missing file → []; exists but corrupt / wrong
+        # shape → abort before CURRENT (never continue with rows=[] split-brain).
+        try:
+            pending_rows = ceh.load_pending_daily_rows(pending_daily)
+        except ceh.CanonicalHistoryError as pexc:
+            raise CommitAborted(f"pending_daily_rows:{pexc}") from pexc
+
+        # Daily — start from live, append the same validated pending rows
         daily_gen = gen_dir / "daily_eps_snapshots"
         daily_gen.mkdir(parents=True, exist_ok=True)
         live_jsonl = DAILY_DIR / "daily.jsonl"
         daily_buf = live_jsonl.read_text(encoding="utf-8") if live_jsonl.exists() else ""
         if daily_buf and not daily_buf.endswith("\n"):
             daily_buf += "\n"
-        if pending_daily.exists():
-            try:
-                payload = json.loads(pending_daily.read_text(encoding="utf-8"))
-                rows = payload.get("rows") or []
-            except Exception:
-                rows = []
-            for row in rows:
-                daily_buf += json.dumps(row, ensure_ascii=False, allow_nan=False) + "\n"
+        for row in pending_rows:
+            daily_buf += json.dumps(row, ensure_ascii=False, allow_nan=False) + "\n"
         atomic_write_text(daily_gen / "daily.jsonl", daily_buf)
         if pending_day_summary.exists():
             try:
@@ -1027,6 +1216,17 @@ def commit_staged_run(
                 dest = daily_gen / src.name
                 if not dest.exists():
                     _copy_file(src, dest)
+
+        # Canonical Git-tracked history: only months that gain new observations.
+        # Written into the generation package BEFORE CURRENT so a crash leaves
+        # live data/history/eps_daily/ unchanged. Not a full-history copy.
+        # Reuse the same validated pending_rows (do not re-parse).
+        try:
+            month_payloads = ceh.build_generation_month_payloads(ROOT, pending_rows)
+        except ceh.CanonicalHistoryError as hexc:
+            raise CommitAborted(f"canonical_history:{hexc}") from hexc
+        if month_payloads:
+            ceh.write_month_payloads(gen_dir / "history" / "eps_daily", month_payloads)
 
         # Alerts
         if pending_alerts.exists():
@@ -1099,6 +1299,22 @@ def commit_staged_run(
             print(
                 f"WARNING: post-CURRENT materialization failed — runStatus=committed "
                 f"materializationStatus=failed ({mat_err})",
+                file=sys.stderr,
+            )
+        # Source-git persist of canonical files is after financial COMMIT.
+        # Push failure must not rollback CURRENT; retry is idempotent.
+        try:
+            if mat_status == "success":
+                persist_canonical_history_to_source_git()
+            else:
+                st = read_canonical_git_state()
+                st["status"] = "pending"
+                st["error"] = "materialize_failed"
+                st["lastAttempt"] = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+                write_canonical_git_state(st)
+        except Exception as gexc:
+            print(
+                f"WARNING: canonical source-git persist error — financial commit intact ({gexc})",
                 file=sys.stderr,
             )
 
@@ -1504,6 +1720,10 @@ def main(argv: list[str] | None = None) -> int:
             retry_pending_publish_if_needed()
         except Exception as pub_exc:
             print(f"WARNING: pending publish retry error: {pub_exc}", file=sys.stderr)
+        try:
+            retry_pending_canonical_git_if_needed()
+        except Exception as git_exc:
+            print(f"WARNING: pending canonical source-git retry error: {git_exc}", file=sys.stderr)
         if args.no_export and not args.validate_only:
             print(
                 "ERROR: --no-export is banned for production ingest "

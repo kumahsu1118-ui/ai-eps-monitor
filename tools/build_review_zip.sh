@@ -150,7 +150,7 @@ PYSHOT
 
 STAGE=$(mktemp -d)
 DEST="$STAGE/ai-eps-monitor-review"
-mkdir -p "$DEST"/{web/data,tools,fixtures/parser,fixtures/data,data/{earnings,drivers,alerts,daily_eps_snapshots,revisions,snapshots},review-pack/screenshots,dashboard}
+mkdir -p "$DEST"/{web/data,tools,fixtures/parser,fixtures/data,data/{earnings,drivers,alerts,daily_eps_snapshots,revisions,snapshots,history/eps_daily},review-pack/screenshots,dashboard}
 
 # Core web
 cp -a "$ROOT"/web/index.html "$ROOT"/web/app.js "$ROOT"/web/styles.css "$DEST/web/"
@@ -165,7 +165,7 @@ cp -a "$ROOT"/web/data/*.json "$DEST/web/data/" 2>/dev/null || true
 # refreshVersion / sitePublished. Do not pack secrets (.env, cookies, tokens).
 
 # Tools (no secrets)
-for f in export_web_data.py build_alerts.py run_acceptance_tests.py run_unit_tests.py run_integration_tests.py sa_parser.py atomic_io.py snapshot_quality.py ingest_snapshot.py publish_github_pages.sh build_review_zip.sh generate_readme_review.py; do
+for f in export_web_data.py build_alerts.py revision_windows.py canonical_eps_history.py run_acceptance_tests.py run_unit_tests.py run_integration_tests.py sa_parser.py atomic_io.py snapshot_quality.py ingest_snapshot.py publish_github_pages.sh build_review_zip.sh generate_readme_review.py; do
   cp -a "$ROOT/tools/$f" "$DEST/tools/" 2>/dev/null || true
 done
 
@@ -180,6 +180,7 @@ cp -a "$ROOT"/data/earnings/*.json "$DEST/data/earnings/" 2>/dev/null || true
 cp -a "$ROOT"/data/drivers/*.json "$DEST/data/drivers/" 2>/dev/null || true
 cp -a "$ROOT"/data/alerts/*.json "$DEST/data/alerts/" 2>/dev/null || true
 cp -a "$ROOT"/data/daily_eps_snapshots/*.jsonl "$DEST/data/daily_eps_snapshots/" 2>/dev/null || true
+cp -a "$ROOT"/data/history/eps_daily/*.jsonl "$DEST/data/history/eps_daily/" 2>/dev/null || true
 cp -a "$ROOT"/data/revisions/history.jsonl "$DEST/data/revisions/" 2>/dev/null || true
 # latest snapshot (sanitized production copy)
 if ls "$ROOT"/data/snapshots/*.json >/dev/null 2>&1; then
@@ -187,7 +188,7 @@ if ls "$ROOT"/data/snapshots/*.json >/dev/null 2>&1; then
 fi
 
 # Docs
-for f in README_REVIEW.md TEST_RESULTS_COMMIT_SEMANTICS.md TEST_RESULTS_IDENTITY_DEPLOY_CRASH.md TEST_RESULTS_TRANSACTION_BOUNDARY.md TEST_RESULTS_TRANSACTIONAL_IDEMPOTENT.md TEST_RESULTS_INGESTION_INTEGRITY.md TEST_RESULTS_PIPELINE_INTEGRITY.md TEST_RESULTS_FAILCLOSED_SIGNAL.md TEST_RESULTS_FINAL_RELIABILITY.md TEST_RESULTS_ROUND3.md CALENDAR_MAPPING_AUDIT.md UPDATE_PIPELINE.md README.md; do
+for f in README_REVIEW.md TEST_RESULTS_CANONICAL_HISTORY.md TEST_RESULTS_COMMIT_SEMANTICS.md TEST_RESULTS_IDENTITY_DEPLOY_CRASH.md TEST_RESULTS_TRANSACTION_BOUNDARY.md TEST_RESULTS_TRANSACTIONAL_IDEMPOTENT.md TEST_RESULTS_INGESTION_INTEGRITY.md TEST_RESULTS_PIPELINE_INTEGRITY.md TEST_RESULTS_FAILCLOSED_SIGNAL.md TEST_RESULTS_FINAL_RELIABILITY.md TEST_RESULTS_ROUND3.md CALENDAR_MAPPING_AUDIT.md UPDATE_PIPELINE.md README.md; do
   [[ -f "$ROOT/$f" ]] && cp -a "$ROOT/$f" "$DEST/"
 done
 

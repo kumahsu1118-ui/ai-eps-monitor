@@ -4,7 +4,8 @@
 Never invents EPS. Missing numerics become null (frontend shows "—").
 Preserves all history.jsonl rows including baselines.
 Earnings digests persist under data/earnings/{T}.json across exports.
-Daily consensus snapshots are append-only under data/daily_eps_snapshots/.
+Daily consensus snapshots are append-only under data/daily_eps_snapshots/
+(runtime cache). Durable Git SoT is data/history/eps_daily/YYYY-MM.jsonl.
 """
 from __future__ import annotations
 
@@ -1203,7 +1204,9 @@ def seed_and_append_daily_snapshots(
                 "mappedYear": slot,
                 "fiscalKey": fiscal,
                 "consensus": new_eps,
+                "analysts": e.get("analysts") if "analysts" in e else e.get("analystCount"),
                 "reportedFiscalLabel": fiscal,
+                "reportedFiscalPeriodEnding": fiscal,
                 "calendarAlignment": e.get("calendarAlignment"),
                 "source": "daily_export",
                 "updateTime": snap_utc,
