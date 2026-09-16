@@ -6640,7 +6640,7 @@ def test_canonical_history_no_mapped_year_identity(fixture: Path) -> None:
         "source": "daily_export",
     }
     a = {**base, "mappedYear": "2027E", "slot": "2027E"}
-    b = {**base, "mappedYear": "2028E", "slot": "2028E", "consensus": 99.0}
+    b = {**base, "mappedYear": "2028E", "slot": "2028E"}
     ident_a = ceh.observation_identity(a)
     ident_b = ceh.observation_identity(b)
     ok = ident_a is not None and ident_a == ident_b
@@ -6666,6 +6666,154 @@ def test_canonical_history_no_mapped_year_identity(fixture: Path) -> None:
         "canonical_history_no_mapped_year_identity_test",
         ok,
         f"n={len(loaded2)} fiscals={fiscals}",
+    )
+
+
+def test_canonical_history_identity_conflict_fail_closed(fixture: Path) -> None:
+    """Same identity + different consensus/analysts must fail closed, not first-wins.
+
+    Opposite incoming order must not pick an order-dependent winner. Live
+    canonical files must be unchanged after the conflict.
+    """
+    _reset_canonical(fixture)
+    ceh = import_mod(fixture, "canonical_eps_history")
+    base = {
+        "date": "2026-09-15",
+        "ticker": "NVDA",
+        "reportedFiscalPeriodEnding": "Jan 2028",
+        "consensus": 15.0,
+        "analysts": 38,
+        "updateTime": "2026-09-15T08:00:00Z",
+        "source": "daily_export",
+    }
+    conflict_eps = {**base, "consensus": 99.0}
+    conflict_an = {**base, "analysts": 99}
+
+    _write_canonical_rows(fixture, [base])
+    before = {p.name: p.read_bytes() for p in ceh.list_month_files(fixture)}
+    before_rows = ceh.load_all_canonical_rows(fixture)
+
+    raised_existing = False
+    try:
+        ceh.build_generation_month_payloads(fixture, [conflict_eps])
+    except Exception as exc:
+        raised_existing = isinstance(exc, ceh.CanonicalHistoryError)
+    after_existing = {p.name: p.read_bytes() for p in ceh.list_month_files(fixture)}
+    ok = raised_existing and after_existing == before
+    ok = ok and len(ceh.load_all_canonical_rows(fixture)) == len(before_rows)
+    ok = ok and abs(float(before_rows[0]["consensus"]) - 15.0) < 1e-9
+
+    raised_an = False
+    try:
+        ceh.merge_observations([base], [conflict_an])
+    except Exception as exc:
+        raised_an = isinstance(exc, ceh.CanonicalHistoryError)
+    ok = ok and raised_an
+
+    replay, n_replay = ceh.merge_observations([base], [{**base, "mappedYear": "2027E"}])
+    ok = ok and n_replay == 0
+    ok = ok and len(replay) == 1
+
+    a15, a99 = dict(base), dict(conflict_eps)
+    raised_fwd = raised_rev = False
+    merged_fwd = merged_rev = None
+    try:
+        merged_fwd, _ = ceh.merge_observations([], [a15, a99])
+    except Exception as exc:
+        raised_fwd = isinstance(exc, ceh.CanonicalHistoryError)
+    try:
+        merged_rev, _ = ceh.merge_observations([], [a99, a15])
+    except Exception as exc:
+        raised_rev = isinstance(exc, ceh.CanonicalHistoryError)
+    ok = ok and raised_fwd and raised_rev
+    ok = ok and merged_fwd is None and merged_rev is None
+
+    payloads_fwd = payloads_rev = None
+    raised_build_fwd = raised_build_rev = False
+    try:
+        payloads_fwd = ceh.build_generation_month_payloads(fixture, [a15, a99])
+    except Exception as exc:
+        raised_build_fwd = isinstance(exc, ceh.CanonicalHistoryError)
+    try:
+        payloads_rev = ceh.build_generation_month_payloads(fixture, [a99, a15])
+    except Exception as exc:
+        raised_build_rev = isinstance(exc, ceh.CanonicalHistoryError)
+    after_order = {p.name: p.read_bytes() for p in ceh.list_month_files(fixture)}
+    ok = ok and raised_build_fwd and raised_build_rev
+    ok = ok and payloads_fwd is None and payloads_rev is None
+    ok = ok and after_order == before
+
+    record(
+        "canonical_history_identity_conflict_fail_closed_test",
+        ok,
+        f"existing={raised_existing} analysts={raised_an} fwd={raised_fwd} rev={raised_rev} "
+        f"unchanged={after_order==before}",
+    )
+
+
+def test_corrupt_pending_daily_rows_aborts_before_current(fixture: Path) -> None:
+    """Corrupt pending_daily_rows.json must abort before CURRENT (no split-brain)."""
+    import os
+    from pathlib import Path as _Path
+
+    _reset_canonical(fixture)
+    ceh = import_mod(fixture, "canonical_eps_history")
+    seed, _ = _fresh_clone_seed_rows()
+    _write_canonical_rows(fixture, seed)
+    ceh.materialize_runtime_daily(fixture)
+    ing = import_mod(fixture, "ingest_snapshot")
+    ing.rebind_paths(fixture)
+    current_path = fixture / "data" / "CURRENT.json"
+    current_path.write_text(
+        json.dumps({"runId": "preexisting", "crashAtomic": True}, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    daily_path = fixture / "data" / "daily_eps_snapshots" / "daily.jsonl"
+    before = _fingerprint_persistent(fixture)
+    daily_before = daily_path.read_bytes()
+    canon_before = {p.name: p.read_bytes() for p in ceh.list_month_files(fixture)}
+
+    snap = _load_base_snap(fixture)
+    snap["snapshot_utc"] = "2026-09-14T14:00:00Z"
+    u = json.loads((fixture / "data" / "universe.json").read_text(encoding="utf-8"))
+    for t in u.get("tickers") or []:
+        if t not in (snap.get("tickers") or {}):
+            snap.setdefault("tickers", {})[t] = _good_ticker()
+    if "NVDA" in snap["tickers"]:
+        row = snap["tickers"]["NVDA"]["eps"].get("2027E") or {}
+        row["consensus"] = float(row.get("consensus") or 15) + 0.41
+        snap["tickers"]["NVDA"]["eps"]["2027E"] = row
+    incoming = _write_incoming_from_snap(fixture, snap)
+
+    orig = ing.commit_staged_run
+
+    def _corrupt_then_commit(stage_dir, *args, **kwargs):
+        p = _Path(stage_dir) / "pending_daily_rows.json"
+        p.write_text("{not-json", encoding="utf-8")
+        return orig(stage_dir, *args, **kwargs)
+
+    ing.commit_staged_run = _corrupt_then_commit
+    os.environ["PIPELINE_LOCK_HELD"] = "1"
+    os.environ["SKIP_CANONICAL_GIT_PERSIST"] = "1"
+    try:
+        result = ing.ingest_and_build(incoming, run_export=True, run_publish=False)
+    finally:
+        ing.commit_staged_run = orig
+
+    after = _fingerprint_persistent(fixture)
+    daily_after = daily_path.read_bytes() if daily_path.exists() else b""
+    canon_after = {p.name: p.read_bytes() for p in ceh.list_month_files(fixture)}
+    cur = json.loads(current_path.read_text(encoding="utf-8")) if current_path.exists() else None
+    ok = result.get("runStatus") == "aborted"
+    ok = ok and after == before
+    ok = ok and daily_after == daily_before
+    ok = ok and canon_after == canon_before
+    ok = ok and cur is not None and cur.get("runId") == "preexisting"
+    record(
+        "corrupt_pending_daily_rows_aborts_before_current_test",
+        ok,
+        f"status={result.get('runStatus')} err={result.get('commitError')} "
+        f"current={cur.get('runId') if cur else None} equal={after==before}",
     )
 
 
@@ -6705,6 +6853,7 @@ INTEGRATION_TEST_NAMES = {
     "test_materialized_marker_with_missing_live_file_repairs_from_current",
     "test_crash_before_financial_commit_does_not_mutate_canonical_history",
     "test_canonical_git_push_failure_retries_to_remote",
+    "test_corrupt_pending_daily_rows_aborts_before_current",
 }
 
 
@@ -6893,6 +7042,8 @@ def _all_suite_tests():
         ("test_materialize_schema_invalid_row_fails_closed", test_materialize_schema_invalid_row_fails_closed),
         ("test_canonical_git_push_failure_retries_to_remote", test_canonical_git_push_failure_retries_to_remote),
         ("test_canonical_history_no_mapped_year_identity", test_canonical_history_no_mapped_year_identity),
+        ("test_canonical_history_identity_conflict_fail_closed", test_canonical_history_identity_conflict_fail_closed),
+        ("test_corrupt_pending_daily_rows_aborts_before_current", test_corrupt_pending_daily_rows_aborts_before_current),
     ]
 
 

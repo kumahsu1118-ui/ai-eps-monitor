@@ -1186,21 +1186,22 @@ def commit_staged_run(
         (gen_dir / "revisions").mkdir(parents=True, exist_ok=True)
         atomic_write_bytes(gen_dir / "revisions" / "history.jsonl", rev_bytes)
 
-        # Daily — start from live, append pending rows into generation copy
+        # Parse pending daily once. Missing file → []; exists but corrupt / wrong
+        # shape → abort before CURRENT (never continue with rows=[] split-brain).
+        try:
+            pending_rows = ceh.load_pending_daily_rows(pending_daily)
+        except ceh.CanonicalHistoryError as pexc:
+            raise CommitAborted(f"pending_daily_rows:{pexc}") from pexc
+
+        # Daily — start from live, append the same validated pending rows
         daily_gen = gen_dir / "daily_eps_snapshots"
         daily_gen.mkdir(parents=True, exist_ok=True)
         live_jsonl = DAILY_DIR / "daily.jsonl"
         daily_buf = live_jsonl.read_text(encoding="utf-8") if live_jsonl.exists() else ""
         if daily_buf and not daily_buf.endswith("\n"):
             daily_buf += "\n"
-        if pending_daily.exists():
-            try:
-                payload = json.loads(pending_daily.read_text(encoding="utf-8"))
-                rows = payload.get("rows") or []
-            except Exception:
-                rows = []
-            for row in rows:
-                daily_buf += json.dumps(row, ensure_ascii=False, allow_nan=False) + "\n"
+        for row in pending_rows:
+            daily_buf += json.dumps(row, ensure_ascii=False, allow_nan=False) + "\n"
         atomic_write_text(daily_gen / "daily.jsonl", daily_buf)
         if pending_day_summary.exists():
             try:
@@ -1219,14 +1220,11 @@ def commit_staged_run(
         # Canonical Git-tracked history: only months that gain new observations.
         # Written into the generation package BEFORE CURRENT so a crash leaves
         # live data/history/eps_daily/ unchanged. Not a full-history copy.
-        pending_rows: list[dict] = []
-        if pending_daily.exists():
-            try:
-                pending_payload = json.loads(pending_daily.read_text(encoding="utf-8"))
-                pending_rows = pending_payload.get("rows") or []
-            except Exception:
-                pending_rows = []
-        month_payloads = ceh.build_generation_month_payloads(ROOT, pending_rows)
+        # Reuse the same validated pending_rows (do not re-parse).
+        try:
+            month_payloads = ceh.build_generation_month_payloads(ROOT, pending_rows)
+        except ceh.CanonicalHistoryError as hexc:
+            raise CommitAborted(f"canonical_history:{hexc}") from hexc
         if month_payloads:
             ceh.write_month_payloads(gen_dir / "history" / "eps_daily", month_payloads)
 

@@ -130,7 +130,7 @@ Seeking Alpha cookies/sessions, GitHub tokens beyond Actions secrets (none requi
 
 Writer: `tools/canonical_eps_history.py` (called from ingest COMMIT). Materializer: same module `--materialize`. `tools/revision_windows.py` reads runtime `daily.jsonl` and does not care whether that file came from a normal ingest or a fresh-clone rebuild.
 
-Admission: only quality-gate-passed observations enter canonical history (never quarantined, invalid fiscal, null/non-finite EPS, revision-history seeds, or staged-but-never-committed). Canonical files are built into the generation **before** CURRENT flips; live `data/history/` is updated only on materialize after a successful financial commit.
+Admission: only quality-gate-passed observations enter canonical history (never quarantined, invalid fiscal, null/non-finite EPS, revision-history seeds, or staged-but-never-committed). Identical identity + identical canonical payload (consensus/analysts) is a no-op replay. Identical identity + different consensus/analysts is a collision: COMMIT aborts (`CanonicalHistoryError`); never silent first-wins. mappedYear/slot-only differences are display-only and still dedupe. Canonical files are built into the generation **before** CURRENT flips; live `data/history/` is updated only on materialize after a successful financial commit. If `pending_daily_rows.json` exists but cannot be parsed or fails the staging contract, COMMIT aborts before CURRENT (no empty-rows fallback).
 
 Materialize (`python3 tools/canonical_eps_history.py --materialize`) is **fail-closed**: malformed or schema-invalid canonical rows abort and do **not** overwrite an existing valid runtime `daily.jsonl`. `--lenient` is inspection/recovery only.
 

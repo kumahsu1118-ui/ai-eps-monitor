@@ -14,6 +14,8 @@ Observation identity (idempotent replay):
   (ticker, normalized reportedFiscalPeriodEnding, date, updateTime)
 Missing updateTime → deterministic fallback ``{date}T00:00:00Z``.
 mappedYear / slot / 2027E labels are display-only and are never identity.
+Same identity + identical canonical payload → no-op. Same identity +
+different consensus/analysts → CanonicalHistoryError (fail closed).
 
 Admission: quality-gate-passed, valid fiscal identity, finite consensus.
 Never: quarantined, seed-from-revision-history, null/non-finite EPS,
@@ -55,7 +57,7 @@ MISSING_UPDATETIME_FALLBACK_SUFFIX = "T00:00:00Z"
 
 
 class CanonicalHistoryError(ValueError):
-    """Malformed canonical input that must not be invented/fixed."""
+    """Malformed or conflicting canonical input that must not be invented/fixed."""
 
 
 def history_dir(root: Path | None = None) -> Path:
@@ -243,20 +245,47 @@ def sort_canonical_rows(rows: list[dict]) -> list[dict]:
     return [d[-1] for d in decorated]
 
 
+def canonical_payload_fingerprint(obs: dict) -> str:
+    """Stable canonical payload for equality (identity fields + consensus + analysts).
+
+    mappedYear / slot are not canonical and must not affect this fingerprint.
+    """
+    admitted = canonical_observation_from_row(obs) or obs
+    return dumps_canonical_row(admitted)
+
+
 def merge_observations(existing: list[dict], incoming: list[dict]) -> tuple[list[dict], int]:
-    """Append new identities only. Identical replay = no-op. Stable order."""
-    seen = {identity_key(r) for r in existing}
+    """Append new identities only. Identical payload replay = no-op.
+
+    Same identity with a different canonical payload (consensus or analysts at
+    minimum) raises CanonicalHistoryError — never first-wins / last-wins.
+    mappedYear / slot-only differences are stripped before compare and dedupe.
+    """
+    by_ident: dict[tuple[str, str, str, str], dict] = {}
+    for r in existing:
+        obs = canonical_observation_from_row(r) or r
+        ident = identity_key(obs)
+        by_ident[ident] = obs
     merged = list(existing)
     n_new = 0
     for row in incoming:
-        obs = canonical_observation_from_row(row) or row
+        obs = canonical_observation_from_row(row)
+        if obs is None:
+            continue
         try:
             ident = identity_key(obs)
         except CanonicalHistoryError:
             continue
-        if ident in seen:
+        prior = by_ident.get(ident)
+        if prior is not None:
+            if canonical_payload_fingerprint(prior) != canonical_payload_fingerprint(obs):
+                raise CanonicalHistoryError(
+                    f"conflicting canonical payload for identity {ident}: "
+                    f"existing={canonical_payload_fingerprint(prior)} "
+                    f"incoming={canonical_payload_fingerprint(obs)}"
+                )
             continue
-        seen.add(ident)
+        by_ident[ident] = obs
         merged.append(obs)
         n_new += 1
     return sort_canonical_rows(merged), n_new
@@ -350,18 +379,46 @@ def apply_payloads_to_live(root: Path | None, payloads: dict[str, str]) -> list[
     return write_month_payloads(history_dir(root), payloads)
 
 
-def pending_rows_from_stage(stage_dir: Path) -> list[dict]:
-    path = Path(stage_dir) / "pending_daily_rows.json"
+def load_pending_daily_rows(path: Path) -> list[dict]:
+    """Parse staged pending_daily_rows.json once.
+
+    Missing file → []. File exists but unparseable / wrong shape / non-object
+    rows → CanonicalHistoryError (caller must abort before CURRENT).
+    """
+    path = Path(path)
     if not path.exists():
         return []
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
-    except Exception:
-        return []
-    rows = payload.get("rows") if isinstance(payload, dict) else payload
+    except Exception as exc:
+        raise CanonicalHistoryError(
+            f"pending_daily_rows.json exists but cannot be parsed: {exc}"
+        ) from exc
+    if isinstance(payload, dict):
+        if "rows" not in payload:
+            raise CanonicalHistoryError("pending_daily_rows.json object missing 'rows'")
+        rows = payload.get("rows")
+    elif isinstance(payload, list):
+        rows = payload
+    else:
+        raise CanonicalHistoryError(
+            f"pending_daily_rows.json must be an object or list, got {type(payload).__name__}"
+        )
     if not isinstance(rows, list):
-        return []
-    return [r for r in rows if isinstance(r, dict)]
+        raise CanonicalHistoryError("pending_daily_rows.json 'rows' is not a list")
+    out: list[dict] = []
+    for i, row in enumerate(rows):
+        if not isinstance(row, dict):
+            raise CanonicalHistoryError(
+                f"pending_daily_rows.json row {i} is not an object ({type(row).__name__})"
+            )
+        out.append(row)
+    return out
+
+
+def pending_rows_from_stage(stage_dir: Path) -> list[dict]:
+    """Fail-closed load of stage_dir/pending_daily_rows.json (missing → [])."""
+    return load_pending_daily_rows(Path(stage_dir) / "pending_daily_rows.json")
 
 
 def main(argv: list[str] | None = None) -> int:

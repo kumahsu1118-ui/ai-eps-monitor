@@ -126,7 +126,7 @@ Shared helper: `tools/revision_windows.py` — used by both `export_web_data.py`
 | `data/generations/<runId>/` | Immutable generation; CURRENT is the financial commit. Updated canonical months only — not a full history copy. | No |
 | `data/*.json`, `web/data/*.json` | Public derived exports (Pages). | Public JSON only |
 
-Canonical joins financial COMMIT: generation package includes updated month files **before** CURRENT; live `data/history/` updates only after CURRENT. Pre-CURRENT crash → canonical live unchanged. Source-git persist of `data/history/eps_daily/` is after COMMIT; push failure does not roll back CURRENT; retry is idempotent. Pages publish is unchanged (public `web/` only). Actual pending-publish state is `data/publish_state.json` (docs historically mentioned `data/.pending-publish`, which is gitignored).
+Canonical joins financial COMMIT: generation package includes updated month files **before** CURRENT; live `data/history/` updates only after CURRENT. Pre-CURRENT crash → canonical live unchanged. Same identity + different consensus/analysts aborts COMMIT (never first-wins). Corrupt `pending_daily_rows.json` aborts before CURRENT. Source-git persist of `data/history/eps_daily/` is after COMMIT; push failure does not roll back CURRENT; retry is idempotent. Pages publish is unchanged (public `web/` only). Actual pending-publish state is `data/publish_state.json` (docs historically mentioned `data/.pending-publish`, which is gitignored).
 
 **No production backfill here.** Workspace `daily.jsonl` is not copied into canonical.
 
