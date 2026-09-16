@@ -12,6 +12,7 @@
 #   AHEAD / fetch-and-rebuild from newest remote HEAD
 #   vendor / iter_frontend_static_files / list_index_local_assets
 #   dashboard.json  (meta.json + dashboard.json.meta synced)
+#   payload hash feeds dataVersion + refreshVersion (not sitePublished)
 set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="${AI_EPS_ROOT:-$(cd "$SCRIPT_DIR/.." && pwd)}"
