@@ -117,9 +117,22 @@ Shared helper: `tools/revision_windows.py` — used by both `export_web_data.py`
 - Internal 30D is **daily.jsonl only** — revision-event history is never substituted when daily observations are absent.
 - Missing/unavailable daily history is fail-closed for lifecycle too: do not mint a new Internal 30D and do not resolve a prior open. True `Resolved` requires a valid computed Internal 30D with `|pct| < 4%`. Empty `daily.jsonl` is data loss, not evidence the revision fell below the resolve threshold.
 
-## daily.jsonl persistence
+## Durable Git canonical EPS history vs runtime cache
 
-Live cache `data/daily_eps_snapshots/daily.jsonl`; committed copy under `data/generations/<runId>/`. Not published to GitHub Pages and not tracked in git. A fresh workspace cannot reconstruct Internal 30/60/90D until weekday collections accumulate on that machine.
+| Path | Role | Git-tracked? |
+|------|------|----------------|
+| `data/history/eps_daily/YYYY-MM.jsonl` | Canonical durable SoT (monthly append-only). | Yes (source repo) |
+| `data/daily_eps_snapshots/daily.jsonl` | Runtime cache. Rebuild: `python3 tools/canonical_eps_history.py --materialize`. | No |
+| `data/generations/<runId>/` | Immutable generation; CURRENT is the financial commit. Updated canonical months only — not a full history copy. | No |
+| `data/*.json`, `web/data/*.json` | Public derived exports (Pages). | Public JSON only |
+
+Canonical joins financial COMMIT: generation package includes updated month files **before** CURRENT; live `data/history/` updates only after CURRENT. Pre-CURRENT crash → canonical live unchanged. Source-git persist of `data/history/eps_daily/` is after COMMIT; push failure does not roll back CURRENT; retry is idempotent. Pages publish is unchanged (public `web/` only). Actual pending-publish state is `data/publish_state.json` (docs historically mentioned `data/.pending-publish`, which is gitignored).
+
+**No production backfill here.** Workspace `daily.jsonl` is not copied into canonical.
+
+## daily.jsonl persistence (runtime cache)
+
+Live cache `data/daily_eps_snapshots/daily.jsonl`; committed copy under `data/generations/<runId>/`. Rebuildable from canonical history; not published to GitHub Pages and not tracked in git. Until production backfill, a fresh clone reconstructs only observations that have been committed to `data/history/eps_daily/`.
 
 ## What is NOT in the public repo
 Seeking Alpha cookies/sessions, GitHub tokens beyond Actions secrets (none required for static Pages from this machine’s push), `.env`, browser profiles, private raw pulls beyond published JSON fields.

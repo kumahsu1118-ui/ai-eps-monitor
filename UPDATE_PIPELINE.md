@@ -21,7 +21,7 @@ Repo: https://github.com/kumahsu1118-ui/ai-eps-monitor
 
 ### 3. Pull consensus & prices
 - For each ticker: earnings estimates & revisions (SA **1M/3M/6M** only; never invent SA 7D/30D/90D; never treat **1M as 30D** or **3M as 90D**).
-- **Internal 30D/60D/90D** are computed later at export from `data/daily_eps_snapshots/daily.jsonl` (identity = ticker + Reported Fiscal Period Ending). Shared helper: `tools/revision_windows.py` (also used by the alert engine). Each window is anchored on the **latest valid observation** for that identity (`targetDate = latestDate − N days`), not the snapshot timestamp. Baseline uses a **schedule-aware weekday-gap** rule (weekdays `0 8 * * 1-5` Taipei): Friday→Monday is valid; an ancient observation cannot fake a 30D baseline. Insufficient history → unavailable.
+- **Internal 30D/60D/90D** are computed later at export from `data/daily_eps_snapshots/daily.jsonl` (identity = ticker + Reported Fiscal Period Ending). That runtime JSONL is materialized from Git-tracked `data/history/eps_daily/YYYY-MM.jsonl`. Shared helper: `tools/revision_windows.py` (also used by the alert engine). Each window is anchored on the **latest valid observation** for that identity (`targetDate = latestDate − N days`), not the snapshot timestamp. Baseline uses a **schedule-aware weekday-gap** rule (weekdays `0 8 * * 1-5` Taipei): Friday→Monday is valid; an ancient observation cannot fake a 30D baseline. Insufficient history → unavailable.
 - Record **Last Close** (regular session) and **After Hours** separately if shown.
 - Preserve **Reported Fiscal Period Ending**; map only to FY-mapped calendar **slots** (not true CY EPS).
 
@@ -30,7 +30,7 @@ Repo: https://github.com/kumahsu1118-ui/ai-eps-monitor
 ### 4. Quality Gate (fail-closed) then persist
 - Order: **Collection → Quality Gate → publishable → persist history → Alert Engine → Export → Publish**.
 - Browser/collection writes ONLY `data/incoming/<UTC timestamp>.json` (never unvalidated into `data/snapshots/`).
-- Single entrypoint: `python3 tools/ingest_snapshot.py` — Incoming → Gate → **stage** `data/staging/<runId>/` → pure-build export (`--no-persistent-mutation`) → **atomic COMMIT** of ALL mutable outputs (validated snapshots, revisions, daily, alerts, comparison checkpoint, web/data; `runStatus=committed`; `data/CURRENT.json` sole commit pointer) → optional `publish_prebuilt_site` (no second export). Pre-CURRENT failure → `runStatus=aborted` (must not become LKG). Post-CURRENT materialization failure → `runStatus=committed` + `materializationStatus=failed` (never aborted; no CURRENT rollback; retry `materialize_generation(resolve_current_generation())`).
+- Single entrypoint: `python3 tools/ingest_snapshot.py` — Incoming → Gate → **stage** `data/staging/<runId>/` → pure-build export (`--no-persistent-mutation`) → **atomic COMMIT** of ALL mutable outputs (validated snapshots, revisions, daily, **canonical `data/history/eps_daily/` month files**, alerts, comparison checkpoint, web/data; `runStatus=committed`; `data/CURRENT.json` sole commit pointer) → optional source-git persist of canonical history → optional `publish_prebuilt_site` (no second export). Pre-CURRENT failure → `runStatus=aborted` (must not become LKG; canonical live files unchanged). Post-CURRENT materialization failure → `runStatus=committed` + `materializationStatus=failed` (never aborted; no CURRENT rollback; retry `materialize_generation(resolve_current_generation())`).
 - `--validate-only` gates/stages without commit (unsafe `--no-export` commit banned). Historical timestamps require explicit `--backfill`.
 - Rejected / needs_verification / future/invalid timestamps → quarantine only; **must not** remain as validated snapshot candidates; **do not** mutate Alert DB or daily EPS history before COMMIT.
 - Global lock: `data/.pipeline.lock` (concurrent → `RUN ALREADY IN PROGRESS`). Nested `PIPELINE_LOCK_HELD=1` skips re-acquire for ingest→publish.
@@ -109,7 +109,7 @@ Seeking Alpha cookies/sessions, GitHub tokens beyond Actions secrets (none requi
 
 ## EPS Revision Momentum (Internal 30/60/90D)
 
-- Computed from append-only `daily.jsonl` during the ingest export/read path (no second persistent writer). Formula lives in **`tools/revision_windows.py`** and is used by both `export_web_data.py` and `build_alerts.py`.
+- Computed from append-only `daily.jsonl` during the ingest export/read path (no second persistent writer). Formula lives in **`tools/revision_windows.py`** and is used by both `export_web_data.py` and `build_alerts.py`. Runtime `daily.jsonl` is rebuilt from `data/history/eps_daily/*.jsonl` on a fresh clone (`python3 tools/canonical_eps_history.py --materialize`).
 - Identity = ticker + normalized `reportedFiscalPeriodEnding`. Mapped year/slot is display-only.
 - Windows are independent: missing 30D history does not borrow 60D/90D or the oldest observation.
 - Window origin = latest valid daily observation for that fiscal identity; `targetDate = latestDate − N days` (snapshot `as_of` is only a cutoff).
@@ -119,9 +119,26 @@ Seeking Alpha cookies/sessions, GitHub tokens beyond Actions secrets (none requi
 - SA **1M/3M/6M** remain Source-reported on `#/revisions` and are never copied onto Internal 30/60/90D.
 - Up/Down Analyst counts: captured SA sources in this repo do not include them → `null` / unavailable (never derived from EPS moves).
 
-## daily.jsonl persistence (location only)
+## Durable Git canonical EPS history vs runtime cache
 
-- Live cache: `data/daily_eps_snapshots/daily.jsonl`
-- Committed copy: `data/generations/<runId>/daily_eps_snapshots/daily.jsonl` (CURRENT pointer is the financial commit)
-- Ingest COMMIT copies live JSONL into the new generation, then appends pending rows; materialize copies CURRENT → live.
-- **Not in git / not in the GitHub Pages payload.** Public `data/*.json` and `web/data/*.json` are derived exports. A fresh clone or fresh Cloud Agent workspace does **not** carry `daily.jsonl`; Internal 30/60/90D will be unavailable until enough weekday collections accumulate on that machine. Restart of the same workspace is durable only if `data/generations/` (CURRENT) survives.
+| Path | Role | Git-tracked? |
+|------|------|----------------|
+| `data/history/eps_daily/YYYY-MM.jsonl` | **Canonical durable SoT.** Monthly append-only observations. Identity = ticker + normalized `reportedFiscalPeriodEnding` + date + `updateTime`. | **Yes** (source repo) |
+| `data/daily_eps_snapshots/daily.jsonl` | Runtime cache. Rebuildable via `python3 tools/canonical_eps_history.py --materialize`. | No |
+| `data/generations/<runId>/` | Immutable financial generation package; CURRENT pointer. May include only **updated** canonical month files, never a full history copy. | No |
+| `data/*.json`, `web/data/*.json` | Public derived exports (Pages payload). | Public JSON only |
+
+Writer: `tools/canonical_eps_history.py` (called from ingest COMMIT). Materializer: same module `--materialize`. `tools/revision_windows.py` reads runtime `daily.jsonl` and does not care whether that file came from a normal ingest or a fresh-clone rebuild.
+
+Admission: only quality-gate-passed observations enter canonical history (never quarantined, invalid fiscal, null/non-finite EPS, revision-history seeds, or staged-but-never-committed). Canonical files are built into the generation **before** CURRENT flips; live `data/history/` is updated only on materialize after a successful financial commit.
+
+Source-git persist (`git add data/history/eps_daily`) runs **after** CURRENT. Push failure does not roll back financial state; retry is idempotent (identical observation = no-op). Pages publish is unchanged (public `web/` only).
+
+**No production backfill in this change.** Existing workspace `daily.jsonl` / generations are not copied into canonical (that is a later backfill). Until backfill, a fresh clone reconstructs only observations that have been committed to canonical files going forward.
+
+## daily.jsonl persistence (runtime cache)
+
+- Live cache: `data/daily_eps_snapshots/daily.jsonl` — rebuildable materialized state, **not** the sole durable SoT.
+- Committed copy: `data/generations/<runId>/daily_eps_snapshots/daily.jsonl` (CURRENT pointer is the financial commit).
+- Ingest COMMIT copies live JSONL into the new generation, then appends pending rows; materialize copies CURRENT → live. This preserves un-backfilled workspace history until canonical backfill.
+- **Not in git / not in the GitHub Pages payload.** Public `data/*.json` and `web/data/*.json` are derived exports.

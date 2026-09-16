@@ -7,6 +7,8 @@ Source of truth:
 - SPA: `web/index.html`, `web/app.js`, `web/styles.css`
 - Exported JSON: `web/data/*.json`
 - Pipeline: `data/snapshots`, `data/revisions`, `data/drivers`, `data/earnings`, `data/alerts`
+- Canonical EPS history (source repo, **not** the Pages payload): `data/history/eps_daily/*.jsonl`
+
 
 To refresh the public site:
 

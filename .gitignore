@@ -39,3 +39,4 @@ web/pages-verify.png
 *.lock
 data/.pending-publish
 data/.last-publish-web
+data/canonical_git_state.json

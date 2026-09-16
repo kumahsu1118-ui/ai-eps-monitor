@@ -141,6 +141,7 @@ def build_fixture(dest: Path) -> Path:
         "atomic_io.py",
         "snapshot_quality.py",
         "ingest_snapshot.py",
+        "canonical_eps_history.py",
         "publish_github_pages.sh",
         "build_review_zip.sh",
     ):
@@ -162,6 +163,7 @@ def build_fixture(dest: Path) -> Path:
     for sub in (
         "snapshots", "revisions", "drivers", "earnings", "alerts",
         "daily_eps_snapshots", "incoming", "staging", "generations",
+        "history", "history/eps_daily",
         "snapshots/quarantine",
     ):
         (dest / "data" / sub).mkdir(parents=True, exist_ok=True)
@@ -324,8 +326,15 @@ def snapshot_prod_fingerprints() -> dict:
     ]
     out = {}
     for p in paths:
-        if p.exists():
+        if p.exists() and p.is_file():
             out[str(p)] = hashlib.sha256(p.read_bytes()).hexdigest()
+    hist = ROOT / "data" / "history" / "eps_daily"
+    if hist.is_dir():
+        h = hashlib.sha256()
+        for p in sorted(hist.glob("*.jsonl")):
+            h.update(p.name.encode("utf-8"))
+            h.update(p.read_bytes())
+        out[str(hist)] = h.hexdigest()
     return out
 
 
@@ -3585,6 +3594,13 @@ def _fingerprint_persistent(fixture: Path) -> dict:
         out[str(p.relative_to(fixture))] = (
             hashlib.sha256(p.read_bytes()).hexdigest() if p.exists() else None
         )
+    hist_dir = fixture / "data" / "history" / "eps_daily"
+    hist_files = []
+    if hist_dir.is_dir():
+        hist_files = sorted(p for p in hist_dir.glob("*.jsonl") if p.is_file())
+    out["canonical_history"] = [
+        (p.name, hashlib.sha256(p.read_bytes()).hexdigest()) for p in hist_files
+    ]
     snaps = sorted(
         (fixture / "data" / "snapshots").glob("20*.json"),
         key=lambda x: x.name,
@@ -5985,6 +6001,509 @@ def test_internal_30d_valid_window_below_4pct_resolves(fixture: Path) -> None:
     )
 
 
+# ---------------------------------------------------------------------------
+# PR #12 — Durable Git Canonical EPS History
+# ---------------------------------------------------------------------------
+
+
+def _window_cmp_fields(w: dict) -> dict:
+    return {
+        "revisionPct": w.get("revisionPct"),
+        "startEps": w.get("startEps"),
+        "endEps": w.get("endEps"),
+        "startDate": w.get("startDate"),
+        "endDate": w.get("endDate"),
+        "anchorDate": w.get("anchorDate"),
+        "targetDate": w.get("targetDate"),
+    }
+
+
+def _reset_canonical(fixture: Path) -> None:
+    hist = fixture / "data" / "history" / "eps_daily"
+    hist.mkdir(parents=True, exist_ok=True)
+    for p in hist.glob("*.jsonl"):
+        try:
+            p.unlink()
+        except OSError:
+            pass
+    daily = fixture / "data" / "daily_eps_snapshots" / "daily.jsonl"
+    # Leave runtime daily.jsonl alone unless a test deletes it — canonical tests
+    # materialize into it explicitly.
+
+
+def _write_canonical_rows(fixture: Path, rows: list[dict]) -> None:
+    ceh = import_mod(fixture, "canonical_eps_history")
+    payloads = ceh.build_generation_month_payloads(fixture, rows)
+    if payloads:
+        ceh.apply_payloads_to_live(fixture, payloads)
+
+
+def _compute_internal_windows(fixture: Path, daily_rows: list[dict], as_of: datetime) -> dict:
+    rw = import_mod(fixture, "revision_windows")
+    groups = rw.group_daily_by_fiscal_identity(daily_rows)
+    out = {}
+    for key, pts in groups.items():
+        out[key] = {
+            30: rw.compute_internal_window(pts, as_of=as_of, window_days=30),
+            60: rw.compute_internal_window(pts, as_of=as_of, window_days=60),
+            90: rw.compute_internal_window(pts, as_of=as_of, window_days=90),
+        }
+    return out
+
+
+def _fresh_clone_seed_rows() -> tuple[list[dict], datetime]:
+    """Observations sufficient for valid Internal 30/60/90D (same as PR #11 window fixture)."""
+    as_of = datetime(2026, 9, 15, 18, 0, 0, tzinfo=timezone.utc)
+    ticker, fiscal = "NVDA", "Jan 2028"
+    rows = [
+        {
+            "date": (as_of - timedelta(days=90)).strftime("%Y-%m-%d"),
+            "ticker": ticker,
+            "reportedFiscalPeriodEnding": fiscal,
+            "consensus": 10.0,
+            "analysts": 40,
+            "updateTime": (as_of - timedelta(days=90)).strftime("%Y-%m-%dT08:00:00Z"),
+            "source": "daily_export",
+        },
+        {
+            "date": (as_of - timedelta(days=60)).strftime("%Y-%m-%d"),
+            "ticker": ticker,
+            "reportedFiscalPeriodEnding": fiscal,
+            "consensus": 11.0,
+            "analysts": 41,
+            "updateTime": (as_of - timedelta(days=60)).strftime("%Y-%m-%dT08:00:00Z"),
+            "source": "daily_export",
+        },
+        {
+            "date": (as_of - timedelta(days=30)).strftime("%Y-%m-%d"),
+            "ticker": ticker,
+            "reportedFiscalPeriodEnding": fiscal,
+            "consensus": 12.0,
+            "analysts": 42,
+            "updateTime": (as_of - timedelta(days=30)).strftime("%Y-%m-%dT08:00:00Z"),
+            "source": "daily_export",
+        },
+        {
+            "date": as_of.strftime("%Y-%m-%d"),
+            "ticker": ticker,
+            "reportedFiscalPeriodEnding": fiscal,
+            "consensus": 15.0,
+            "analysts": 43,
+            "updateTime": as_of.strftime("%Y-%m-%dT08:00:00Z"),
+            "source": "daily_export",
+        },
+    ]
+    return rows, as_of
+
+
+def test_fresh_clone_history_reconstruction(fixture: Path) -> None:
+    """PRIMARY ACCEPTANCE: Git-tracked canonical files alone rebuild Internal 30/60/90D."""
+    _reset_canonical(fixture)
+    ceh = import_mod(fixture, "canonical_eps_history")
+    rw = import_mod(fixture, "revision_windows")
+    rows, as_of = _fresh_clone_seed_rows()
+    _write_canonical_rows(fixture, rows)
+    daily_path = ceh.materialize_runtime_daily(fixture)
+    daily_rows = ceh.load_jsonl_rows(daily_path)
+    key = rw.fiscal_identity_key("NVDA", "Jan 2028")
+    windows_before = _compute_internal_windows(fixture, daily_rows, as_of)
+    w_before = windows_before[key]
+    ok = w_before[30].get("status") == "ok"
+    ok = ok and w_before[60].get("status") == "ok"
+    ok = ok and w_before[90].get("status") == "ok"
+
+    expected = {n: _window_cmp_fields(w_before[n]) for n in (30, 60, 90)}
+
+    # Simulate a fresh clone: only Git-tracked files survive.
+    clone = fixture / "_fresh_clone"
+    if clone.exists():
+        shutil.rmtree(clone)
+    (clone / "tools").mkdir(parents=True)
+    for name in (
+        "canonical_eps_history.py",
+        "revision_windows.py",
+        "sa_parser.py",
+        "atomic_io.py",
+    ):
+        shutil.copy2(fixture / "tools" / name, clone / "tools" / name)
+    hist_src = fixture / "data" / "history" / "eps_daily"
+    hist_dst = clone / "data" / "history" / "eps_daily"
+    hist_dst.mkdir(parents=True, exist_ok=True)
+    for p in hist_src.glob("*.jsonl"):
+        shutil.copy2(p, hist_dst / p.name)
+
+    # git-init the clone and commit only tracked canonical + tools; then wipe runtime
+    subprocess.run(["git", "init"], cwd=str(clone), check=True, capture_output=True)
+    subprocess.run(
+        ["git", "add", "--", "data/history/eps_daily", "tools"],
+        cwd=str(clone),
+        check=True,
+        capture_output=True,
+    )
+    subprocess.run(
+        [
+            "git",
+            "-c", "user.email=test@example.com",
+            "-c", "user.name=test",
+            "commit",
+            "-m",
+            "canonical history",
+        ],
+        cwd=str(clone),
+        check=True,
+        capture_output=True,
+    )
+    # Delete runtime + generations if present; keep only git-tracked files
+    for rel in ("data/daily_eps_snapshots", "data/generations", "data/CURRENT.json"):
+        p = clone / rel
+        if p.is_dir():
+            shutil.rmtree(p)
+        elif p.is_file():
+            p.unlink()
+    subprocess.run(["git", "clean", "-fdx", "-e", ".git"], cwd=str(clone), check=True, capture_output=True)
+    tracked = subprocess.run(
+        ["git", "ls-files"],
+        cwd=str(clone),
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout
+    ok = ok and "data/history/eps_daily/" in tracked
+    ok = ok and "daily.jsonl" not in tracked
+    ok = ok and not (clone / "data" / "daily_eps_snapshots").exists()
+    ok = ok and not (clone / "data" / "generations").exists()
+
+    rebuilt = ceh.materialize_runtime_daily(clone)
+    rebuilt_rows = ceh.load_jsonl_rows(rebuilt)
+    windows_after = _compute_internal_windows(clone, rebuilt_rows, as_of)
+    w_after = windows_after.get(key) or {}
+    for n in (30, 60, 90):
+        got = _window_cmp_fields(w_after.get(n) or {})
+        ok = ok and got == expected[n]
+        ok = ok and (w_after.get(n) or {}).get("status") == "ok"
+
+    # Also: wiping runtime in the original fixture and rebuilding matches
+    ddir = fixture / "data" / "daily_eps_snapshots"
+    gdir = fixture / "data" / "generations"
+    if ddir.exists():
+        shutil.rmtree(ddir)
+    if gdir.exists():
+        shutil.rmtree(gdir)
+    ceh.materialize_runtime_daily(fixture)
+    again = ceh.load_jsonl_rows(ceh.runtime_daily_path(fixture))
+    w2 = _compute_internal_windows(fixture, again, as_of)[key]
+    for n in (30, 60, 90):
+        ok = ok and _window_cmp_fields(w2[n]) == expected[n]
+
+    record(
+        "fresh_clone_history_reconstruction_test",
+        ok,
+        f"30={expected[30]} after={_window_cmp_fields(w_after.get(30) or {})}",
+    )
+
+
+def test_canonical_history_exact_replay_idempotent(fixture: Path) -> None:
+    _reset_canonical(fixture)
+    ceh = import_mod(fixture, "canonical_eps_history")
+    rows, _ = _fresh_clone_seed_rows()
+    _write_canonical_rows(fixture, rows)
+    before = {}
+    for p in ceh.list_month_files(fixture):
+        before[p.name] = p.read_bytes()
+    payloads = ceh.build_generation_month_payloads(fixture, rows)
+    ok = payloads == {}
+    _write_canonical_rows(fixture, rows)
+    after = {p.name: p.read_bytes() for p in ceh.list_month_files(fixture)}
+    ok = ok and after == before
+    n1 = len(ceh.load_all_canonical_rows(fixture))
+    n2 = len(ceh.admitted_observations(rows))
+    ok = ok and n1 == n2
+    record("canonical_history_exact_replay_idempotent_test", ok, f"n={n1} payloads={list(payloads)}")
+
+
+def test_same_day_multiple_observations_preserved(fixture: Path) -> None:
+    _reset_canonical(fixture)
+    ceh = import_mod(fixture, "canonical_eps_history")
+    rows = [
+        {
+            "date": "2026-09-15",
+            "ticker": "NVDA",
+            "reportedFiscalPeriodEnding": "Jan 2028",
+            "consensus": 10.0,
+            "updateTime": "2026-09-15T08:00:00Z",
+            "source": "daily_export",
+        },
+        {
+            "date": "2026-09-15",
+            "ticker": "NVDA",
+            "reportedFiscalPeriodEnding": "Jan 2028",
+            "consensus": 12.0,
+            "updateTime": "2026-09-15T18:00:00Z",
+            "source": "daily_export",
+        },
+    ]
+    _write_canonical_rows(fixture, rows)
+    loaded = ceh.load_all_canonical_rows(fixture)
+    ok = len(loaded) == 2
+    times = [r.get("updateTime") for r in loaded]
+    ok = ok and "2026-09-15T08:00:00Z" in times and "2026-09-15T18:00:00Z" in times
+    cons = sorted(float(r["consensus"]) for r in loaded)
+    ok = ok and cons == [10.0, 12.0]
+    record("same_day_multiple_observations_preserved_test", ok, f"n={len(loaded)} times={times}")
+
+
+def test_canonical_history_missing_updatetime_deterministic(fixture: Path) -> None:
+    _reset_canonical(fixture)
+    ceh = import_mod(fixture, "canonical_eps_history")
+    row = {
+        "date": "2026-09-15",
+        "ticker": "NVDA",
+        "reportedFiscalPeriodEnding": "Jan 2028",
+        "consensus": 15.5,
+        "source": "daily_export",
+    }
+    obs = ceh.canonical_observation_from_row(row)
+    ok = obs is not None and obs.get("updateTime") == "2026-09-15T00:00:00Z"
+    ident_a = ceh.observation_identity(row)
+    ident_b = ceh.observation_identity({**row, "updateTime": "2026-09-15T00:00:00Z"})
+    ok = ok and ident_a == ident_b
+    _write_canonical_rows(fixture, [row])
+    _write_canonical_rows(fixture, [row])  # replay still missing updateTime
+    loaded = ceh.load_all_canonical_rows(fixture)
+    ok = ok and len(loaded) == 1
+    ok = ok and loaded[0]["updateTime"] == "2026-09-15T00:00:00Z"
+    record(
+        "canonical_history_missing_updatetime_deterministic_test",
+        ok,
+        f"ut={obs.get('updateTime') if obs else None} n={len(loaded)}",
+    )
+
+
+def test_failed_ingest_does_not_mutate_canonical_history(fixture: Path) -> None:
+    """Rejected / non-publishable ingest must not append canonical history."""
+    import os
+    _reset_canonical(fixture)
+    ceh = import_mod(fixture, "canonical_eps_history")
+    seed, _ = _fresh_clone_seed_rows()
+    _write_canonical_rows(fixture, seed)
+    before = {p.name: p.read_bytes() for p in ceh.list_month_files(fixture)}
+    ing = import_mod(fixture, "ingest_snapshot")
+    ing.rebind_paths(fixture)
+    bad = {
+        "snapshot_utc": "2026-09-16T12:00:00Z",
+        "source": "fixture",
+        "tickers": {
+            "NVDA": {
+                "price": 0,
+                "eps": {
+                    "2026E": {
+                        "consensus": 1.0,
+                        "high": 1.1,
+                        "low": 0.9,
+                        "analysts": 5,
+                        "rev_1M_pct": 0.1,
+                        "reported_fiscal_label": "Jan 2027",
+                    },
+                    "2027E": {
+                        "consensus": 99.0,
+                        "high": 2.1,
+                        "low": 1.9,
+                        "analysts": 5,
+                        "rev_1M_pct": 0.1,
+                        "reported_fiscal_label": "Jan 2028",
+                    },
+                },
+            }
+        },
+    }
+    incoming = fixture / "data" / "incoming" / "2026-09-16T120000Z.json"
+    incoming.parent.mkdir(parents=True, exist_ok=True)
+    incoming.write_text(json.dumps(bad, indent=2), encoding="utf-8")
+    os.environ["PIPELINE_LOCK_HELD"] = "1"
+    os.environ["SKIP_CANONICAL_GIT_PERSIST"] = "1"
+    result = ing.ingest_and_build(incoming, expected_tickers=["NVDA"], run_export=False, run_publish=False)
+    after = {p.name: p.read_bytes() for p in ceh.list_month_files(fixture)}
+    ok = result.get("ok") is False
+    ok = ok and (result.get("runStatus") == "aborted" or result.get("quarantinePath"))
+    ok = ok and after == before
+    record(
+        "failed_ingest_does_not_mutate_canonical_history_test",
+        ok,
+        f"status={result.get('runStatus')} q={result.get('quarantinePath')} same={after==before}",
+    )
+
+
+def test_crash_before_financial_commit_does_not_mutate_canonical_history(fixture: Path) -> None:
+    import os
+    _reset_canonical(fixture)
+    ceh = import_mod(fixture, "canonical_eps_history")
+    seed, _ = _fresh_clone_seed_rows()
+    _write_canonical_rows(fixture, seed)
+    before = {p.name: p.read_bytes() for p in ceh.list_month_files(fixture)}
+    ing = import_mod(fixture, "ingest_snapshot")
+    ing.rebind_paths(fixture)
+    snap = _load_base_snap(fixture)
+    snap["snapshot_utc"] = "2026-09-14T13:00:00Z"
+    u = json.loads((fixture / "data" / "universe.json").read_text(encoding="utf-8"))
+    for t in u.get("tickers") or []:
+        if t not in (snap.get("tickers") or {}):
+            snap.setdefault("tickers", {})[t] = _good_ticker()
+    if "NVDA" in snap["tickers"]:
+        row = snap["tickers"]["NVDA"]["eps"].get("2027E") or {}
+        row["consensus"] = float(row.get("consensus") or 15) + 0.33
+        snap["tickers"]["NVDA"]["eps"]["2027E"] = row
+    incoming = _write_incoming_from_snap(fixture, snap)
+    os.environ["PIPELINE_LOCK_HELD"] = "1"
+    os.environ["SKIP_CANONICAL_GIT_PERSIST"] = "1"
+    os.environ["FAULT_INJECT_COMMIT_FAIL"] = "1"
+    try:
+        result = ing.ingest_and_build(incoming, run_export=True, run_publish=False)
+    finally:
+        os.environ.pop("FAULT_INJECT_COMMIT_FAIL", None)
+    after = {p.name: p.read_bytes() for p in ceh.list_month_files(fixture)}
+    cur = ing.read_current_pointer()
+    ok = result.get("runStatus") == "aborted"
+    ok = ok and after == before
+    ok = ok and (cur is None or cur.get("snapshot_utc") != "2026-09-14T13:00:00Z")
+    record(
+        "crash_before_financial_commit_does_not_mutate_canonical_history_test",
+        ok,
+        f"status={result.get('runStatus')} same={after==before}",
+    )
+
+
+def test_monthly_rollover_history(fixture: Path) -> None:
+    _reset_canonical(fixture)
+    ceh = import_mod(fixture, "canonical_eps_history")
+    rows = [
+        {
+            "date": "2026-09-30",
+            "ticker": "NVDA",
+            "reportedFiscalPeriodEnding": "Jan 2028",
+            "consensus": 10.0,
+            "updateTime": "2026-09-30T08:00:00Z",
+            "source": "daily_export",
+        },
+        {
+            "date": "2026-10-01",
+            "ticker": "NVDA",
+            "reportedFiscalPeriodEnding": "Jan 2028",
+            "consensus": 10.1,
+            "updateTime": "2026-10-01T08:00:00Z",
+            "source": "daily_export",
+        },
+    ]
+    _write_canonical_rows(fixture, rows)
+    names = [p.name for p in ceh.list_month_files(fixture)]
+    ok = "2026-09.jsonl" in names and "2026-10.jsonl" in names
+    sep = ceh.load_jsonl_rows(ceh.month_file_path(fixture, "2026-09"))
+    octo = ceh.load_jsonl_rows(ceh.month_file_path(fixture, "2026-10"))
+    ok = ok and len(sep) == 1 and sep[0]["date"] == "2026-09-30"
+    ok = ok and len(octo) == 1 and octo[0]["date"] == "2026-10-01"
+    record("monthly_rollover_history_test", ok, f"files={names}")
+
+
+def test_canonical_to_runtime_deterministic(fixture: Path) -> None:
+    _reset_canonical(fixture)
+    ceh = import_mod(fixture, "canonical_eps_history")
+    rows, _ = _fresh_clone_seed_rows()
+    rows = list(rows) + [
+        {
+            "date": "2026-09-15",
+            "ticker": "NVDA",
+            "reportedFiscalPeriodEnding": "Jan 2028",
+            "consensus": 15.2,
+            "updateTime": "2026-09-15T18:00:00Z",
+            "source": "daily_export",
+        },
+        {
+            "date": "not-a-date",
+            "ticker": "NVDA",
+            "reportedFiscalPeriodEnding": "Jan 2028",
+            "consensus": 99.0,
+            "source": "daily_export",
+        },
+        {"this": "is not json-admissible", "consensus": None},
+        {
+            "date": "2026-09-15",
+            "ticker": "MSFT",
+            "reportedFiscalPeriodEnding": "Jun 2027",
+            "consensus": "N/A",
+            "source": "daily_export",
+        },
+    ]
+    _write_canonical_rows(fixture, rows)
+    # Inject a malformed line into the month file — materializer must reject it
+    month = ceh.month_file_path(fixture, "2026-09")
+    buf = month.read_text(encoding="utf-8") if month.exists() else ""
+    buf += "NOT JSON\n"
+    buf += json.dumps({"date": "2026-09-15", "ticker": "AVGO", "consensus": None}) + "\n"
+    month.parent.mkdir(parents=True, exist_ok=True)
+    month.write_text(buf, encoding="utf-8")
+    p1 = ceh.materialize_runtime_daily(fixture)
+    b1 = p1.read_bytes()
+    p2 = ceh.materialize_runtime_daily(fixture)
+    b2 = p2.read_bytes()
+    ok = b1 == b2
+    loaded = ceh.load_jsonl_rows(p1)
+    dates = [r["date"] for r in loaded]
+    ok = ok and "not-a-date" not in dates
+    ok = ok and all(r.get("consensus") is not None for r in loaded)
+    ok = ok and all("mappedYear" not in r and "slot" not in r for r in loaded)
+    text = p1.read_text(encoding="utf-8")
+    ok = ok and "NOT JSON" not in text
+    # unsorted incoming should still produce sorted runtime
+    shuffled = list(reversed(ceh.load_all_canonical_rows(fixture)))
+    hist = ceh.history_dir(fixture)
+    for p in list(hist.glob("*.jsonl")):
+        p.unlink()
+    _write_canonical_rows(fixture, shuffled)
+    b3 = ceh.materialize_runtime_daily(fixture).read_bytes()
+    ok = ok and b3 == b1
+    record("canonical_to_runtime_deterministic_test", ok, f"bytes={len(b1)} n={len(loaded)}")
+
+
+def test_canonical_history_no_mapped_year_identity(fixture: Path) -> None:
+    _reset_canonical(fixture)
+    ceh = import_mod(fixture, "canonical_eps_history")
+    base = {
+        "date": "2026-09-15",
+        "ticker": "NVDA",
+        "reportedFiscalPeriodEnding": "Jan 2028",
+        "consensus": 15.0,
+        "updateTime": "2026-09-15T08:00:00Z",
+        "source": "daily_export",
+    }
+    a = {**base, "mappedYear": "2027E", "slot": "2027E"}
+    b = {**base, "mappedYear": "2028E", "slot": "2028E", "consensus": 99.0}
+    ident_a = ceh.observation_identity(a)
+    ident_b = ceh.observation_identity(b)
+    ok = ident_a is not None and ident_a == ident_b
+    _write_canonical_rows(fixture, [a, b])
+    loaded = ceh.load_all_canonical_rows(fixture)
+    ok = ok and len(loaded) == 1
+    ok = ok and abs(float(loaded[0]["consensus"]) - 15.0) < 1e-9
+    ok = ok and "mappedYear" not in loaded[0]
+    # Different fiscal, same mappedYear → two identities
+    other = {
+        **base,
+        "reportedFiscalPeriodEnding": "Jan 2029",
+        "mappedYear": "2027E",
+        "consensus": 16.0,
+        "updateTime": "2026-09-15T08:00:00Z",
+    }
+    _write_canonical_rows(fixture, [other])
+    loaded2 = ceh.load_all_canonical_rows(fixture)
+    ok = ok and len(loaded2) == 2
+    fiscals = {r["reportedFiscalPeriodEnding"] for r in loaded2}
+    ok = ok and fiscals == {"Jan 2028", "Jan 2029"}
+    record(
+        "canonical_history_no_mapped_year_identity_test",
+        ok,
+        f"n={len(loaded2)} fiscals={fiscals}",
+    )
+
+
 # Suite classification: integration = subprocess/crash/publish/heavy ingest
 INTEGRATION_TEST_NAMES = {
     "test_full_export_2027_rollover",
@@ -6019,6 +6538,7 @@ INTEGRATION_TEST_NAMES = {
     "test_same_second_identical_ingest_has_unique_run_id",
     "test_committed_generation_never_mutated_by_replay",
     "test_materialized_marker_with_missing_live_file_repairs_from_current",
+    "test_crash_before_financial_commit_does_not_mutate_canonical_history",
 }
 
 
@@ -6194,6 +6714,16 @@ def _all_suite_tests():
         ("test_internal_30d_no_revision_event_fallback", test_internal_30d_no_revision_event_fallback),
         ("test_internal_30d_missing_daily_does_not_false_resolve", test_internal_30d_missing_daily_does_not_false_resolve),
         ("test_internal_30d_valid_window_below_4pct_resolves", test_internal_30d_valid_window_below_4pct_resolves),
+        # Durable Git Canonical EPS History
+        ("test_fresh_clone_history_reconstruction", test_fresh_clone_history_reconstruction),
+        ("test_canonical_history_exact_replay_idempotent", test_canonical_history_exact_replay_idempotent),
+        ("test_same_day_multiple_observations_preserved", test_same_day_multiple_observations_preserved),
+        ("test_canonical_history_missing_updatetime_deterministic", test_canonical_history_missing_updatetime_deterministic),
+        ("test_failed_ingest_does_not_mutate_canonical_history", test_failed_ingest_does_not_mutate_canonical_history),
+        ("test_crash_before_financial_commit_does_not_mutate_canonical_history", test_crash_before_financial_commit_does_not_mutate_canonical_history),
+        ("test_monthly_rollover_history", test_monthly_rollover_history),
+        ("test_canonical_to_runtime_deterministic", test_canonical_to_runtime_deterministic),
+        ("test_canonical_history_no_mapped_year_identity", test_canonical_history_no_mapped_year_identity),
     ]
 
 
@@ -6227,10 +6757,12 @@ def main(suite: str = "all", unit_timeout_s: float = 25.0, integration_timeout_s
     Unit target <30s wall; integration covers subprocess/crash/publish.
     """
     import time
+    import os
     global PASS, FAIL, RESULTS
     PASS = 0
     FAIL = 0
     RESULTS = []
+    os.environ.setdefault("SKIP_CANONICAL_GIT_PERSIST", "1")
 
     label = {
         "all": "Commit Semantics + Single Writer + Release Identity (unit+integration)",

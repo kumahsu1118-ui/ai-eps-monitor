@@ -15,9 +15,13 @@ Buy-side monitor for NVDA, AVGO, TSM, MSFT, BE, KEYS.
 
 | Path | Role |
 |------|------|
-| `tools/` | Exporter, alert engine, SA parser, acceptance tests, publish |
+| `tools/` | Exporter, alert engine, SA parser, acceptance tests, publish, canonical history writer/materializer |
 | `web/` | SPA (`index.html`, `app.js`, `styles.css`) + exported `web/data/*.json` |
-| `data/` | Pipeline DB (`snapshots/`, `revisions/`, `drivers/`, `earnings/`, `alerts/`) **and** Pages public JSON at `data/*.json` |
+| `data/history/eps_daily/` | **Canonical durable EPS daily history** (Git-tracked monthly JSONL). Fresh clone SoT for Internal 30D/60D/90D. |
+| `data/daily_eps_snapshots/daily.jsonl` | Runtime cache materialized from canonical history (not sole durable SoT; not Git-tracked). |
+| `data/generations/<runId>/` | Immutable committed generation packages; `data/CURRENT.json` is the financial commit pointer. Not Git-tracked. |
+| `data/*.json`, `web/data/*.json` | Public derived exports (Pages payload). |
+| `data/` (other) | Pipeline DB (`snapshots/`, `revisions/`, `drivers/`, `earnings/`, `alerts/`) |
 | `tests/fixtures/` | Sanitized universe/snapshots + SA HTML parser fixtures |
 | `docs/` | Mapping audit, pipeline, Round 2 spec, test results |
 
@@ -27,6 +31,9 @@ GitHub Pages is served from the **repo root**. Ingest is the sole pipeline write
 python3 tools/ingest_snapshot.py --publish
 # or publish-only from CURRENT generation web/:
 bash tools/publish_github_pages.sh
+
+# Rebuild runtime daily.jsonl from Git-tracked canonical history (fresh clone):
+python3 tools/canonical_eps_history.py --materialize
 ```
 
 ## Tests (must PASS on a clean checkout)
