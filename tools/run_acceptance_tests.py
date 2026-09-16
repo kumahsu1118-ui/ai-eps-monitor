@@ -145,6 +145,7 @@ def build_fixture(dest: Path) -> Path:
         "canonical_eps_history.py",
         "migrate_eps_history.py",
         "rebuild_daily_history.py",
+        "collection_freshness.py",
         "health_check.py",
         "publish_github_pages.sh",
         "build_review_zip.sh",
@@ -7574,6 +7575,9 @@ _HC_TICKER_FISCAL = {
 }
 
 
+_HC_NOW = datetime(2026, 9, 15, 18, 30, 0, tzinfo=timezone.utc)
+
+
 def _hc_window_rows(ticker: str, fiscal: str, *, as_of: datetime | None = None) -> list[dict]:
     as_of = as_of or datetime(2026, 9, 15, 18, 0, 0, tzinfo=timezone.utc)
     rows = []
@@ -7663,7 +7667,7 @@ def test_health_check_is_read_only(fixture: Path) -> None:
     current_before = (fixture / "data" / "CURRENT.json").read_bytes()
     daily_before = (fixture / "data" / "daily_eps_snapshots" / "daily.jsonl").read_bytes()
     hist_before = {p.name: p.read_bytes() for p in (fixture / "data" / "history" / "eps_daily").glob("*.jsonl")}
-    report = hc.run_health_check(fixture)
+    report = hc.run_health_check(fixture, now=_HC_NOW)
     after = hc.fingerprint_production(fixture)
     ok = report.get("mutated") is False
     ok = ok and before == after
@@ -7681,7 +7685,7 @@ def test_health_check_is_read_only(fixture: Path) -> None:
 def test_health_check_healthy_workspace(fixture: Path) -> None:
     _hc_prepare_healthy(fixture)
     hc = import_mod(fixture, "health_check")
-    report = hc.run_health_check(fixture)
+    report = hc.run_health_check(fixture, now=_HC_NOW)
     by = _hc_by_name(report)
     ok = report.get("status") == "HEALTHY"
     for name in (
@@ -7710,7 +7714,7 @@ def test_health_check_canonical_invalid_failed(fixture: Path) -> None:
     hist.mkdir(parents=True, exist_ok=True)
     (hist / "2026-09.jsonl").write_text("{not-json\n", encoding="utf-8")
     hc = import_mod(fixture, "health_check")
-    report = hc.run_health_check(fixture)
+    report = hc.run_health_check(fixture, now=_HC_NOW)
     by = _hc_by_name(report)
     ok = report.get("status") == "FAILED"
     ok = ok and by.get("canonical_history", {}).get("status") == "FAILED"
@@ -7735,7 +7739,7 @@ def test_health_check_runtime_mismatch_failed(fixture: Path) -> None:
     with daily.open("a", encoding="utf-8") as f:
         f.write(json.dumps(extra) + "\n")
     hc = import_mod(fixture, "health_check")
-    report = hc.run_health_check(fixture)
+    report = hc.run_health_check(fixture, now=_HC_NOW)
     by = _hc_by_name(report)
     ok = report.get("status") == "FAILED"
     ok = ok and by.get("runtime_materialization", {}).get("status") == "FAILED"
@@ -7752,7 +7756,7 @@ def test_health_check_missing_runtime_and_current_degraded(fixture: Path) -> Non
     _write_canonical_rows(fixture, rows)
     _hc_write_meta(fixture)
     hc = import_mod(fixture, "health_check")
-    report = hc.run_health_check(fixture)
+    report = hc.run_health_check(fixture, now=_HC_NOW)
     by = _hc_by_name(report)
     ok = report.get("status") == "DEGRADED"
     ok = ok and by.get("runtime_materialization", {}).get("status") == "DEGRADED"
@@ -7783,7 +7787,7 @@ def test_health_check_quarantine_git_collection_and_readiness(fixture: Path) -> 
     _hc_write_git_state(fixture, "pending")
     _hc_write_meta(fixture, collectionStatus="partial", collectionStatusLabel="PARTIAL", failedTickers=["BE"])
     hc = import_mod(fixture, "health_check")
-    report = hc.run_health_check(fixture)
+    report = hc.run_health_check(fixture, now=_HC_NOW)
     by = _hc_by_name(report)
     ok = report.get("status") == "DEGRADED"
     ok = ok and by.get("quarantine", {}).get("status") == "DEGRADED"
@@ -7812,7 +7816,7 @@ def test_health_check_git_failed_and_dangling_current(fixture: Path) -> None:
     )
     _hc_write_git_state(fixture, "failed")
     hc = import_mod(fixture, "health_check")
-    report = hc.run_health_check(fixture)
+    report = hc.run_health_check(fixture, now=_HC_NOW)
     by = _hc_by_name(report)
     ok = report.get("status") == "FAILED"
     ok = ok and by.get("current_pointer", {}).get("status") == "FAILED"
@@ -7841,6 +7845,159 @@ def test_health_check_exit_codes(fixture: Path) -> None:
     )
 
 
+def test_health_check_recent_collection_ages_last_success(fixture: Path) -> None:
+    """Recompute freshness vs supplied now; ignore frozen COMPLETE/dataStale=false."""
+    hc = import_mod(fixture, "health_check")
+    exp = import_mod(fixture, "export_web_data")
+
+    def _coll(last_iso: str, now: datetime, **over) -> dict:
+        _hc_reset(fixture)
+        _hc_write_meta(
+            fixture,
+            lastSuccessfulCollection=last_iso,
+            dataStale=False,
+            collectionStatus="complete",
+            collectionStatusLabel="COMPLETE",
+            **over,
+        )
+        return hc.check_recent_collection(fixture, now=now)
+
+    # Recent expected weekday collection (Wed 2026-09-16 after 08:00 Taipei).
+    last_wed = datetime(2026, 9, 16, 1, 2, 34, tzinfo=timezone.utc)  # 09:02 Taipei
+    now_wed = datetime(2026, 9, 16, 8, 0, 0, tzinfo=timezone.utc)  # 16:00 Taipei
+    recent = _coll(last_wed.strftime("%Y-%m-%dT%H:%M:%SZ"), now_wed)
+
+    # Friday success remains healthy through Sat/Sun (and Monday before grace expiry).
+    friday = datetime(2026, 9, 11, 9, 0, 0, tzinfo=TAIPEI)
+    fri_iso = friday.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    sat = _coll(fri_iso, datetime(2026, 9, 12, 12, 0, 0, tzinfo=TAIPEI))
+    sun = _coll(fri_iso, datetime(2026, 9, 13, 12, 0, 0, tzinfo=TAIPEI))
+    mon_am = _coll(fri_iso, datetime(2026, 9, 14, 10, 0, 0, tzinfo=TAIPEI))
+
+    # Next expected weekday refresh missed (Monday after 08:00+grace).
+    mon_pm = _coll(fri_iso, datetime(2026, 9, 14, 15, 0, 0, tzinfo=TAIPEI))
+
+    # Several-days-old collection, frozen COMPLETE meta.
+    old = _coll("2026-09-10T01:00:00Z", datetime(2026, 9, 16, 8, 0, 0, tzinfo=timezone.utc))
+
+    # Malformed timestamp must not be HEALTHY (fail-closed).
+    bad = _coll("not-a-timestamp", now_wed)
+
+    # Lockstep with exporter schedule rule.
+    f_sat = exp.compute_freshness(fri_iso, now=datetime(2026, 9, 12, 12, 0, 0, tzinfo=TAIPEI))
+    f_mon_pm = exp.compute_freshness(fri_iso, now=datetime(2026, 9, 14, 15, 0, 0, tzinfo=TAIPEI))
+    ok = recent.get("status") == "HEALTHY"
+    ok = ok and sat.get("status") == "HEALTHY" and sun.get("status") == "HEALTHY"
+    ok = ok and mon_am.get("status") == "HEALTHY"
+    ok = ok and mon_pm.get("status") == "DEGRADED"
+    ok = ok and old.get("status") == "DEGRADED"
+    ok = ok and bad.get("status") == "FAILED"
+    ok = ok and bad.get("status") != "HEALTHY"
+    ok = ok and f_sat.get("dataStale") is False and f_mon_pm.get("dataStale") is True
+    ok = ok and (sat.get("details") or {}).get("freshness", {}).get("dataStale") is False
+    ok = ok and (mon_pm.get("details") or {}).get("freshness", {}).get("dataStale") is True
+    record(
+        "health_check_recent_collection_ages_last_success_test",
+        ok,
+        f"recent={recent.get('status')} sat={sat.get('status')} sun={sun.get('status')} "
+        f"mon_am={mon_am.get('status')} mon_pm={mon_pm.get('status')} old={old.get('status')} "
+        f"bad={bad.get('status')}",
+    )
+
+
+def test_health_check_unpushed_canonical_commit_degraded(fixture: Path) -> None:
+    """Bare remote: pushed baseline HEALTHY; local unpushed canonical commit DEGRADED; push HEALTHY."""
+    hc = import_mod(fixture, "health_check")
+    ceh = import_mod(fixture, "canonical_eps_history")
+    work = fixture / "_hc_git_work"
+    bare = fixture / "_hc_git_remote.git"
+    for p in (work, bare):
+        if p.exists():
+            shutil.rmtree(p)
+    bare.mkdir(parents=True)
+    _git_in(bare, ["init", "--bare"])
+    _git_in(bare, ["symbolic-ref", "HEAD", "refs/heads/main"], check=False)
+    hist = work / "data" / "history" / "eps_daily"
+    hist.mkdir(parents=True)
+    row1 = {
+        "date": "2026-09-15",
+        "ticker": "NVDA",
+        "reportedFiscalPeriodEnding": "Jan 2028",
+        "consensus": 15.0,
+        "analysts": 40,
+        "updateTime": "2026-09-15T08:00:00Z",
+    }
+    (hist / "2026-09.jsonl").write_text(ceh.dumps_canonical_row(row1) + "\n", encoding="utf-8")
+    _git_in(work, ["init"])
+    _git_in(work, ["symbolic-ref", "HEAD", "refs/heads/main"], check=False)
+    _git_in(work, ["add", "--", "data/history/eps_daily"])
+    _git_in(
+        work,
+        [
+            "-c", "user.email=test@example.com",
+            "-c", "user.name=test",
+            "-c", "commit.gpgsign=false",
+            "commit",
+            "-m",
+            "baseline canonical",
+        ],
+    )
+    _git_in(work, ["remote", "add", "origin", str(bare)])
+    _git_in(work, ["push", "-u", "origin", "HEAD"])
+
+    prev_skip = os.environ.get("SKIP_CANONICAL_GIT_PERSIST")
+    prev_push = os.environ.get("SKIP_CANONICAL_GIT_PUSH")
+    os.environ.pop("SKIP_CANONICAL_GIT_PERSIST", None)
+    os.environ.pop("SKIP_CANONICAL_GIT_PUSH", None)
+    try:
+        c1 = hc.check_canonical_git_sync(work)
+        porcelain1 = _git_in(work, ["status", "--porcelain"])
+        row2 = dict(row1)
+        row2["date"] = "2026-09-16"
+        row2["updateTime"] = "2026-09-16T08:00:00Z"
+        row2["consensus"] = 15.5
+        with (hist / "2026-09.jsonl").open("a", encoding="utf-8") as f:
+            f.write(ceh.dumps_canonical_row(row2) + "\n")
+        _git_in(work, ["add", "--", "data/history/eps_daily"])
+        _git_in(
+            work,
+            [
+                "-c", "user.email=test@example.com",
+                "-c", "user.name=test",
+                "-c", "commit.gpgsign=false",
+                "commit",
+                "-m",
+                "unpushed canonical",
+            ],
+        )
+        porcelain2 = _git_in(work, ["status", "--porcelain"])
+        c2 = hc.check_canonical_git_sync(work)
+        _git_in(work, ["push"])
+        c3 = hc.check_canonical_git_sync(work)
+    finally:
+        if prev_skip is not None:
+            os.environ["SKIP_CANONICAL_GIT_PERSIST"] = prev_skip
+        else:
+            os.environ["SKIP_CANONICAL_GIT_PERSIST"] = "1"
+        if prev_push is not None:
+            os.environ["SKIP_CANONICAL_GIT_PUSH"] = prev_push
+        else:
+            os.environ["SKIP_CANONICAL_GIT_PUSH"] = "1"
+
+    ok = c1.get("status") == "HEALTHY"
+    ok = ok and not (porcelain1.stdout or "").strip()
+    ok = ok and not (porcelain2.stdout or "").strip()
+    ok = ok and c2.get("status") == "DEGRADED"
+    ok = ok and bool((c2.get("details") or {}).get("divergence", {}).get("canonicalAhead"))
+    ok = ok and c3.get("status") == "HEALTHY"
+    record(
+        "health_check_unpushed_canonical_commit_degraded_test",
+        ok,
+        f"pushed={c1.get('status')} unpushed={c2.get('status')} after_push={c3.get('status')} "
+        f"clean2={not bool((porcelain2.stdout or '').strip())}",
+    )
+
+
 def test_health_check_cli_subprocess_read_only(fixture: Path) -> None:
     """CLI subprocess: JSON + human output, no runtime materialize, --allow-degraded."""
     _hc_reset(fixture)
@@ -7856,7 +8013,16 @@ def test_health_check_cli_subprocess_read_only(fixture: Path) -> None:
     env["SKIP_CANONICAL_GIT_PERSIST"] = "1"
     env["SKIP_CANONICAL_GIT_PUSH"] = "1"
     proc = subprocess.run(
-        [sys.executable, str(script), "--root", str(fixture), "--json", "--allow-degraded"],
+        [
+            sys.executable,
+            str(script),
+            "--root",
+            str(fixture),
+            "--json",
+            "--allow-degraded",
+            "--now",
+            "2026-09-15T18:30:00Z",
+        ],
         cwd=str(fixture),
         env=env,
         capture_output=True,
@@ -7874,7 +8040,15 @@ def test_health_check_cli_subprocess_read_only(fixture: Path) -> None:
     ok = ok and "Pipeline health:" in (proc.stderr or "")
     ok = ok and report.get("status") in {"HEALTHY", "DEGRADED", "FAILED"}
     strict = subprocess.run(
-        [sys.executable, str(script), "--root", str(fixture), "--json"],
+        [
+            sys.executable,
+            str(script),
+            "--root",
+            str(fixture),
+            "--json",
+            "--now",
+            "2026-09-15T18:30:00Z",
+        ],
         cwd=str(fixture),
         env=env,
         capture_output=True,
@@ -7929,6 +8103,7 @@ INTEGRATION_TEST_NAMES = {
     "test_corrupt_pending_daily_rows_aborts_before_current",
     "test_migration_apply_busy_when_pipeline_locked",
     "test_health_check_cli_subprocess_read_only",
+    "test_health_check_unpushed_canonical_commit_degraded",
 }
 
 
@@ -8147,6 +8322,8 @@ def _all_suite_tests():
         ("test_health_check_quarantine_git_collection_and_readiness", test_health_check_quarantine_git_collection_and_readiness),
         ("test_health_check_git_failed_and_dangling_current", test_health_check_git_failed_and_dangling_current),
         ("test_health_check_exit_codes", test_health_check_exit_codes),
+        ("test_health_check_recent_collection_ages_last_success", test_health_check_recent_collection_ages_last_success),
+        ("test_health_check_unpushed_canonical_commit_degraded", test_health_check_unpushed_canonical_commit_degraded),
         ("test_health_check_cli_subprocess_read_only", test_health_check_cli_subprocess_read_only),
     ]
 

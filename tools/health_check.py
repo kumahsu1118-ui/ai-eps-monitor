@@ -10,8 +10,8 @@ Checks
 1. Canonical history validity (Git-tracked ``data/history/eps_daily/``)
 2. Runtime materialization health (compare cache to canonical in memory)
 3. CURRENT presence/integrity (as applicable on checkout)
-4. Canonical git sync state (state file + read-only porcelain)
-5. Recent collection status
+4. Canonical git sync state (state file + porcelain + read-only upstream divergence)
+5. Recent collection status (recompute freshness of lastSuccessfulCollection vs now)
 6. Quarantine status
 7. Migration audit (in-process ``plan_migration``; no --apply)
 8. Per-ticker Internal 30/60/90D history readiness
@@ -50,6 +50,7 @@ if str(_here) not in sys.path:
 
 import canonical_eps_history as ceh  # noqa: E402
 import migrate_eps_history as meh  # noqa: E402
+from collection_freshness import compute_freshness, parse_iso_dt  # noqa: E402
 from revision_windows import (  # noqa: E402
     INTERNAL_REVISION_WINDOWS,
     compute_internal_window,
@@ -475,18 +476,22 @@ def check_current_pointer(root: Path) -> dict:
     )
 
 
+def _git(root: Path, args: list[str]) -> subprocess.CompletedProcess:
+    return subprocess.run(
+        ["git", *args],
+        cwd=str(root),
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+
 def _git_porcelain_history(root: Path) -> tuple[list[str], str | None]:
     git_dir = Path(root) / ".git"
     if not git_dir.exists():
         return [], "not_a_git_repo"
     try:
-        proc = subprocess.run(
-            ["git", "status", "--porcelain", "--", "data/history/eps_daily"],
-            cwd=str(root),
-            capture_output=True,
-            text=True,
-            check=False,
-        )
+        proc = _git(root, ["status", "--porcelain", "--", "data/history/eps_daily"])
     except OSError as exc:
         return [], f"git_unavailable:{exc}"
     if proc.returncode != 0:
@@ -495,11 +500,67 @@ def _git_porcelain_history(root: Path) -> tuple[list[str], str | None]:
     return lines, None
 
 
+def canonical_history_git_divergence(root: Path) -> dict[str, Any]:
+    """Read-only equivalent of ingest ``_canonical_git_unpushed`` plus path filter.
+
+    Never fetch/push/mutate. Uses local upstream tracking refs only.
+    ``canonicalAhead`` is true when unpushed commits touch ``data/history/eps_daily``.
+    """
+    out: dict[str, Any] = {
+        "unpushed": False,
+        "reason": "not_a_git_repo",
+        "ahead": 0,
+        "canonicalAhead": False,
+        "canonicalFiles": [],
+        "upstream": None,
+        "remotes": [],
+    }
+    if not (Path(root) / ".git").exists():
+        return out
+    try:
+        rem = _git(root, ["remote"])
+    except OSError as exc:
+        out["reason"] = f"git_unavailable:{exc}"
+        return out
+    remotes = [r.strip() for r in (rem.stdout or "").splitlines() if r.strip()]
+    out["remotes"] = remotes
+    up = _git(root, ["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"])
+    upstream = (up.stdout or "").strip() if up.returncode == 0 else ""
+    out["upstream"] = upstream or None
+    if not upstream:
+        if not remotes:
+            out["reason"] = "no_remote"
+            return out
+        out["unpushed"] = True
+        out["reason"] = "no_upstream"
+        return out
+    cnt = _git(root, ["rev-list", "--count", f"{upstream}..HEAD"])
+    if cnt.returncode != 0:
+        out["unpushed"] = True
+        out["reason"] = "rev_list_failed"
+        return out
+    try:
+        n = int((cnt.stdout or "0").strip() or 0)
+    except ValueError:
+        out["unpushed"] = True
+        out["reason"] = "rev_list_unparseable"
+        return out
+    out["ahead"] = n
+    names = _git(root, ["diff", "--name-only", f"{upstream}..HEAD", "--", "data/history/eps_daily"])
+    files = [ln.strip() for ln in (names.stdout or "").splitlines() if ln.strip()]
+    out["canonicalFiles"] = files
+    out["canonicalAhead"] = n > 0 and bool(files)
+    out["unpushed"] = n > 0
+    out["reason"] = f"ahead={n}" if n else "in_sync"
+    return out
+
+
 def check_canonical_git_sync(root: Path) -> dict:
     path = Path(root) / GIT_STATE_REL
     skip_persist = os.environ.get("SKIP_CANONICAL_GIT_PERSIST") == "1"
     skip_push = os.environ.get("SKIP_CANONICAL_GIT_PUSH") == "1"
     porcelain, git_err = _git_porcelain_history(root)
+    divergence = canonical_history_git_divergence(root)
     details: dict[str, Any] = {
         "path": str(path),
         "present": path.is_file(),
@@ -508,6 +569,15 @@ def check_canonical_git_sync(root: Path) -> dict:
         "stateStatus": None,
         "porcelain": porcelain,
         "gitError": git_err,
+        "divergence": {
+            "reason": divergence.get("reason"),
+            "ahead": divergence.get("ahead"),
+            "canonicalAhead": divergence.get("canonicalAhead"),
+            "canonicalFiles": divergence.get("canonicalFiles") or [],
+            "upstream": divergence.get("upstream"),
+            "remotes": divergence.get("remotes") or [],
+            "unpushed": divergence.get("unpushed"),
+        },
     }
     state: dict = {}
     if path.is_file():
@@ -549,18 +619,63 @@ def check_canonical_git_sync(root: Path) -> dict:
             f"uncommitted canonical history paths ({len(porcelain)})",
             details,
         )
+    if skip_persist:
+        if path.is_file() and st in CANONICAL_GIT_OK:
+            return _check(
+                "canonical_git_sync",
+                STATUS_HEALTHY,
+                f"canonical git state={st} (SKIP_CANONICAL_GIT_PERSIST=1)",
+                details,
+            )
+        if not path.is_file():
+            return _check(
+                "canonical_git_sync",
+                STATUS_HEALTHY,
+                "SKIP_CANONICAL_GIT_PERSIST=1 and no state file (CI / isolated run)",
+                details,
+            )
+        return _check(
+            "canonical_git_sync",
+            STATUS_DEGRADED,
+            f"canonical git state unrecognized ({st or 'empty'})",
+            details,
+        )
+
+    # Production / non-skipped: prove remote durability without fetch/push.
+    reason = str(divergence.get("reason") or "")
+    if divergence.get("canonicalAhead"):
+        n = int(divergence.get("ahead") or 0)
+        return _check(
+            "canonical_git_sync",
+            STATUS_DEGRADED,
+            f"unpushed canonical history commits (ahead={n} of {divergence.get('upstream')})",
+            details,
+        )
+    if reason in {
+        "no_remote",
+        "no_upstream",
+        "rev_list_failed",
+        "rev_list_unparseable",
+        "not_a_git_repo",
+    } or str(reason).startswith("git_unavailable"):
+        return _check(
+            "canonical_git_sync",
+            STATUS_DEGRADED,
+            f"cannot establish remote durability of canonical history ({reason})",
+            details,
+        )
     if path.is_file() and st in CANONICAL_GIT_OK:
         return _check(
             "canonical_git_sync",
             STATUS_HEALTHY,
-            f"canonical git state={st}",
+            f"canonical git state={st} {reason}",
             details,
         )
-    if skip_persist and not path.is_file():
+    if reason == "in_sync":
         return _check(
             "canonical_git_sync",
             STATUS_HEALTHY,
-            "SKIP_CANONICAL_GIT_PERSIST=1 and no state file (CI / isolated run)",
+            "canonical history in sync with upstream",
             details,
         )
     if not path.is_file():
@@ -578,9 +693,19 @@ def check_canonical_git_sync(root: Path) -> dict:
     )
 
 
-def check_recent_collection(root: Path) -> dict:
+def check_recent_collection(root: Path, now: datetime | None = None) -> dict:
+    now_utc = now or _now_utc()
+    if now_utc.tzinfo is None:
+        now_utc = now_utc.replace(tzinfo=timezone.utc)
+    now_utc = now_utc.astimezone(timezone.utc)
     meta, source = _load_meta(root)
-    details: dict[str, Any] = {"source": source, "present": meta is not None}
+    details: dict[str, Any] = {
+        "source": source,
+        "present": meta is not None,
+        "now": now_utc.strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "freshness": None,
+        "lastSuccessfulCollectionParsed": False,
+    }
     if meta is None:
         if source:
             return _check(
@@ -599,8 +724,9 @@ def check_recent_collection(root: Path) -> dict:
     label = meta.get("collectionStatusLabel")
     failed = list(meta.get("failedTickers") or [])
     successful = list(meta.get("successfulTickers") or [])
-    last = meta.get("lastSuccessfulCollection") or meta.get("consensusDataAsOf")
-    stale = bool(meta.get("dataStale"))
+    last_raw = meta.get("lastSuccessfulCollection")
+    last = last_raw if last_raw not in (None, "") else None
+    persisted_stale = bool(meta.get("dataStale"))
     details.update(
         {
             "collectionStatus": status or None,
@@ -608,12 +734,34 @@ def check_recent_collection(root: Path) -> dict:
             "failedTickers": failed,
             "successfulTickers": successful,
             "lastSuccessfulCollection": last,
-            "dataStale": stale,
+            "persistedDataStale": persisted_stale,
             "qualityGate": (meta.get("qualityGate") or {}).get("status")
             if isinstance(meta.get("qualityGate"), dict)
             else None,
         }
     )
+    if last is not None and parse_iso_dt(str(last)) is None:
+        details["lastSuccessfulCollectionParsed"] = False
+        return _check(
+            "recent_collection",
+            STATUS_FAILED,
+            f"lastSuccessfulCollection is not a valid timestamp: {last!r}",
+            details,
+        )
+    if last is None:
+        return _check(
+            "recent_collection",
+            STATUS_DEGRADED,
+            "lastSuccessfulCollection missing; cannot age collection vs now",
+            details,
+        )
+    details["lastSuccessfulCollectionParsed"] = True
+    freshness = compute_freshness(str(last), now=now_utc)
+    details["freshness"] = freshness
+    computed_stale = bool(freshness.get("dataStale"))
+    details["dataStale"] = computed_stale
+    details["persistedDataStale"] = persisted_stale
+
     if status in {"failed", "fail"}:
         return _check(
             "recent_collection",
@@ -621,25 +769,28 @@ def check_recent_collection(root: Path) -> dict:
             f"collectionStatus={status or label} failedTickers={failed}",
             details,
         )
-    if status in {"partial", "incomplete"} or failed or stale:
-        reason = []
-        if status in {"partial", "incomplete"}:
-            reason.append(f"status={status}")
-        if failed:
-            reason.append(f"failedTickers={failed}")
-        if stale:
-            reason.append("dataStale=true")
+    reasons: list[str] = []
+    if status in {"partial", "incomplete"}:
+        reasons.append(f"status={status}")
+    if failed:
+        reasons.append(f"failedTickers={failed}")
+    if computed_stale:
+        reasons.append("schedule_stale")
+    elif persisted_stale:
+        reasons.append("persisted_dataStale=true")
+    if reasons:
         return _check(
             "recent_collection",
             STATUS_DEGRADED,
-            "recent collection degraded: " + ", ".join(reason),
+            "recent collection degraded: " + ", ".join(reasons),
             details,
         )
-    if status in {"complete", "ok", "success"} or (not status and last and not stale):
+    if status in {"complete", "ok", "success", ""}:
         return _check(
             "recent_collection",
             STATUS_HEALTHY,
-            f"collection {label or status or 'ok'} lastSuccessfulCollection={last}",
+            f"collection {label or status or 'ok'} lastSuccessfulCollection={last} "
+            f"asOf={details['now']}",
             details,
         )
     return _check(
@@ -859,9 +1010,13 @@ def format_human_report(report: dict) -> str:
     return "\n".join(lines) + "\n"
 
 
-def run_health_check(root: Path | None = None) -> dict:
+def run_health_check(root: Path | None = None, now: datetime | None = None) -> dict:
     """Run every check. Never writes. Returns a JSON-serializable report."""
     root = Path(root or ROOT)
+    now_utc = now or _now_utc()
+    if now_utc.tzinfo is None:
+        now_utc = now_utc.replace(tzinfo=timezone.utc)
+    now_utc = now_utc.astimezone(timezone.utc)
     before = fingerprint_production(root)
     checks: list[dict] = []
     try:
@@ -870,7 +1025,7 @@ def run_health_check(root: Path | None = None) -> dict:
         checks.append(check_runtime_materialization(root))
         checks.append(check_current_pointer(root))
         checks.append(check_canonical_git_sync(root))
-        checks.append(check_recent_collection(root))
+        checks.append(check_recent_collection(root, now=now_utc))
         checks.append(check_quarantine(root))
         checks.append(check_migration_audit(root))
         checks.append(
@@ -907,6 +1062,7 @@ def run_health_check(root: Path | None = None) -> dict:
         "readOnly": True,
         "mutated": mutated,
         "root": str(root),
+        "now": now_utc.strftime("%Y-%m-%dT%H:%M:%SZ"),
         "checks": checks,
         "exitCodes": {
             STATUS_HEALTHY: EXIT_HEALTHY,
@@ -932,12 +1088,24 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--root", type=Path, default=None, help="Project root (default: repo root)")
     ap.add_argument("--json", action="store_true", help="Print JSON only to stdout")
     ap.add_argument(
+        "--now",
+        type=str,
+        default=None,
+        help="Deterministic UTC timestamp (ISO-8601) for collection freshness",
+    )
+    ap.add_argument(
         "--allow-degraded",
         action="store_true",
         help="Exit 0 on HEALTHY or DEGRADED; exit 1 only on FAILED (CI gate)",
     )
     args = ap.parse_args(argv)
-    report = run_health_check(args.root)
+    now = None
+    if args.now:
+        now = parse_iso_dt(args.now)
+        if now is None:
+            print(f"ERROR: invalid --now timestamp: {args.now!r}", file=sys.stderr)
+            return EXIT_FAILED
+    report = run_health_check(args.root, now=now)
     human = format_human_report(report)
     payload = json.dumps(report, indent=2, ensure_ascii=False, default=str)
     if args.json:

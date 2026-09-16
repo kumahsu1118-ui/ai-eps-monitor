@@ -73,7 +73,7 @@ python3 tools/health_check.py --allow-degraded         # read-only; FAIL only on
 git diff --exit-code
 ```
 
-`python3 tools/health_check.py` never mutates production state (no materialize, ingest, SA fetch, canonical git persist, or Pages publish). It prints a human summary plus JSON. Final status is exactly `HEALTHY` / `DEGRADED` / `FAILED`. Exit codes: `HEALTHY=0`, `DEGRADED=1`, `FAILED=2`. CI uses `--allow-degraded` so a fresh clone (missing `CURRENT.json` / runtime `daily.jsonl`, incomplete 30/60/90D) is not a red gate; only `FAILED` fails the job.
+`python3 tools/health_check.py` never mutates production state (no materialize, ingest, SA fetch, canonical git persist, or Pages publish). It prints a human summary plus JSON. Final status is exactly `HEALTHY` / `DEGRADED` / `FAILED`. Exit codes: `HEALTHY=0`, `DEGRADED=1`, `FAILED=2`. CI uses `--allow-degraded` so a fresh clone (missing `CURRENT.json` / runtime `daily.jsonl`, incomplete 30/60/90D) is not a red gate; only `FAILED` fails the job. Collection freshness is recomputed from `lastSuccessfulCollection` vs now (optional `--now`); canonical git sync also flags unpushed canonical-history commits.
 
 Materialize is fail-closed and does not require `generations/`, `daily_eps_snapshots/`, or `CURRENT.json`. It writes untracked runtime `data/daily_eps_snapshots/daily.jsonl` — do not commit it. `--audit` is read-only (takes `data/.pipeline.lock` only) and is valid on a fresh clone because Git-tracked `data/history/eps_daily/` is the canonical SoT. CI never ingests, fetches Seeking Alpha, persists canonical git history, publishes Pages, or creates commits.
 
