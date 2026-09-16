@@ -148,6 +148,7 @@ def build_fixture(dest: Path) -> Path:
         "collection_freshness.py",
         "health_check.py",
         "publish_github_pages.sh",
+        "publish_release.py",
         "build_review_zip.sh",
     ):
         src = ROOT / "tools" / name
@@ -244,6 +245,97 @@ def build_fixture(dest: Path) -> Path:
     site.mkdir(parents=True, exist_ok=True)
     (site / "data").mkdir(parents=True, exist_ok=True)
     return dest
+
+
+REQUIRED_PUBLISH_WEB_JSON = (
+    "meta.json",
+    "companies.json",
+    "valuation.json",
+    "revisions.json",
+    "eps_history.json",
+    "earnings.json",
+    "watchlist.json",
+    "alerts.json",
+    "dashboard.json",
+)
+
+
+def seed_publishable_current(
+    fixture: Path,
+    run_id: str = "fixture-current-1",
+    snapshot_utc: str = "2026-09-15T01:36:00Z",
+) -> Path:
+    """Copy live web/data into a synthetic CURRENT generation (acceptance fixtures)."""
+    gen = fixture / "data" / "generations" / run_id
+    gen_web = gen / "web" / "data"
+    gen_web.mkdir(parents=True, exist_ok=True)
+    live = fixture / "web" / "data"
+    live.mkdir(parents=True, exist_ok=True)
+    for name in REQUIRED_PUBLISH_WEB_JSON:
+        src = live / name
+        dest = gen_web / name
+        if src.is_file():
+            shutil.copy2(src, dest)
+        elif name == "meta.json":
+            dest.write_text(
+                json.dumps(
+                    {
+                        "qualityGate": {"status": "ok", "publishable": True},
+                        "lastSuccessfulCollection": snapshot_utc,
+                        "schemaVersion": "1",
+                        "dataVersion": "fixture-dv",
+                        "refreshVersion": "fixture-rv",
+                    },
+                    indent=2,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+        elif name == "dashboard.json":
+            dest.write_text(json.dumps({"meta": {}, "companies": {}}, indent=2) + "\n", encoding="utf-8")
+        else:
+            dest.write_text("{}\n", encoding="utf-8")
+    meta_path = gen_web / "meta.json"
+    meta = json.loads(meta_path.read_text(encoding="utf-8"))
+    meta.setdefault("qualityGate", {})["publishable"] = True
+    meta["qualityGate"]["status"] = "ok"
+    meta["lastSuccessfulCollection"] = meta.get("lastSuccessfulCollection") or snapshot_utc
+    meta["schemaVersion"] = meta.get("schemaVersion") or "1"
+    meta_path.write_text(json.dumps(meta, indent=2) + "\n", encoding="utf-8")
+    shutil.copy2(meta_path, live / "meta.json")
+    for src in gen_web.glob("*.json"):
+        shutil.copy2(src, live / src.name)
+    (gen / "generation_meta.json").write_text(
+        json.dumps(
+            {
+                "runId": run_id,
+                "snapshot_utc": snapshot_utc,
+                "schemaVersion": "1",
+                "runStatus": "committed",
+                "materializationStatus": "success",
+            },
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    (fixture / "data" / "CURRENT.json").write_text(
+        json.dumps(
+            {
+                "runId": run_id,
+                "generation": str(gen),
+                "snapshot_utc": snapshot_utc,
+                "committedAt": snapshot_utc,
+                "schemaVersion": "1",
+                "crashAtomic": True,
+            },
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    (fixture / "data" / ".materialized_run_id").write_text(run_id + "\n", encoding="utf-8")
+    return gen
 
 
 def restore_base_snapshot(fixture: Path) -> None:
@@ -3352,22 +3444,22 @@ def test_site_published_does_not_change_refresh_version(fixture: Path) -> None:
 
 
 def test_push_failure_retry_still_pushes(fixture: Path) -> None:
-    """.data-version must be written only after successful push."""
+    """.data-version must be written only after successful push / remote verify."""
+    py = (ROOT / "tools" / "publish_release.py").read_text(encoding="utf-8")
     body = (ROOT / "tools" / "publish_github_pages.sh").read_text(encoding="utf-8")
-    # VERSION_FILE write must appear AFTER git push
-    push_idx = body.find("git push origin main")
-    # find echo HASH to VERSION_FILE
+    ok = ".data-version" in py and "NOT updated" in py
+    ok = ok and "git push" in py
+    ok = ok and "git push origin main" in body
     import re as _re
     writes = [m.start() for m in _re.finditer(r'echo "\$HASH" > "\$VERSION_FILE"', body)]
-    ok = push_idx > 0 and len(writes) >= 1
+    push_idx = body.find("git push origin main")
+    ok = ok and push_idx > 0 and len(writes) >= 1
     ok = ok and all(w > push_idx for w in writes)
-    ok = ok and "data-version NOT updated" in body or ".data-version NOT updated" in body
-    ok = ok and "AHEAD" in body  # recovery path
-    # Simulate logic: PREV not updated on failed push
+    ok = ok and (".data-version NOT updated" in py or ".data-version NOT updated" in body)
+    ok = ok and ("worktree" in py or "AHEAD" in body)
     version_file = fixture / "site-repo" / ".data-version"
     version_file.parent.mkdir(parents=True, exist_ok=True)
     version_file.write_text("oldhash\n", encoding="utf-8")
-    # failed push would leave oldhash; new hash differs → retry proceeds
     ok = ok and version_file.read_text().strip() == "oldhash"
     record("push_failure_retry_still_pushes_test", ok, f"writes_after_push={writes} push_idx={push_idx}")
 
@@ -3636,6 +3728,7 @@ def test_parent_lock_ingest_publish(fixture: Path) -> None:
     meta.setdefault("refreshVersion", "def")
     meta_path.parent.mkdir(parents=True, exist_ok=True)
     meta_path.write_text(json.dumps(meta, indent=2) + "\n", encoding="utf-8")
+    seed_publishable_current(fixture)
 
     lock_path = fixture / "data" / ".pipeline.lock"
     env = os.environ.copy()
@@ -4030,6 +4123,7 @@ def test_clean_publish_contains_all_index_assets(fixture: Path) -> None:
     meta.setdefault("refreshVersion", "cleanpub1r")
     meta_path.parent.mkdir(parents=True, exist_ok=True)
     meta_path.write_text(json.dumps(meta, indent=2) + "\n", encoding="utf-8")
+    seed_publishable_current(fixture)
     # Ensure vendor present in fixture web
     vendor = fixture / "web" / "vendor" / "chart.umd.min.js"
     ok = vendor.exists()
@@ -4294,6 +4388,7 @@ def test_real_parent_lock_publish_integration(fixture: Path) -> None:
     meta.setdefault("refreshVersion", "parentlock1r")
     meta_path.parent.mkdir(parents=True, exist_ok=True)
     meta_path.write_text(json.dumps(meta, indent=2) + "\n", encoding="utf-8")
+    seed_publishable_current(fixture)
 
     lock_path = fixture / "data" / ".pipeline.lock"
     env = os.environ.copy()
@@ -4369,6 +4464,7 @@ def test_pending_publish_retry(fixture: Path) -> None:
     meta.setdefault("dataVersion", "pend1")
     meta.setdefault("refreshVersion", "pend1r")
     meta_path.write_text(json.dumps(meta, indent=2) + "\n", encoding="utf-8")
+    seed_publishable_current(fixture)
     os.environ["PIPELINE_LOCK_HELD"] = "1"
     os.environ["AI_EPS_ROOT"] = str(fixture)
     rc = ing.retry_pending_publish_if_needed()
@@ -4583,6 +4679,7 @@ def test_standalone_publish_cannot_mutate_persistent_state(fixture: Path) -> Non
     meta.setdefault("dataVersion", "pubonly1")
     meta.setdefault("refreshVersion", "pubonly1r")
     meta_path.write_text(json.dumps(meta, indent=2) + "\n", encoding="utf-8")
+    seed_publishable_current(fixture)
     env = os.environ.copy()
     env["PIPELINE_LOCK_HELD"] = "1"
     env["AI_EPS_ROOT"] = str(fixture)

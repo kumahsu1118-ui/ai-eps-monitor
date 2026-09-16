@@ -44,6 +44,9 @@ jobs:
       - name: Acceptance tests
         run: python3 tools/run_acceptance_tests.py
 
+      - name: Publisher fail-closed fault tests
+        run: python3 tools/run_publisher_fault_tests.py
+
       - name: Canonical fresh-clone materialize
         run: |
           python3 tools/canonical_eps_history.py --materialize

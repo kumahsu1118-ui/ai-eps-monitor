@@ -165,7 +165,7 @@ cp -a "$ROOT"/web/data/*.json "$DEST/web/data/" 2>/dev/null || true
 # refreshVersion / sitePublished. Do not pack secrets (.env, cookies, tokens).
 
 # Tools (no secrets)
-for f in export_web_data.py build_alerts.py revision_windows.py canonical_eps_history.py run_acceptance_tests.py run_unit_tests.py run_integration_tests.py sa_parser.py atomic_io.py snapshot_quality.py ingest_snapshot.py publish_github_pages.sh build_review_zip.sh generate_readme_review.py; do
+for f in export_web_data.py build_alerts.py revision_windows.py canonical_eps_history.py run_acceptance_tests.py run_unit_tests.py run_integration_tests.py run_publisher_fault_tests.py sa_parser.py atomic_io.py snapshot_quality.py ingest_snapshot.py publish_github_pages.sh publish_release.py build_review_zip.sh generate_readme_review.py collection_freshness.py; do
   cp -a "$ROOT/tools/$f" "$DEST/tools/" 2>/dev/null || true
 done
 

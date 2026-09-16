@@ -1388,11 +1388,20 @@ def publish_prebuilt_site(*, release_version: str | None = None) -> int:
     if gen is not None:
         gen_web = gen / "web" / "data"
         if gen_web.is_dir():
-            # Prefer publish from committed generation package web/
+            # Prefer publish from committed generation package web/.
+            # Rematerialize errors must propagate (publisher is fail-closed).
             try:
                 materialize_generation(gen)
             except Exception as mex:
-                print(f"WARNING: rematerialize before publish: {mex}", file=sys.stderr)
+                print(f"ERROR: rematerialization failure before publish: {mex}", file=sys.stderr)
+                now_fail = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+                state = read_publish_state()
+                state["publishStatus"] = "failed"
+                state["lastPublishAttempt"] = now_fail
+                if release_version:
+                    state["pendingReleaseVersion"] = release_version
+                write_publish_state(state)
+                return 1
     # Stamp then finalize release identity so meta matches final asset tree
     finalize_release_identity(ROOT / "web")
     now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
