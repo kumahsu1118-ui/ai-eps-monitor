@@ -20,7 +20,8 @@ Repo: https://github.com/kumahsu1118-ui/ai-eps-monitor
 **On failure:** Mark collection failed; keep previous consensus; set / keep freshness so **DATA STALE** can appear when past the most recent weekday **08:00 Taipei** collection window + grace without a successful pull; notify user to re-auth.
 
 ### 3. Pull consensus & prices
-- For each ticker: earnings estimates + revisions (SA **1M/3M/6M** only; never invent 7D/30D/90D).
+- For each ticker: earnings estimates & revisions (SA **1M/3M/6M** only; never invent SA 7D/30D/90D; never treat **1M as 30D** or **3M as 90D**).
+- **Internal 30D/60D/90D** are computed later at export from `data/daily_eps_snapshots/daily.jsonl` (identity = ticker + Reported Fiscal Period Ending). Insufficient history → unavailable.
 - Record **Last Close** (regular session) and **After Hours** separately if shown.
 - Preserve **Reported Fiscal Period Ending**; map only to FY-mapped calendar **slots** (not true CY EPS).
 
@@ -105,3 +106,11 @@ Seeking Alpha cookies/sessions, GitHub tokens beyond Actions secrets (none requi
 - **Release identity:** stamp cache-bust then finalize; `appVersion` hashes canonicalized index (strip `?v=`) + assets; `releaseVersion = hash(appVersion|schema|data|refresh)`.
 - **Official domains:** Tier1 only `officialDomainsByTicker[ticker]` (or any listed domain when ticker unknown). Explicit `sourceType` cannot bypass hostname checks when a URL is present. Generic `investor.*`/`ir.*` → `unverified_ir_candidate`. Seeking Alpha host must be `seekingalpha.com` / `*.seekingalpha.com` (no substring).
 - **Parser:** duplicate identical fiscal rows dedupe; conflicting → `needs_verification` / `duplicate_conflicting_fiscal_row`; slot collision → `mapped_slot_collision`.
+
+## EPS Revision Momentum (Internal 30/60/90D)
+
+- Computed in `export_web_data.py` from append-only `daily.jsonl` during the ingest export/read path (no second persistent writer).
+- Identity = ticker + normalized `reportedFiscalPeriodEnding`. Mapped year/slot is display-only.
+- Windows are independent: missing 30D history does not borrow 60D/90D or the oldest observation.
+- SA **1M/3M/6M** remain Source-reported on `#/revisions` and are never copied onto Internal 30/60/90D.
+- Up/Down Analyst counts: captured SA sources in this repo do not include them → `null` / unavailable (never derived from EPS moves).

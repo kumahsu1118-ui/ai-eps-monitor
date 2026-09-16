@@ -5107,6 +5107,325 @@ def test_materialized_marker_with_missing_live_file_repairs_from_current(fixture
     )
 
 
+def _daily_pt(date, ticker, fiscal, consensus, slot=None):
+    row = {
+        "date": date,
+        "ticker": ticker,
+        "reportedFiscalLabel": fiscal,
+        "reportedFiscalPeriodEnding": fiscal,
+        "consensus": consensus,
+    }
+    if slot:
+        row["slot"] = slot
+        row["mappedYear"] = slot
+    return row
+
+
+def test_internal_revision_windows_from_daily_history(fixture: Path) -> None:
+    """30/60/90D from daily history: D-90=10, D-60=11, D-30=12, D0=15 → distinct windows."""
+    exp = import_mod(fixture, "export_web_data")
+    as_of = datetime(2026, 9, 15, tzinfo=timezone.utc)
+    ticker, fiscal = "NVDA", "Jan 2028"
+    daily = [
+        _daily_pt((as_of - timedelta(days=90)).strftime("%Y-%m-%d"), ticker, fiscal, 10.0, "2027E"),
+        _daily_pt((as_of - timedelta(days=60)).strftime("%Y-%m-%d"), ticker, fiscal, 11.0, "2027E"),
+        _daily_pt((as_of - timedelta(days=30)).strftime("%Y-%m-%d"), ticker, fiscal, 12.0, "2027E"),
+        _daily_pt(as_of.strftime("%Y-%m-%d"), ticker, fiscal, 15.0, "2027E"),
+    ]
+    groups = exp.group_daily_by_fiscal_identity(daily)
+    key = exp.fiscal_identity_key(ticker, fiscal)
+    pts = groups[key]
+    w30 = exp.compute_internal_window(pts, as_of=as_of, window_days=30)
+    w60 = exp.compute_internal_window(pts, as_of=as_of, window_days=60)
+    w90 = exp.compute_internal_window(pts, as_of=as_of, window_days=90)
+    ok = w30.get("status") == "ok" and abs(float(w30["revisionPct"]) - 25.0) < 1e-6  # 12→15
+    ok = ok and w60.get("status") == "ok" and abs(float(w60["revisionPct"]) - (4.0 / 11.0 * 100)) < 1e-6
+    ok = ok and w90.get("status") == "ok" and abs(float(w90["revisionPct"]) - 50.0) < 1e-6  # 10→15
+    ok = ok and w30["revisionPct"] != w60["revisionPct"] != w90["revisionPct"]
+    ok = ok and w30.get("windowLabel") == "Internal 30D"
+    companies = {
+        ticker: {
+            "eps": {
+                "2027E": {
+                    "consensus": 15.0,
+                    "rev1M": 1.37,
+                    "rev3M": 22.85,
+                    "rev6M": 40.57,
+                    "reportedFiscalLabel": fiscal,
+                    "mappedYear": "2027E",
+                    "calendarAlignment": "CY2027",
+                }
+            },
+            "epsByFiscal": {
+                fiscal: {
+                    "consensus": 15.0,
+                    "rev1M": 1.37,
+                    "rev3M": 22.85,
+                    "rev6M": 40.57,
+                    "reportedFiscalLabel": fiscal,
+                    "mappedYear": "2027E",
+                    "calendarAlignment": "CY2027",
+                }
+            },
+        }
+    }
+    rows = exp.build_revision_momentum(companies, [ticker], daily, as_of=as_of, year_keys=["2026E", "2027E", "2028E"])
+    hit = [r for r in rows if r.get("ticker") == ticker and r.get("reportedFiscalPeriodEnding") == fiscal]
+    ok = ok and len(hit) == 1
+    if hit:
+        ok = ok and abs(float(hit[0]["internal"]["30D"]["revisionPct"]) - 25.0) < 1e-6
+        ok = ok and hit[0]["identity"] == {"ticker": ticker, "reportedFiscalPeriodEnding": fiscal}
+    record(
+        "internal_revision_windows_from_daily_history_test",
+        ok,
+        f"30={w30.get('revisionPct')} 60={w60.get('revisionPct')} 90={w90.get('revisionPct')}",
+    )
+
+
+def test_internal_revision_insufficient_history_unavailable(fixture: Path) -> None:
+    """Oldest observation must not fake a 30D window; insufficient → unavailable."""
+    exp = import_mod(fixture, "export_web_data")
+    as_of = datetime(2026, 9, 15, tzinfo=timezone.utc)
+    ticker, fiscal = "TSM", "Dec 2027"
+    daily = [
+        _daily_pt((as_of - timedelta(days=5)).strftime("%Y-%m-%d"), ticker, fiscal, 10.0, "2027E"),
+        _daily_pt(as_of.strftime("%Y-%m-%d"), ticker, fiscal, 12.0, "2027E"),
+    ]
+    pts = exp.group_daily_by_fiscal_identity(daily)[exp.fiscal_identity_key(ticker, fiscal)]
+    w30 = exp.compute_internal_window(pts, as_of=as_of, window_days=30)
+    w60 = exp.compute_internal_window(pts, as_of=as_of, window_days=60)
+    w90 = exp.compute_internal_window(pts, as_of=as_of, window_days=90)
+    fake_30 = (12.0 - 10.0) / 10.0 * 100.0
+    ok = w30.get("status") == "unavailable" and w30.get("revisionPct") is None
+    ok = ok and w30.get("reason") == "insufficient_history"
+    ok = ok and w30.get("revisionPct") != fake_30
+    ok = ok and w60.get("status") == "unavailable" and w90.get("status") == "unavailable"
+    # Far-before oldest (D-90) still must not substitute for a missing D-30 baseline.
+    daily2 = [
+        _daily_pt((as_of - timedelta(days=90)).strftime("%Y-%m-%d"), ticker, fiscal, 8.0, "2027E"),
+        _daily_pt(as_of.strftime("%Y-%m-%d"), ticker, fiscal, 12.0, "2027E"),
+    ]
+    pts2 = exp.group_daily_by_fiscal_identity(daily2)[exp.fiscal_identity_key(ticker, fiscal)]
+    w30b = exp.compute_internal_window(pts2, as_of=as_of, window_days=30)
+    ok = ok and w30b.get("status") == "unavailable" and w30b.get("revisionPct") is None
+    record(
+        "internal_revision_insufficient_history_unavailable_test",
+        ok,
+        f"30={w30.get('status')} far={w30b.get('status')}",
+    )
+
+
+def test_internal_revision_fiscal_rollover_identity(fixture: Path) -> None:
+    """Identity is ticker + reported fiscal period ending, not mappedYear/slot."""
+    exp = import_mod(fixture, "export_web_data")
+    as_of = datetime(2026, 9, 15, tzinfo=timezone.utc)
+    # Same mapped slot 2027E, two fiscal identities (rollover).
+    daily = [
+        _daily_pt((as_of - timedelta(days=90)).strftime("%Y-%m-%d"), "NVDA", "Jan 2027", 9.0, "2027E"),
+        _daily_pt((as_of - timedelta(days=40)).strftime("%Y-%m-%d"), "NVDA", "Jan 2027", 9.2, "2027E"),
+        _daily_pt((as_of - timedelta(days=30)).strftime("%Y-%m-%d"), "NVDA", "Jan 2028", 15.0, "2027E"),
+        _daily_pt(as_of.strftime("%Y-%m-%d"), "NVDA", "Jan 2028", 16.0, "2027E"),
+    ]
+    companies = {
+        "NVDA": {
+            "eps": {
+                "2026E": {
+                    "consensus": 9.2,
+                    "rev1M": 0.1,
+                    "reportedFiscalLabel": "Jan 2027",
+                    "mappedYear": "2026E",
+                },
+                "2027E": {
+                    "consensus": 16.0,
+                    "rev1M": 1.37,
+                    "reportedFiscalLabel": "Jan 2028",
+                    "mappedYear": "2027E",
+                },
+            },
+            "epsByFiscal": {
+                "Jan 2027": {
+                    "consensus": 9.2,
+                    "rev1M": 0.1,
+                    "reportedFiscalLabel": "Jan 2027",
+                    "mappedYear": "2026E",
+                },
+                "Jan 2028": {
+                    "consensus": 16.0,
+                    "rev1M": 1.37,
+                    "reportedFiscalLabel": "Jan 2028",
+                    "mappedYear": "2027E",
+                },
+            },
+        }
+    }
+    rows = exp.build_revision_momentum(
+        companies, ["NVDA"], daily, as_of=as_of, year_keys=["2026E", "2027E", "2028E"]
+    )
+    by_fy = {r["reportedFiscalPeriodEnding"]: r for r in rows if r.get("ticker") == "NVDA"}
+    ok = "Jan 2027" in by_fy and "Jan 2028" in by_fy
+    r27 = by_fy.get("Jan 2027") or {}
+    r28 = by_fy.get("Jan 2028") or {}
+    # Jan 2028 30D = 15→16 = +6.666...%; must not mix with Jan 2027's 9.0
+    pct28 = (r28.get("internal") or {}).get("30D") or {}
+    pct27_30 = (r27.get("internal") or {}).get("30D") or {}
+    pct27_90 = (r27.get("internal") or {}).get("90D") or {}
+    ok = ok and pct28.get("status") == "ok" and abs(float(pct28["revisionPct"]) - (100.0 / 15.0)) < 0.05
+    ok = ok and pct27_30.get("status") == "unavailable"  # no D-30 obs for Jan 2027
+    ok = ok and pct27_90.get("status") == "ok" and abs(float(pct27_90["revisionPct"]) - (0.2 / 9.0 * 100)) < 0.05
+    # Mixing identities by slot would compare 9.0→16.0 (~77.8%) — must not appear.
+    mixed = (16.0 - 9.0) / 9.0 * 100.0
+    ok = ok and (pct28.get("revisionPct") is None or abs(float(pct28["revisionPct"]) - mixed) > 1.0)
+    ok = ok and (pct27_90.get("revisionPct") is None or abs(float(pct27_90["revisionPct"]) - mixed) > 1.0)
+    record(
+        "internal_revision_fiscal_rollover_identity_test",
+        ok,
+        f"fy28_30={pct28.get('revisionPct')} fy27_30={pct27_30.get('status')} fy27_90={pct27_90.get('revisionPct')}",
+    )
+
+
+def test_internal_revision_zero_baseline_unavailable(fixture: Path) -> None:
+    """Zero start consensus must not divide; window is unavailable."""
+    exp = import_mod(fixture, "export_web_data")
+    as_of = datetime(2026, 9, 15, tzinfo=timezone.utc)
+    ticker, fiscal = "BE", "Dec 2027"
+    daily = [
+        _daily_pt((as_of - timedelta(days=30)).strftime("%Y-%m-%d"), ticker, fiscal, 0.0, "2027E"),
+        _daily_pt(as_of.strftime("%Y-%m-%d"), ticker, fiscal, 1.5, "2027E"),
+    ]
+    pts = exp.group_daily_by_fiscal_identity(daily)[exp.fiscal_identity_key(ticker, fiscal)]
+    w30 = exp.compute_internal_window(pts, as_of=as_of, window_days=30)
+    ok = w30.get("status") == "unavailable"
+    ok = ok and w30.get("reason") == "zero_baseline"
+    ok = ok and w30.get("revisionPct") is None
+    ok = ok and not (isinstance(w30.get("revisionPct"), float) and (w30["revisionPct"] == float("inf") or w30["revisionPct"] != w30["revisionPct"]))
+    record("internal_revision_zero_baseline_unavailable_test", ok, f"reason={w30.get('reason')}")
+
+
+def test_source_windows_separated_from_internal(fixture: Path) -> None:
+    """SA 1M/3M/6M stay source-reported and are never treated as Internal 30/60/90."""
+    exp = import_mod(fixture, "export_web_data")
+    sa = import_mod(fixture, "sa_parser")
+    as_of = datetime(2026, 9, 15, tzinfo=timezone.utc)
+    ticker, fiscal = "AVGO", "Oct 2028"
+    daily = [
+        _daily_pt((as_of - timedelta(days=30)).strftime("%Y-%m-%d"), ticker, fiscal, 15.0, "2028E"),
+        _daily_pt(as_of.strftime("%Y-%m-%d"), ticker, fiscal, 16.0, "2028E"),
+    ]
+    companies = {
+        ticker: {
+            "eps": {
+                "2028E": {
+                    "consensus": 16.0,
+                    "rev1M": 15.7,
+                    "rev3M": 18.76,
+                    "rev6M": 37.83,
+                    "reportedFiscalLabel": fiscal,
+                    "mappedYear": "2028E",
+                }
+            },
+            "epsByFiscal": {
+                fiscal: {
+                    "consensus": 16.0,
+                    "rev1M": 15.7,
+                    "rev3M": 18.76,
+                    "rev6M": 37.83,
+                    "reportedFiscalLabel": fiscal,
+                    "mappedYear": "2028E",
+                }
+            },
+        }
+    }
+    rows = exp.build_revision_momentum(companies, [ticker], daily, as_of=as_of, year_keys=["2026E", "2027E", "2028E"])
+    hit = rows[0]
+    internal_30 = hit["internal"]["30D"]
+    sa_1m = hit["sourceReported"]["1M"]
+    ok = internal_30.get("windowLabel") == "Internal 30D"
+    ok = ok and sa_1m.get("sourceWindow") == "Seeking Alpha 1M"
+    ok = ok and "Source-reported" in (sa_1m.get("windowLabel") or "")
+    ok = ok and sa_1m.get("neverInternal30D") is True
+    ok = ok and abs(float(internal_30["revisionPct"]) - (100.0 / 15.0)) < 0.05
+    ok = ok and abs(float(sa_1m["revisionPct"]) - 15.7) < 1e-9
+    ok = ok and abs(float(internal_30["revisionPct"]) - float(sa_1m["revisionPct"])) > 1.0
+    packed = sa.pack_snapshot_eps_from_rows(
+        [
+            {
+                "fiscalPeriodEnding": fiscal,
+                "consensus": 16.0,
+                "high": 18.0,
+                "low": 14.0,
+                "analystCount": 10,
+                "rev1M": 15.7,
+                "rev3M": 18.76,
+                "rev6M": 37.83,
+            }
+        ]
+    )
+    slot = packed.get("2028E") or {}
+    ok = ok and slot.get("rev_1M_pct") == 15.7
+    ok = ok and "rev_30d" not in slot and "rev30D" not in slot
+    app = spa_js_text(fixture)
+    ok = ok and "EPS Revision Momentum" in app
+    ok = ok and "Internal 30D" in app and "Internal 60D" in app and "Internal 90D" in app
+    ok = ok and "Source-reported" in app
+    ok = ok and "Seeking Alpha 1M" in app
+    record(
+        "source_windows_separated_from_internal_test",
+        ok,
+        f"int30={internal_30.get('revisionPct')} sa1m={sa_1m.get('revisionPct')}",
+    )
+
+
+def test_analyst_direction_unavailable_when_not_in_source(fixture: Path) -> None:
+    """No source-native Up/Down Analysts → null; never derive from EPS change."""
+    sa = import_mod(fixture, "sa_parser")
+    exp = import_mod(fixture, "export_web_data")
+    html = (ROOT / "fixtures" / "parser" / "nvda_estimates_sanitized.html").read_text(encoding="utf-8")
+    parsed = sa.parse_estimates(html)
+    ok = len(parsed.get("rows") or []) >= 1
+    for row in parsed.get("rows") or []:
+        ok = ok and row.get("upAnalysts") is None
+        ok = ok and row.get("downAnalysts") is None
+        ok = ok and row.get("analystDirectionStatus") == "unavailable"
+        ok = ok and row.get("analystDirectionReason") == "not_in_source"
+    fixture_html = (ROOT / "tests" / "fixtures" / "sa" / "estimates_nvda.html").read_text(encoding="utf-8")
+    ok = ok and "Up Analyst" not in fixture_html and "Down Analyst" not in fixture_html
+    ok = ok and "up-analysts" not in fixture_html.lower()
+    # EPS moved higher — still must not invent upAnalysts=1
+    as_of = datetime(2026, 9, 15, tzinfo=timezone.utc)
+    daily = [
+        _daily_pt((as_of - timedelta(days=30)).strftime("%Y-%m-%d"), "NVDA", "Jan 2028", 10.0, "2027E"),
+        _daily_pt(as_of.strftime("%Y-%m-%d"), "NVDA", "Jan 2028", 16.0, "2027E"),
+    ]
+    companies = {
+        "NVDA": {
+            "epsByFiscal": {
+                "Jan 2028": {
+                    "consensus": 16.0,
+                    "rev1M": 1.37,
+                    "reportedFiscalLabel": "Jan 2028",
+                    "mappedYear": "2027E",
+                }
+            },
+            "eps": {},
+        }
+    }
+    rows = exp.build_revision_momentum(companies, ["NVDA"], daily, as_of=as_of, year_keys=["2027E"])
+    ok = ok and rows
+    hit = rows[0]
+    ok = ok and hit.get("upAnalysts") is None and hit.get("downAnalysts") is None
+    ok = ok and hit.get("analystDirectionStatus") == "unavailable"
+    ok = ok and hit["internal"]["30D"].get("status") == "ok"
+    # Explicit source-native counts still pass through (not stripped).
+    native = sa.source_analyst_direction({"upAnalysts": 4, "downAnalysts": 1})
+    ok = ok and native.get("upAnalysts") == 4.0 and native.get("downAnalysts") == 1.0
+    ok = ok and native.get("analystDirectionStatus") == "ok"
+    record(
+        "analyst_direction_unavailable_when_not_in_source_test",
+        ok,
+        f"status={hit.get('analystDirectionStatus')} derived_blocked={hit.get('upAnalysts') is None}",
+    )
+
+
 # Suite classification: integration = subprocess/crash/publish/heavy ingest
 INTEGRATION_TEST_NAMES = {
     "test_full_export_2027_rollover",
@@ -5299,6 +5618,13 @@ def _all_suite_tests():
         ("test_fake_sa_domain_not_selected_as_consensus_source", test_fake_sa_domain_not_selected_as_consensus_source),
         ("test_strict_sa_hostname_used_everywhere", test_strict_sa_hostname_used_everywhere),
         ("test_materialized_marker_with_missing_live_file_repairs_from_current", test_materialized_marker_with_missing_live_file_repairs_from_current),
+        # EPS Revision Momentum (Internal 30/60/90D)
+        ("test_internal_revision_windows_from_daily_history", test_internal_revision_windows_from_daily_history),
+        ("test_internal_revision_insufficient_history_unavailable", test_internal_revision_insufficient_history_unavailable),
+        ("test_internal_revision_fiscal_rollover_identity", test_internal_revision_fiscal_rollover_identity),
+        ("test_internal_revision_zero_baseline_unavailable", test_internal_revision_zero_baseline_unavailable),
+        ("test_source_windows_separated_from_internal", test_source_windows_separated_from_internal),
+        ("test_analyst_direction_unavailable_when_not_in_source", test_analyst_direction_unavailable_when_not_in_source),
     ]
 
 

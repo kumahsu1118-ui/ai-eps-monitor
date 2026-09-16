@@ -761,6 +761,25 @@ REVISION_REGIME_DOC = (
     "Complements Momentum (which can be Neutral when legs diverge)."
 )
 
+INTERNAL_REVISION_WINDOWS = (30, 60, 90)
+# Allow a weekday/holiday gap at the window-start boundary. Observations older
+# than this are NOT used as a substitute baseline (never "oldest in series").
+INTERNAL_WINDOW_START_SLACK_DAYS = 2
+INTERNAL_REVISION_NOTE = (
+    "Internal 30D/60D/90D are computed from daily EPS history keyed by "
+    "ticker + reportedFiscalPeriodEnding (normalized). Insufficient history "
+    "→ unavailable (never substitute the oldest observation). "
+    "Seeking Alpha 1M/3M/6M are Source-reported windows and are never treated "
+    "as Internal 30/60/90D. Up/Down Analyst counts are unavailable unless "
+    "present as source-native fields (captured SA sources in this repo do not "
+    "include them)."
+)
+SOURCE_REPORTED_WINDOWS = (
+    ("1M", "rev1M", "Seeking Alpha 1M"),
+    ("3M", "rev3M", "Seeking Alpha 3M"),
+    ("6M", "rev6M", "Seeking Alpha 6M"),
+)
+
 
 def compute_momentum_from_revisions(rev_y1, rev_y2) -> str:
     """Fixed formula from Y+1 / Y+2 1M revisions. No guidance/drivers."""
@@ -1275,6 +1294,266 @@ def build_eps_history_from_daily(daily_rows: list[dict]) -> dict:
     return hist
 
 
+def _parse_obs_datetime(value) -> datetime | None:
+    """Parse a daily-snapshot timestamp to UTC datetime."""
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        dt = value
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt.astimezone(timezone.utc)
+    s = str(value).strip()
+    if not s:
+        return None
+    for fmt in ("%Y-%m-%d", "%Y-%m-%dT%H:%M:%SZ", "%Y-%m-%dT%H:%M:%S"):
+        try:
+            piece = s[:10] if fmt == "%Y-%m-%d" else s[:19]
+            dt = datetime.strptime(piece, fmt)
+            return dt.replace(tzinfo=timezone.utc)
+        except Exception:
+            continue
+    try:
+        if s.endswith("Z"):
+            s = s[:-1] + "+00:00"
+        dt = datetime.fromisoformat(s)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt.astimezone(timezone.utc)
+    except Exception:
+        return None
+
+
+def fiscal_identity_key(ticker, fiscal_label) -> tuple[str, str] | None:
+    """Cross-time identity: ticker + normalized reportedFiscalPeriodEnding.
+
+    Mapped year / slot is display-only and must not be used as identity.
+    """
+    import sa_parser as _sa
+
+    t = str(ticker or "").strip().upper()
+    lab = _sa.normalize_fiscal_period_label(fiscal_label)
+    if not t or not lab:
+        return None
+    return (t, lab)
+
+
+def group_daily_by_fiscal_identity(daily_rows: list[dict] | None) -> dict[tuple[str, str], list]:
+    """Group daily.jsonl observations by (ticker, reportedFiscalPeriodEnding)."""
+    groups: dict[tuple[str, str], list] = {}
+    for row in daily_rows or []:
+        if not isinstance(row, dict):
+            continue
+        ticker = row.get("ticker") or row.get("Ticker")
+        fiscal = (
+            row.get("reportedFiscalPeriodEnding")
+            or row.get("reportedFiscalLabel")
+            or row.get("fiscalKey")
+            or row.get("Fiscal Year")
+        )
+        # Explicitly ignore mappedYear / slot as identity.
+        key = fiscal_identity_key(ticker, fiscal)
+        if not key:
+            continue
+        cons = to_num(row.get("consensus") if "consensus" in row else row.get("Current EPS"))
+        if cons is None:
+            continue
+        dt = _parse_obs_datetime(
+            row.get("date") or row.get("Date") or row.get("updateTime") or row.get("Update Time")
+        )
+        if dt is None:
+            continue
+        groups.setdefault(key, []).append((dt, cons, row))
+    for key in groups:
+        groups[key].sort(key=lambda x: x[0])
+    return groups
+
+
+def compute_internal_window(
+    points: list | None,
+    *,
+    as_of: datetime,
+    window_days: int,
+    max_start_slack_days: int = INTERNAL_WINDOW_START_SLACK_DAYS,
+) -> dict:
+    """Internal N-day consensus revision from real daily history.
+
+    Uses the nearest valid observation at or before window start (within slack)
+    vs the latest observation at or before as_of, for one fiscal identity.
+    Insufficient history → unavailable. Never substitutes the oldest observation
+    when it is outside the window-start slack.
+    Zero baseline → unavailable (no division by zero).
+    """
+    label = f"Internal {int(window_days)}D"
+    unavailable = {
+        "windowDays": int(window_days),
+        "windowLabel": label,
+        "status": "unavailable",
+        "reason": "insufficient_history",
+        "revisionPct": None,
+        "startEps": None,
+        "endEps": None,
+        "startDate": None,
+        "endDate": None,
+    }
+    if as_of.tzinfo is None:
+        as_of = as_of.replace(tzinfo=timezone.utc)
+    as_of = as_of.astimezone(timezone.utc)
+    window_start = as_of - timedelta(days=int(window_days))
+    pts = list(points or [])
+    if not pts:
+        return dict(unavailable)
+    latest_candidates = [p for p in pts if p[0] <= as_of]
+    if not latest_candidates:
+        return dict(unavailable)
+    latest = latest_candidates[-1]
+    before = [p for p in pts if p[0] <= window_start]
+    start_pt = before[-1] if before else None
+    if start_pt is not None and (window_start - start_pt[0]).days > max_start_slack_days:
+        # Oldest-in-series (or any far-before point) is not a valid N-day baseline.
+        start_pt = None
+    end_meta = {
+        "endEps": latest[1],
+        "endDate": latest[0].strftime("%Y-%m-%d"),
+    }
+    if start_pt is None:
+        return {**unavailable, **end_meta}
+    if latest[0] <= start_pt[0]:
+        return {**unavailable, **end_meta}
+    first = start_pt[1]
+    last = latest[1]
+    start_meta = {
+        "startEps": first,
+        "startDate": start_pt[0].strftime("%Y-%m-%d"),
+        **end_meta,
+    }
+    if first is None or last is None:
+        return {**unavailable, **start_meta}
+    if first == 0:
+        return {**unavailable, "reason": "zero_baseline", **start_meta}
+    pct = (last - first) / abs(first) * 100.0
+    if not math.isfinite(pct):
+        return {**unavailable, "reason": "zero_baseline", **start_meta}
+    return {
+        "windowDays": int(window_days),
+        "windowLabel": label,
+        "status": "ok",
+        "reason": None,
+        "revisionPct": pct,
+        **start_meta,
+    }
+
+
+def _source_reported_windows(eps_entry: dict | None) -> dict:
+    e = eps_entry or {}
+    out = {}
+    for key, field, source_window in SOURCE_REPORTED_WINDOWS:
+        out[key] = {
+            "windowLabel": f"Source-reported · {source_window}",
+            "sourceWindow": source_window,
+            "revisionPct": to_num(e.get(field)),
+            "neverInternal30D": True,
+            "neverInternal60D": True,
+            "neverInternal90D": True,
+        }
+    return out
+
+
+def build_revision_momentum(
+    companies: dict,
+    tickers: list[str],
+    daily_rows: list[dict] | None,
+    *,
+    as_of: datetime | str | None = None,
+    year_keys: list[str] | None = None,
+) -> list[dict]:
+    """EPS Revision Momentum rows for the #/revisions table.
+
+    Produced during export from daily history (no second persistent writer).
+    """
+    import sa_parser as _sa
+
+    if isinstance(as_of, str):
+        as_of_dt = _parse_obs_datetime(as_of)
+    else:
+        as_of_dt = as_of
+    as_of_dt = as_of_dt or datetime.now(timezone.utc)
+    if as_of_dt.tzinfo is None:
+        as_of_dt = as_of_dt.replace(tzinfo=timezone.utc)
+
+    groups = group_daily_by_fiscal_identity(daily_rows)
+    year_keys = year_keys or display_mapped_years()
+    rows: list[dict] = []
+    seen: set[tuple[str, str]] = set()
+
+    for t in tickers:
+        c = companies.get(t) or {}
+        entries: list[dict] = []
+        by_fiscal = c.get("epsByFiscal") or {}
+        if isinstance(by_fiscal, dict):
+            for lab, packed in by_fiscal.items():
+                if not isinstance(packed, dict):
+                    continue
+                entry = dict(packed)
+                entry["reportedFiscalLabel"] = packed.get("reportedFiscalLabel") or lab
+                entries.append(entry)
+        eps_map = c.get("eps") or {}
+        if isinstance(eps_map, dict):
+            for slot in year_keys:
+                packed = eps_map.get(slot)
+                if not isinstance(packed, dict):
+                    continue
+                entries.append(dict(packed))
+
+        for packed in entries:
+            fiscal = packed.get("reportedFiscalLabel") or packed.get("reportedFiscalPeriodEnding")
+            key = fiscal_identity_key(t, fiscal)
+            if not key or key in seen:
+                continue
+            seen.add(key)
+            ident_ticker, ident_fiscal = key
+            points = groups.get(key) or []
+            internal = {
+                f"{w}D": compute_internal_window(points, as_of=as_of_dt, window_days=w)
+                for w in INTERNAL_REVISION_WINDOWS
+            }
+            direction = _sa.source_analyst_direction(packed)
+            rows.append(
+                {
+                    "ticker": ident_ticker,
+                    "reportedFiscalPeriodEnding": ident_fiscal,
+                    "reportedFiscalLabel": ident_fiscal,
+                    "mappedYear": packed.get("mappedYear"),
+                    "calendarAlignment": packed.get("calendarAlignment"),
+                    "asOf": as_of_dt.strftime("%Y-%m-%d"),
+                    "currentEps": to_num(packed.get("consensus")),
+                    "identity": {
+                        "ticker": ident_ticker,
+                        "reportedFiscalPeriodEnding": ident_fiscal,
+                    },
+                    "internal": internal,
+                    "sourceReported": _source_reported_windows(packed),
+                    "upAnalysts": direction.get("upAnalysts"),
+                    "downAnalysts": direction.get("downAnalysts"),
+                    "analystDirectionStatus": direction.get("analystDirectionStatus"),
+                    "analystDirectionReason": direction.get("analystDirectionReason"),
+                }
+            )
+
+    def _sort_key(row: dict):
+        parsed = None
+        try:
+            import sa_parser as _sa2
+
+            parsed = _sa2.parse_fiscal_period_ending(row.get("reportedFiscalPeriodEnding"))
+        except Exception:
+            parsed = None
+        return (row.get("ticker") or "", parsed or (99, 0))
+
+    rows.sort(key=_sort_key)
+    return rows
+
+
 def _has_digest_content(obj: dict) -> bool:
     if not isinstance(obj, dict):
         return False
@@ -1614,7 +1893,9 @@ def regenerate_markdown_backups(companies: dict, valuation: list, snap: dict, ti
         "",
         "## Source discipline notes",
         "",
-        "- SA does **not** expose 7D/30D/90D on these pages; recorded as Data unavailable; visible **1M/3M/6M %** stored separately.",
+        "- SA source-reported windows are **1M/3M/6M** (never treated as Internal 30D/60D/90D).",
+        "- Internal 30D/60D/90D are computed from `data/daily_eps_snapshots/daily.jsonl` keyed by ticker + Reported Fiscal Period Ending; insufficient history → Data unavailable (never oldest-observation substitute).",
+        "- Captured SA sources do **not** include Up/Down Analyst counts; those fields stay unavailable (never derived).",
         "- Missing years are Data unavailable. Never backfilled from adjacent years.",
         f"- Mapping rule: {MAPPING_RULE_NOTE}",
         f"- True CY EPS status: {TRUE_CY_STATUS}",
@@ -2561,6 +2842,14 @@ def _main_locked() -> int:
     if NO_PERSISTENT_MUTATION:
         print("NO_PERSISTENT_MUTATION — daily/alerts/checkpoint staged for ingest COMMIT")
     eps_history = build_eps_history_from_daily(daily_rows)
+    # Internal 30/60/90D: read-path computation from daily history (no extra writer).
+    revision_momentum = build_revision_momentum(
+        companies,
+        tickers,
+        daily_rows,
+        as_of=snap_utc,
+        year_keys=year_keys,
+    )
 
     earnings = load_or_init_earnings(companies, tickers)
 
@@ -2647,7 +2936,12 @@ def _main_locked() -> int:
     payload_parts = {
         "companies": strip_operational_fields(companies),
         "valuation": strip_operational_fields({"rows": valuation}),
-        "revisions": strip_operational_fields({"revisions": revisions}),
+        "revisions": strip_operational_fields(
+            {
+                "revisions": revisions,
+                "revisionMomentum": revision_momentum,
+            }
+        ),
         "eps_history": strip_operational_fields(eps_history),
         "earnings": strip_operational_fields(earnings),
         "alerts": strip_operational_fields({
@@ -2666,6 +2960,7 @@ def _main_locked() -> int:
         "primarySource": source,
         "snapshotFile": snap_path.name,
         "revisionWindowNote": snap.get("revision_window_note"),
+        "internalRevisionNote": INTERNAL_REVISION_NOTE,
         "calendarAlignmentRule": snap.get("calendar_alignment_rule"),
         "mappingRule": MAPPING_RULE_NOTE,
         "trueCyStatus": TRUE_CY_STATUS,
@@ -2737,7 +3032,12 @@ def _main_locked() -> int:
     watchlist_o = stamp_build_id({"tickers": tickers}, build_id)
     companies_o = stamp_build_id(companies, build_id, ticker_map=True)
     valuation_o = stamp_build_id({"rows": valuation}, build_id)
-    revisions_o = stamp_build_id({"revisions": revisions}, build_id)
+    revisions_payload = {
+        "revisions": revisions,
+        "revisionMomentum": revision_momentum,
+        "revisionMomentumNote": INTERNAL_REVISION_NOTE,
+    }
+    revisions_o = stamp_build_id(revisions_payload, build_id)
     eps_o = stamp_build_id(eps_history if isinstance(eps_history, dict) else {"series": eps_history}, build_id, ticker_map=True)
     earnings_o = stamp_build_id(earnings, build_id, ticker_map=True)
     alerts_o = stamp_build_id(alerts, build_id)
@@ -2758,7 +3058,11 @@ def _main_locked() -> int:
         "meta": meta,
         "companies": companies,
         "valuation": {"rows": valuation},
-        "revisions": {"revisions": revisions},
+        "revisions": {
+            "revisions": revisions,
+            "revisionMomentum": revision_momentum,
+            "revisionMomentumNote": INTERNAL_REVISION_NOTE,
+        },
         "epsHistory": eps_history,
         "earnings": earnings,
         "alerts": alerts,
