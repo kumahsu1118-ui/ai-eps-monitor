@@ -40,3 +40,6 @@ web/pages-verify.png
 data/.pending-publish
 data/.last-publish-web
 data/canonical_git_state.json
+
+# Runtime cache materialized from Git canonical history (CI + local). Never commit.
+data/daily_eps_snapshots/

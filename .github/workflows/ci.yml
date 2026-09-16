@@ -1,0 +1,101 @@
+# Repository health gate. No secrets. Never ingest, fetch SA, persist
+# canonical git history, publish Pages, mutate main, or create commits.
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Repository health
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      SKIP_CANONICAL_GIT_PERSIST: "1"
+      SKIP_CANONICAL_GIT_PUSH: "1"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Python version
+        run: python3 --version
+
+      - name: Unit tests
+        run: python3 tools/run_unit_tests.py
+
+      - name: Integration tests
+        run: python3 tools/run_integration_tests.py
+
+      - name: Acceptance tests
+        run: python3 tools/run_acceptance_tests.py
+
+      - name: Canonical fresh-clone materialize
+        run: |
+          python3 tools/canonical_eps_history.py --materialize
+          python3 - <<'PY'
+          import sys
+
+          sys.path.insert(0, "tools")
+          import canonical_eps_history as ceh
+
+          path = ceh.runtime_daily_path()
+          if not path.is_file():
+              print("ERROR: daily.jsonl missing after materialize", file=sys.stderr)
+              sys.exit(1)
+          try:
+              rows = ceh.load_jsonl_rows(path, strict=True)
+          except ceh.CanonicalHistoryError as exc:
+              print(f"ERROR: daily.jsonl strict parse failed: {exc}", file=sys.stderr)
+              sys.exit(1)
+          if not rows:
+              print("ERROR: daily.jsonl parsed 0 observations", file=sys.stderr)
+              sys.exit(1)
+          print(f"parsed daily.jsonl rows={len(rows)} path={path}")
+          PY
+
+      - name: Migration audit (read-only)
+        run: |
+          python3 tools/migrate_eps_history.py --audit --json | python3 -c '
+          import json, sys
+          plan = json.load(sys.stdin)
+          counts = plan.get("counts") or {}
+          ok = plan.get("ok") is True
+          conflicts = int(counts.get("conflicts") or 0)
+          blocking = int(counts.get("blockingValidation") or 0)
+          if not ok or conflicts or blocking:
+              print(
+                  "ERROR: migrate --audit health failed",
+                  "ok=", plan.get("ok"),
+                  "conflicts=", conflicts,
+                  "blockingValidation=", blocking,
+                  file=sys.stderr,
+              )
+              sys.exit(1)
+          print("migrate --audit ok=True conflicts=0 blockingValidation=0")
+          print("counts", json.dumps(counts, sort_keys=True))
+          '
+
+      - name: Tracked tree remains clean
+        run: |
+          git diff --exit-code
+          git diff --cached --exit-code
+          if [ -n "$(git status --porcelain)" ]; then
+            echo "ERROR: unexpected untracked or staged files (runtime artifacts must stay gitignored)"
+            git status --porcelain
+            exit 1
+          fi
