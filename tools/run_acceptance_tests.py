@@ -6756,21 +6756,20 @@ def test_corrupt_pending_daily_rows_aborts_before_current(fixture: Path) -> None
     import os
     from pathlib import Path as _Path
 
-    _reset_canonical(fixture)
     ceh = import_mod(fixture, "canonical_eps_history")
-    seed, _ = _fresh_clone_seed_rows()
-    _write_canonical_rows(fixture, seed)
-    ceh.materialize_runtime_daily(fixture)
     ing = import_mod(fixture, "ingest_snapshot")
     ing.rebind_paths(fixture)
+    os.environ["PIPELINE_LOCK_HELD"] = "1"
+    os.environ["SKIP_CANONICAL_GIT_PERSIST"] = "1"
+    # Settle live cache to whatever CURRENT already points at (prior tests).
+    # Do not plant a fake CURRENT — that would make ensure_live rematerialize
+    # and look like a live mutation of this abort.
+    ing.ensure_live_matches_current()
+
     current_path = fixture / "data" / "CURRENT.json"
-    current_path.write_text(
-        json.dumps({"runId": "preexisting", "crashAtomic": True}, indent=2) + "\n",
-        encoding="utf-8",
-    )
     daily_path = fixture / "data" / "daily_eps_snapshots" / "daily.jsonl"
-    before = _fingerprint_persistent(fixture)
-    daily_before = daily_path.read_bytes()
+    before_current = current_path.read_bytes() if current_path.exists() else None
+    daily_before = daily_path.read_bytes() if daily_path.exists() else None
     canon_before = {p.name: p.read_bytes() for p in ceh.list_month_files(fixture)}
 
     snap = _load_base_snap(fixture)
@@ -6793,27 +6792,26 @@ def test_corrupt_pending_daily_rows_aborts_before_current(fixture: Path) -> None
         return orig(stage_dir, *args, **kwargs)
 
     ing.commit_staged_run = _corrupt_then_commit
-    os.environ["PIPELINE_LOCK_HELD"] = "1"
-    os.environ["SKIP_CANONICAL_GIT_PERSIST"] = "1"
     try:
         result = ing.ingest_and_build(incoming, run_export=True, run_publish=False)
     finally:
         ing.commit_staged_run = orig
 
-    after = _fingerprint_persistent(fixture)
-    daily_after = daily_path.read_bytes() if daily_path.exists() else b""
+    after_current = current_path.read_bytes() if current_path.exists() else None
+    daily_after = daily_path.read_bytes() if daily_path.exists() else None
     canon_after = {p.name: p.read_bytes() for p in ceh.list_month_files(fixture)}
-    cur = json.loads(current_path.read_text(encoding="utf-8")) if current_path.exists() else None
+    err = str(result.get("commitError") or "")
     ok = result.get("runStatus") == "aborted"
-    ok = ok and after == before
+    ok = ok and "pending_daily_rows" in err
+    ok = ok and after_current == before_current
     ok = ok and daily_after == daily_before
     ok = ok and canon_after == canon_before
-    ok = ok and cur is not None and cur.get("runId") == "preexisting"
     record(
         "corrupt_pending_daily_rows_aborts_before_current_test",
         ok,
-        f"status={result.get('runStatus')} err={result.get('commitError')} "
-        f"current={cur.get('runId') if cur else None} equal={after==before}",
+        f"status={result.get('runStatus')} err={err} "
+        f"current_same={after_current==before_current} daily_same={daily_after==daily_before} "
+        f"canon_same={canon_after==canon_before}",
     )
 
 
