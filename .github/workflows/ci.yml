@@ -90,6 +90,9 @@ jobs:
           print("counts", json.dumps(counts, sort_keys=True))
           '
 
+      - name: Pipeline health check (read-only)
+        run: python3 tools/health_check.py --allow-degraded
+
       - name: Tracked tree remains clean
         run: |
           git diff --exit-code
