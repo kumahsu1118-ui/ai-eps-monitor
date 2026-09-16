@@ -5831,6 +5831,159 @@ def test_internal_30d_no_revision_event_fallback(fixture: Path) -> None:
     )
 
 
+def test_internal_30d_missing_daily_does_not_false_resolve(fixture: Path) -> None:
+    """Prior open Internal 30D + empty/missing daily history must not emit Resolved."""
+    ba = import_mod(fixture, "build_alerts")
+    now = datetime(2026, 9, 15, 12, 0, tzinfo=timezone.utc)
+    ticker, fiscal = "KEYS", "Oct 2027"
+    d0 = now.strftime("%Y-%m-%d")
+    d30 = (now - timedelta(days=30)).strftime("%Y-%m-%d")
+    daily_open = [
+        _daily_pt(d30, ticker, fiscal, 10.0, "2027E"),
+        _daily_pt(d0, ticker, fiscal, 11.0, "2027E"),  # +10% ≥ 5%
+    ]
+    out_open, _ = ba.rule2_cumulative(
+        history=[], lookback_days=30, daily_rows=daily_open, now=now, prior_history=[]
+    )
+    opens = [
+        a
+        for a in out_open
+        if a.get("ticker") == ticker
+        and a.get("rule") == "cumulative_revision_gt_5pct"
+        and str(a.get("lifecycleEvent") or "").lower() == "open"
+    ]
+    ok = len(opens) == 1
+    aid = opens[0]["id"] if opens else None
+    prior = opens[:1]
+
+    # Empty daily_rows: no new Open, no Resolved; prior stays unevaluated.
+    out_empty, diag_empty = ba.rule2_cumulative(
+        history=[], lookback_days=30, daily_rows=[], now=now + timedelta(days=1), prior_history=prior
+    )
+    empty_cum = [a for a in out_empty if a.get("rule") == "cumulative_revision_gt_5pct"]
+    empty_resolved = [
+        a
+        for a in empty_cum
+        if str(a.get("lifecycleEvent") or a.get("status") or "").lower() == "resolved"
+        or "no longer tracked" in str(a.get("message") or "").lower()
+        or "window lost" in str(a.get("message") or "").lower()
+    ]
+    empty_new_open = [a for a in empty_cum if str(a.get("lifecycleEvent") or "").lower() == "open"]
+    ok = ok and len(empty_resolved) == 0 and len(empty_new_open) == 0
+    ok = ok and not any(str(a.get("id")) == str(aid) and str(a.get("status") or "").lower() == "resolved" for a in out_empty)
+
+    # Identity present but window unevaluable (single point) also must not resolve.
+    daily_one = [_daily_pt((now + timedelta(days=1)).strftime("%Y-%m-%d"), ticker, fiscal, 11.0, "2027E")]
+    out_one, diag_one = ba.rule2_cumulative(
+        history=[], lookback_days=30, daily_rows=daily_one, now=now + timedelta(days=1), prior_history=prior
+    )
+    one_resolved = [
+        a
+        for a in out_one
+        if a.get("rule") == "cumulative_revision_gt_5pct"
+        and str(a.get("lifecycleEvent") or a.get("status") or "").lower() == "resolved"
+    ]
+    ok = ok and len(one_resolved) == 0
+    ok = ok and any(
+        d.get("diagnostic") and d.get("ticker") == ticker for d in list(diag_empty) + list(diag_one)
+    )
+
+    # evaluate_alerts merge: empty daily.jsonl keeps prior in activeAlerts / history (not Resolved).
+    jsonl = fixture / "data" / "daily_eps_snapshots" / "daily.jsonl"
+    jsonl.parent.mkdir(parents=True, exist_ok=True)
+    jsonl.write_text("", encoding="utf-8")
+    (fixture / "data" / "alerts" / "index.json").write_text(
+        json.dumps({"alerts": prior, "activeAlerts": prior, "alertHistory": prior}, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    payload = ba.evaluate_alerts(now=now + timedelta(days=1))
+    hist = payload.get("alertHistory") or []
+    active = payload.get("activeAlerts") or []
+    hist_hit = [a for a in hist if a.get("id") == aid]
+    active_hit = [a for a in active if a.get("id") == aid]
+    hist_resolved = [
+        a
+        for a in hist
+        if a.get("id") == aid and str(a.get("lifecycleEvent") or a.get("status") or "").lower() == "resolved"
+    ]
+    ok = ok and len(hist_hit) == 1 and str(hist_hit[0].get("status") or "").lower() != "resolved"
+    ok = ok and len(active_hit) == 1 and str(active_hit[0].get("status") or "").lower() != "resolved"
+    ok = ok and len(hist_resolved) == 0
+    record(
+        "internal_30d_missing_daily_does_not_false_resolve_test",
+        ok,
+        f"aid={aid} empty_res={len(empty_resolved)} one_res={len(one_resolved)} "
+        f"active={len(active_hit)} hist_res={len(hist_resolved)}",
+    )
+
+
+def test_internal_30d_valid_window_below_4pct_resolves(fixture: Path) -> None:
+    """Valid Internal 30D with abs(pct)<4% still resolves a prior open."""
+    ba = import_mod(fixture, "build_alerts")
+    now = datetime(2026, 9, 15, 12, 0, tzinfo=timezone.utc)
+    ticker, fiscal = "KEYS", "Oct 2027"
+    d0 = now.strftime("%Y-%m-%d")
+    d30 = (now - timedelta(days=30)).strftime("%Y-%m-%d")
+    daily_open = [
+        _daily_pt(d30, ticker, fiscal, 10.0, "2027E"),
+        _daily_pt(d0, ticker, fiscal, 11.0, "2027E"),  # +10%
+    ]
+    out_open, _ = ba.rule2_cumulative(
+        history=[], lookback_days=30, daily_rows=daily_open, now=now, prior_history=[]
+    )
+    opens = [
+        a
+        for a in out_open
+        if a.get("ticker") == ticker
+        and a.get("rule") == "cumulative_revision_gt_5pct"
+        and str(a.get("lifecycleEvent") or "").lower() == "open"
+    ]
+    ok = len(opens) == 1
+    aid = opens[0]["id"] if opens else None
+    now2 = now + timedelta(days=2)
+    d2 = now2.strftime("%Y-%m-%d")
+    d30b = (now2 - timedelta(days=30)).strftime("%Y-%m-%d")
+    daily_resolve = [
+        _daily_pt(d30b, ticker, fiscal, 10.0, "2027E"),
+        _daily_pt(d2, ticker, fiscal, 10.3, "2027E"),  # +3% < 4%
+    ]
+    out_res, _ = ba.rule2_cumulative(
+        history=[], lookback_days=30, daily_rows=daily_resolve, now=now2, prior_history=opens
+    )
+    resolved = [
+        a
+        for a in out_res
+        if a.get("id") == aid
+        and (
+            str(a.get("lifecycleEvent") or "").lower() == "resolved"
+            or str(a.get("status") or "").lower() == "resolved"
+        )
+    ]
+    ok = ok and len(resolved) == 1
+    ok = ok and "< 4" in str(resolved[0].get("message") or "")
+    # evaluate_alerts: prior open + valid <4% window → no longer active.
+    jsonl = fixture / "data" / "daily_eps_snapshots" / "daily.jsonl"
+    jsonl.parent.mkdir(parents=True, exist_ok=True)
+    jsonl.write_text("\n".join(json.dumps(r) for r in daily_resolve) + "\n", encoding="utf-8")
+    (fixture / "data" / "alerts" / "index.json").write_text(
+        json.dumps({"alerts": opens, "activeAlerts": opens, "alertHistory": opens}, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    payload = ba.evaluate_alerts(now=now2)
+    hist_resolved = [
+        a
+        for a in (payload.get("alertHistory") or [])
+        if a.get("id") == aid and str(a.get("status") or a.get("lifecycleEvent") or "").lower() == "resolved"
+    ]
+    active_hit = [a for a in (payload.get("activeAlerts") or []) if a.get("id") == aid]
+    ok = ok and len(hist_resolved) == 1 and len(active_hit) == 0
+    record(
+        "internal_30d_valid_window_below_4pct_resolves_test",
+        ok,
+        f"aid={aid} resolved={len(resolved)} hist_res={len(hist_resolved)} active={len(active_hit)}",
+    )
+
+
 # Suite classification: integration = subprocess/crash/publish/heavy ingest
 INTEGRATION_TEST_NAMES = {
     "test_full_export_2027_rollover",
@@ -6038,6 +6191,8 @@ def _all_suite_tests():
         ("test_export_30d_matches_alert_engine_30d", test_export_30d_matches_alert_engine_30d),
         ("test_revision_window_same_day_as_of_cutoff", test_revision_window_same_day_as_of_cutoff),
         ("test_internal_30d_no_revision_event_fallback", test_internal_30d_no_revision_event_fallback),
+        ("test_internal_30d_missing_daily_does_not_false_resolve", test_internal_30d_missing_daily_does_not_false_resolve),
+        ("test_internal_30d_valid_window_below_4pct_resolves", test_internal_30d_valid_window_below_4pct_resolves),
     ]
 
 

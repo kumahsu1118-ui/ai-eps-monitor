@@ -115,6 +115,7 @@ Shared helper: `tools/revision_windows.py` — used by both `export_web_data.py`
 - Same-day collapse is cutoff-aware: latest `updateTime` ≤ `as_of`, else last append among remaining rows. Calendar `date` is the day bucket.
 - Baseline: schedule-aware weekday-gap (`MAX_BASELINE_WEEKDAY_GAP = 1`). Friday→Monday is valid; ancient observations cannot fake a 30D baseline. See the helper module docstring.
 - Internal 30D is **daily.jsonl only** — revision-event history is never substituted when daily observations are absent.
+- Missing/unavailable daily history is fail-closed for lifecycle too: do not mint a new Internal 30D and do not resolve a prior open. True `Resolved` requires a valid computed Internal 30D with `|pct| < 4%`. Empty `daily.jsonl` is data loss, not evidence the revision fell below the resolve threshold.
 
 ## daily.jsonl persistence
 

@@ -12,6 +12,9 @@ Rules (documented, no ML / no invented thresholds beyond these):
      material Update / Resolved (no daily spam).
      If <2 usable daily points in window → alertDiagnostics only (NOT alertHistory).
      NEVER reconstruct Internal 30D from revision-event history when daily.jsonl is empty.
+     Missing/unavailable daily history must not mint a new Internal 30D and must not
+     resolve a prior open (data loss ≠ abs(pct)<4%). True Resolved requires a valid
+     computed Internal 30D with |pct|<4%.
   2b. Source-reported SA 1M |rev1M|>=5% → source_reported_1m_revision
      labeled "Source window: Seeking Alpha 1M" (NEVER Internal 30D).
   3. Results vs consensus (resultsVsConsensus) and guidance vs consensus
@@ -410,12 +413,16 @@ def rule2_cumulative(
     calendar slack). Friday→Monday is valid; ancient obs cannot fake 30D.
     NEVER substitute revision-event history when daily.jsonl has no groups —
     Internal 30D is fail-closed without daily observations (exporter has no
-    equivalent fallback).
+    equivalent fallback). Missing/unavailable daily history also must not
+    resolve a prior open: empty groups or an unevaluable window is not
+    evidence that |pct| fell below 4%. Preserve the prior open (diagnostics
+    only) until a valid window can be computed.
 
     Stateful hysteresis (Internal 30D — never SA 1M):
       |pct| >= 5% → Open (or Update same active alert ID while stays >=5%)
-      |pct| < 4%  → Resolve active alert
+      |pct| < 4%  → Resolve active alert (valid computed window only)
       4% <= |pct| < 5% → hold prior Open/Updated (hysteresis band)
+      window unavailable / daily missing → no new Open, no Resolved
 
     History only records Open / material Update / Resolved — no daily spam.
     Stable alert ID per open episode (no daily minting).
@@ -485,37 +492,28 @@ def rule2_cumulative(
             return True
 
     def _insufficient(ticker: str, fiscal: str, pts: list, message: str) -> None:
+        prior = prior_open.get((ticker, fiscal))
         diagnostics.append(
             {
                 "rule": "cumulative_revision_insufficient_history",
                 "severity": "info",
                 "ticker": ticker,
                 "period": fiscal,
-                "message": message,
+                "message": (
+                    message
+                    if prior is None
+                    else f"{message}; prior open Internal 30D preserved (window unavailable is not a resolve)"
+                ),
                 "lookbackDays": lookback_days,
                 "windowPointCount": len(pts),
                 "status": "insufficient history",
                 "eventAt": now_utc_iso(),
                 "diagnostic": True,
+                "priorAlertId": (prior or {}).get("id"),
             }
         )
-        prior = prior_open.get((ticker, fiscal))
-        if prior is not None:
-            resolved = dict(prior)
-            resolved["status"] = "Resolved"
-            resolved["lifecycleStatus"] = "Resolved"
-            resolved["lifecycleEvent"] = "Resolved"
-            resolved["resolvedAt"] = now.strftime("%Y-%m-%dT%H:%M:%SZ")
-            resolved["oneshot"] = False
-            resolved["expiresAt"] = now.strftime("%Y-%m-%dT%H:%M:%SZ")
-            resolved["activeUntil"] = resolved["expiresAt"]
-            resolved["message"] = (
-                f"{ticker} {fiscal}: Internal 30D cumulative resolved "
-                f"(insufficient history / window lost)"
-            )
-            resolved["title"] = resolved["message"]
-            resolved["windowLabel"] = "Internal 30D"
-            out.append(resolved)
+        # Fail closed: an unevaluable/missing window is not abs(pct)<4%.
+        # Do not mint a new Internal 30D and do not resolve a prior open.
 
     evaluated_keys = set()
     for (ticker, fiscal), pts in groups.items():
@@ -657,22 +655,36 @@ def rule2_cumulative(
                 a["windowLabel"] = "Internal 30D"
                 out.append(a)
 
-    # Resolve prior opens for keys no longer in groups (ticker/fiscal disappeared)
+    # Keys not in groups (empty/missing daily.jsonl, or this fiscal identity
+    # absent this run) are NOT a true resolve. Empty daily is data loss, not
+    # abs(pct)<4%, and is not independently proven fiscal-identity removal.
+    # Preserve prior opens until a valid Internal 30D window can be evaluated.
     for key, prior in prior_open.items():
         if key in evaluated_keys:
             continue
-        a = dict(prior)
-        a["status"] = "Resolved"
-        a["lifecycleStatus"] = "Resolved"
-        a["lifecycleEvent"] = "Resolved"
-        a["resolvedAt"] = now.strftime("%Y-%m-%dT%H:%M:%SZ")
-        a["oneshot"] = False
-        a["expiresAt"] = now.strftime("%Y-%m-%dT%H:%M:%SZ")
-        a["activeUntil"] = a["expiresAt"]
-        a["windowLabel"] = "Internal 30D"
-        a["message"] = f"{key[0]} {key[1]}: Internal 30D cumulative resolved (no longer tracked)"
-        a["title"] = a["message"]
-        out.append(a)
+        reason = (
+            "daily history unavailable"
+            if not groups
+            else "fiscal identity not in daily history"
+        )
+        diagnostics.append(
+            {
+                "rule": "cumulative_revision_insufficient_history",
+                "severity": "info",
+                "ticker": key[0],
+                "period": key[1],
+                "message": (
+                    f"{key[0]} {key[1]}: Internal 30D cannot be evaluated "
+                    f"({reason}); prior open preserved"
+                ),
+                "lookbackDays": lookback_days,
+                "windowPointCount": 0,
+                "status": "insufficient history",
+                "eventAt": now_utc_iso(),
+                "diagnostic": True,
+                "priorAlertId": prior.get("id"),
+            }
+        )
 
     return out, diagnostics
 
