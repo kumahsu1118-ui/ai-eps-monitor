@@ -6,27 +6,35 @@ Single implementation used by ``export_web_data`` (persisted meta) and
 """
 from __future__ import annotations
 
+import re
 from datetime import datetime, timedelta, timezone
 
 TAIPEI = timezone(timedelta(hours=8))
 COLLECTION_HOUR_TAIPEI = 8
 COLLECTION_GRACE_HOURS = 6
+DATE_ONLY_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
 
 def parse_iso_dt(iso_utc: str) -> datetime | None:
+    """Parse a collection timestamp. Fail closed on malformed strings.
+
+    Accepts a valid ISO datetime, or an *exact* ``YYYY-MM-DD`` (midnight UTC).
+    Does not recover by truncating a longer malformed string to its date prefix.
+    """
     s = (iso_utc or "").strip()
     if not s:
         return None
-    raw = s
+    if DATE_ONLY_RE.fullmatch(s):
+        try:
+            return datetime.strptime(s, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+        except Exception:
+            return None
     if s.endswith("Z"):
         s = s[:-1] + "+00:00"
     try:
         dt = datetime.fromisoformat(s)
     except Exception:
-        try:
-            dt = datetime.strptime(raw[:10], "%Y-%m-%d").replace(tzinfo=timezone.utc)
-        except Exception:
-            return None
+        return None
     if dt.tzinfo is None:
         dt = dt.replace(tzinfo=timezone.utc)
     return dt

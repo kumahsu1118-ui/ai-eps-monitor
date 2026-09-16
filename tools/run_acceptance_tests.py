@@ -7880,8 +7880,12 @@ def test_health_check_recent_collection_ages_last_success(fixture: Path) -> None
     # Several-days-old collection, frozen COMPLETE meta.
     old = _coll("2026-09-10T01:00:00Z", datetime(2026, 9, 16, 8, 0, 0, tzinfo=timezone.utc))
 
-    # Malformed timestamp must not be HEALTHY (fail-closed).
+    # Malformed timestamp must not be HEALTHY (fail-closed), including
+    # strings whose first 10 chars look like YYYY-MM-DD.
     bad = _coll("not-a-timestamp", now_wed)
+    bad_t = _coll("2026-09-15Tnot-a-time", now_wed)
+    bad_space = _coll("2026-09-15 garbage", now_wed)
+    date_only = _coll("2026-09-15", datetime(2026, 9, 15, 12, 0, 0, tzinfo=timezone.utc))
 
     # Lockstep with exporter schedule rule.
     f_sat = exp.compute_freshness(fri_iso, now=datetime(2026, 9, 12, 12, 0, 0, tzinfo=TAIPEI))
@@ -7892,7 +7896,9 @@ def test_health_check_recent_collection_ages_last_success(fixture: Path) -> None
     ok = ok and mon_pm.get("status") == "DEGRADED"
     ok = ok and old.get("status") == "DEGRADED"
     ok = ok and bad.get("status") == "FAILED"
-    ok = ok and bad.get("status") != "HEALTHY"
+    ok = ok and bad_t.get("status") == "FAILED"
+    ok = ok and bad_space.get("status") == "FAILED"
+    ok = ok and date_only.get("status") == "HEALTHY"
     ok = ok and f_sat.get("dataStale") is False and f_mon_pm.get("dataStale") is True
     ok = ok and (sat.get("details") or {}).get("freshness", {}).get("dataStale") is False
     ok = ok and (mon_pm.get("details") or {}).get("freshness", {}).get("dataStale") is True
@@ -7901,7 +7907,26 @@ def test_health_check_recent_collection_ages_last_success(fixture: Path) -> None
         ok,
         f"recent={recent.get('status')} sat={sat.get('status')} sun={sun.get('status')} "
         f"mon_am={mon_am.get('status')} mon_pm={mon_pm.get('status')} old={old.get('status')} "
-        f"bad={bad.get('status')}",
+        f"bad={bad.get('status')} bad_t={bad_t.get('status')} bad_space={bad_space.get('status')} "
+        f"date_only={date_only.get('status')}",
+    )
+
+
+def test_parse_iso_dt_rejects_malformed_date_prefix(fixture: Path) -> None:
+    """Do not recover malformed timestamps by truncating to YYYY-MM-DD."""
+    cf = import_mod(fixture, "collection_freshness")
+    exp = import_mod(fixture, "export_web_data")
+    ok = cf.parse_iso_dt("2026-09-15T18:00:00Z") is not None
+    ok = ok and cf.parse_iso_dt("2026-09-15") == datetime(2026, 9, 15, tzinfo=timezone.utc)
+    ok = ok and cf.parse_iso_dt("2026-09-15Tnot-a-time") is None
+    ok = ok and cf.parse_iso_dt("2026-09-15 garbage") is None
+    ok = ok and cf.parse_iso_dt("not-a-timestamp") is None
+    ok = ok and exp.parse_iso_dt("2026-09-15Tnot-a-time") is None
+    ok = ok and exp.parse_iso_dt("2026-09-15 garbage") is None
+    record(
+        "parse_iso_dt_rejects_malformed_date_prefix_test",
+        ok,
+        "iso_ok date_only_ok malformed_none",
     )
 
 
@@ -8323,6 +8348,7 @@ def _all_suite_tests():
         ("test_health_check_git_failed_and_dangling_current", test_health_check_git_failed_and_dangling_current),
         ("test_health_check_exit_codes", test_health_check_exit_codes),
         ("test_health_check_recent_collection_ages_last_success", test_health_check_recent_collection_ages_last_success),
+        ("test_parse_iso_dt_rejects_malformed_date_prefix", test_parse_iso_dt_rejects_malformed_date_prefix),
         ("test_health_check_unpushed_canonical_commit_degraded", test_health_check_unpushed_canonical_commit_degraded),
         ("test_health_check_cli_subprocess_read_only", test_health_check_cli_subprocess_read_only),
     ]
