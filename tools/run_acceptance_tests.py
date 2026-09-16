@@ -136,6 +136,7 @@ def build_fixture(dest: Path) -> Path:
     for name in (
         "export_web_data.py",
         "build_alerts.py",
+        "revision_windows.py",
         "sa_parser.py",
         "atomic_io.py",
         "snapshot_quality.py",
@@ -5535,6 +5536,188 @@ def test_revision_momentum_public_schema(fixture: Path) -> None:
     )
 
 
+def test_revision_window_monday_friday_baseline_valid(fixture: Path) -> None:
+    """Monday targetDate + prior Friday baseline is valid (2-day slack used to reject)."""
+    exp = import_mod(fixture, "export_web_data")
+    rw = import_mod(fixture, "revision_windows")
+    # targetDate Monday 2026-08-17; latest = Monday + 30d = 2026-09-16 (Wed)
+    friday = datetime(2026, 8, 14, tzinfo=timezone.utc)
+    monday_target = datetime(2026, 8, 17, tzinfo=timezone.utc)
+    latest = datetime(2026, 9, 16, tzinfo=timezone.utc)
+    ok = (latest - monday_target).days == 30
+    ok = ok and friday.weekday() == 4 and monday_target.weekday() == 0
+    # Old 2-day calendar slack: (Mon - Fri).days = 3 > 2 → would be unavailable.
+    old_slack_days = (monday_target - friday).days
+    ok = ok and old_slack_days == 3
+    ticker, fiscal = "NVDA", "Jan 2028"
+    daily = [
+        _daily_pt(friday.strftime("%Y-%m-%d"), ticker, fiscal, 10.0, "2027E"),
+        _daily_pt(latest.strftime("%Y-%m-%d"), ticker, fiscal, 12.0, "2027E"),
+    ]
+    pts = exp.group_daily_by_fiscal_identity(daily)[exp.fiscal_identity_key(ticker, fiscal)]
+    w30 = exp.compute_internal_window(pts, as_of=latest, window_days=30)
+    ok = ok and w30.get("status") == "ok"
+    ok = ok and w30.get("targetDate") == monday_target.strftime("%Y-%m-%d")
+    ok = ok and w30.get("startDate") == friday.strftime("%Y-%m-%d")
+    ok = ok and abs(float(w30["revisionPct"]) - 20.0) < 1e-6
+    ok = ok and rw.baseline_gap_allowed(friday.date(), monday_target.date()) is True
+    ok = ok and rw.weekday_gap(friday.date(), monday_target.date()) == 1
+    ok = ok and rw.MAX_BASELINE_WEEKDAY_GAP == 1
+    # Alert engine must agree on the same input.
+    ba = import_mod(fixture, "build_alerts")
+    out, diag = ba.rule2_cumulative(history=[], lookback_days=30, daily_rows=daily, now=latest, prior_history=[])
+    hits = [a for a in out if a.get("ticker") == ticker and a.get("rule") == "cumulative_revision_gt_5pct"]
+    ok = ok and len(hits) == 1
+    if hits:
+        ok = ok and abs(float(hits[0]["cumulativePct"]) - 20.0) < 1e-6
+        ok = ok and hits[0].get("startDate") == friday.strftime("%Y-%m-%d")
+        ok = ok and hits[0].get("startEps") == 10.0
+        ok = ok and hits[0].get("endEps") == 12.0
+    ok = ok and not any(d.get("rule") == "cumulative_revision_insufficient_history" for d in diag if d.get("ticker") == ticker)
+    record(
+        "revision_window_monday_friday_baseline_valid_test",
+        ok,
+        f"status={w30.get('status')} pct={w30.get('revisionPct')} old_slack={old_slack_days}d alerts={len(hits)}",
+    )
+
+
+def test_revision_window_too_old_baseline_unavailable(fixture: Path) -> None:
+    """Ancient observation must not masquerade as a valid 30D baseline."""
+    exp = import_mod(fixture, "export_web_data")
+    rw = import_mod(fixture, "revision_windows")
+    as_of = datetime(2026, 9, 15, tzinfo=timezone.utc)
+    ticker, fiscal = "TSM", "Dec 2027"
+    ancient = as_of - timedelta(days=90)
+    daily = [
+        _daily_pt(ancient.strftime("%Y-%m-%d"), ticker, fiscal, 8.0, "2027E"),
+        _daily_pt(as_of.strftime("%Y-%m-%d"), ticker, fiscal, 12.0, "2027E"),
+    ]
+    pts = exp.group_daily_by_fiscal_identity(daily)[exp.fiscal_identity_key(ticker, fiscal)]
+    w30 = exp.compute_internal_window(pts, as_of=as_of, window_days=30)
+    fake_30 = (12.0 - 8.0) / 8.0 * 100.0
+    target = (as_of - timedelta(days=30)).date()
+    ok = w30.get("status") == "unavailable" and w30.get("revisionPct") is None
+    ok = ok and w30.get("reason") == "insufficient_history"
+    ok = ok and w30.get("revisionPct") != fake_30
+    ok = ok and rw.baseline_gap_allowed(ancient.date(), target) is False
+    ok = ok and rw.weekday_gap(ancient.date(), target) > rw.MAX_BASELINE_WEEKDAY_GAP
+    ba = import_mod(fixture, "build_alerts")
+    out, diag = ba.rule2_cumulative(history=[], lookback_days=30, daily_rows=daily, now=as_of, prior_history=[])
+    fake_alerts = [
+        a
+        for a in out
+        if a.get("ticker") == ticker
+        and a.get("rule") == "cumulative_revision_gt_5pct"
+        and str(a.get("lifecycleEvent") or "").lower() != "resolved"
+    ]
+    insuff = [d for d in diag if d.get("ticker") == ticker and d.get("rule") == "cumulative_revision_insufficient_history"]
+    ok = ok and len(fake_alerts) == 0 and len(insuff) >= 1
+    record(
+        "revision_window_too_old_baseline_unavailable_test",
+        ok,
+        f"30={w30.get('status')} fake={fake_30} gap={rw.weekday_gap(ancient.date(), target)} alerts={len(fake_alerts)}",
+    )
+
+
+def test_revision_window_same_day_prefers_latest_updatetime(fixture: Path) -> None:
+    """Same calendar day: latest updateTime wins; missing updateTime → last append."""
+    exp = import_mod(fixture, "export_web_data")
+    as_of = datetime(2026, 9, 15, 20, 0, tzinfo=timezone.utc)
+    ticker, fiscal = "MSFT", "Jun 2027"
+    d0 = as_of.strftime("%Y-%m-%d")
+    d30 = (as_of - timedelta(days=30)).strftime("%Y-%m-%d")
+    # Later updateTime is appended FIRST; earlier updateTime appended LAST.
+    daily_time = [
+        _daily_pt(d30, ticker, fiscal, 10.0, "2027E"),
+        {
+            **_daily_pt(d0, ticker, fiscal, 12.0, "2027E"),
+            "updateTime": "2026-09-15T18:00:00Z",
+        },
+        {
+            **_daily_pt(d0, ticker, fiscal, 10.5, "2027E"),
+            "updateTime": "2026-09-15T08:00:00Z",
+        },
+    ]
+    pts = exp.group_daily_by_fiscal_identity(daily_time)[exp.fiscal_identity_key(ticker, fiscal)]
+    w30 = exp.compute_internal_window(pts, as_of=as_of, window_days=30)
+    ok = w30.get("status") == "ok"
+    ok = ok and abs(float(w30["revisionPct"]) - 20.0) < 1e-6  # 10 → 12, not 10 → 10.5
+    ok = ok and abs(float(w30["endEps"]) - 12.0) < 1e-9
+    # No updateTime: last append order wins (10.5).
+    daily_append = [
+        _daily_pt(d30, ticker, fiscal, 10.0, "2027E"),
+        _daily_pt(d0, ticker, fiscal, 11.0, "2027E"),
+        _daily_pt(d0, ticker, fiscal, 10.5, "2027E"),
+    ]
+    pts2 = exp.group_daily_by_fiscal_identity(daily_append)[exp.fiscal_identity_key(ticker, fiscal)]
+    w30b = exp.compute_internal_window(pts2, as_of=as_of, window_days=30)
+    ok = ok and w30b.get("status") == "ok"
+    ok = ok and abs(float(w30b["endEps"]) - 10.5) < 1e-9
+    ok = ok and abs(float(w30b["revisionPct"]) - 5.0) < 1e-6  # 10 → 10.5
+    record(
+        "revision_window_same_day_prefers_latest_updatetime_test",
+        ok,
+        f"timed_end={w30.get('endEps')} append_end={w30b.get('endEps')}",
+    )
+
+
+def test_export_30d_matches_alert_engine_30d(fixture: Path) -> None:
+    """export 30D and alert-engine 30D are identical on the same input (shared helper)."""
+    exp = import_mod(fixture, "export_web_data")
+    ba = import_mod(fixture, "build_alerts")
+    ok = getattr(exp.compute_internal_window, "__module__", "") == "revision_windows"
+    ok = ok and getattr(ba.compute_internal_window, "__module__", "") == "revision_windows"
+    ok = ok and getattr(exp.group_daily_by_fiscal_identity, "__module__", "") == "revision_windows"
+    as_of = datetime(2026, 9, 15, 12, 0, tzinfo=timezone.utc)
+    ticker, fiscal = "KEYS", "Oct 2027"
+    daily = [
+        _daily_pt((as_of - timedelta(days=30)).strftime("%Y-%m-%d"), ticker, fiscal, 15.0, "2027E"),
+        _daily_pt(as_of.strftime("%Y-%m-%d"), ticker, fiscal, 16.0, "2027E"),
+    ]
+    pts = exp.group_daily_by_fiscal_identity(daily)[exp.fiscal_identity_key(ticker, fiscal)]
+    w30 = exp.compute_internal_window(pts, as_of=as_of, window_days=30)
+    out, diag = ba.rule2_cumulative(history=[], lookback_days=30, daily_rows=daily, now=as_of, prior_history=[])
+    hits = [
+        a
+        for a in out
+        if a.get("ticker") == ticker and a.get("rule") == "cumulative_revision_gt_5pct"
+    ]
+    ok = ok and w30.get("status") == "ok"
+    ok = ok and len(hits) == 1
+    if hits:
+        ok = ok and abs(float(hits[0]["cumulativePct"]) - float(w30["revisionPct"])) < 1e-12
+        ok = ok and hits[0].get("startEps") == w30.get("startEps")
+        ok = ok and hits[0].get("endEps") == w30.get("endEps")
+        ok = ok and hits[0].get("startDate") == w30.get("startDate")
+        ok = ok and str(hits[0].get("eventDate") or "")[:10] == w30.get("endDate")
+    companies = {
+        ticker: {
+            "epsByFiscal": {
+                fiscal: {
+                    "consensus": 16.0,
+                    "reportedFiscalLabel": fiscal,
+                    "mappedYear": "2027E",
+                }
+            },
+            "eps": {},
+        }
+    }
+    rows = exp.build_revision_momentum(companies, [ticker], daily, as_of=as_of, year_keys=["2027E"])
+    w30b = ((rows[0].get("internal") or {}).get("30D") if rows else {}) or {}
+    ok = ok and abs(float(w30b.get("revisionPct")) - float(w30["revisionPct"])) < 1e-12
+    ok = ok and (
+        len(diag) == 0
+        or not any(
+            d.get("ticker") == ticker and d.get("rule") == "cumulative_revision_insufficient_history" for d in diag
+        )
+    )
+    record(
+        "export_30d_matches_alert_engine_30d_test",
+        ok,
+        f"exp={w30.get('revisionPct')} alert={(hits[0].get('cumulativePct') if hits else None)} module={getattr(exp.compute_internal_window, '__module__', None)}",
+    )
+
+
 # Suite classification: integration = subprocess/crash/publish/heavy ingest
 INTEGRATION_TEST_NAMES = {
     "test_full_export_2027_rollover",
@@ -5736,6 +5919,10 @@ def _all_suite_tests():
         ("test_analyst_direction_unavailable_when_not_in_source", test_analyst_direction_unavailable_when_not_in_source),
         ("test_internal_revision_anchor_latest_observation", test_internal_revision_anchor_latest_observation),
         ("test_revision_momentum_public_schema", test_revision_momentum_public_schema),
+        ("test_revision_window_monday_friday_baseline_valid", test_revision_window_monday_friday_baseline_valid),
+        ("test_revision_window_too_old_baseline_unavailable", test_revision_window_too_old_baseline_unavailable),
+        ("test_revision_window_same_day_prefers_latest_updatetime", test_revision_window_same_day_prefers_latest_updatetime),
+        ("test_export_30d_matches_alert_engine_30d", test_export_30d_matches_alert_engine_30d),
     ]
 
 

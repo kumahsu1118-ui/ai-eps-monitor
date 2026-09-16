@@ -106,5 +106,18 @@ bash tools/publish_github_pages.sh
 | Git push | Auth/network | pending-publish; retry from CURRENT web/ |
 | Pages CDN lag | Old JSON briefly | Expected; cache-bust / wait |
 
+## Internal revision windows (30/60/90D)
+
+Shared helper: `tools/revision_windows.py` — used by both `export_web_data.py` and `build_alerts.py`.
+
+- Identity = ticker + normalized `reportedFiscalPeriodEnding`.
+- Anchor = latest valid daily observation ≤ `as_of`; `targetDate = latestDate − N days`.
+- Same-day collapse: latest `updateTime`, else last append order.
+- Baseline: schedule-aware weekday-gap (`MAX_BASELINE_WEEKDAY_GAP = 1`). Friday→Monday is valid; ancient observations cannot fake a 30D baseline. See the helper module docstring.
+
+## daily.jsonl persistence
+
+Live cache `data/daily_eps_snapshots/daily.jsonl`; committed copy under `data/generations/<runId>/`. Not published to GitHub Pages and not tracked in git. A fresh workspace cannot reconstruct Internal 30/60/90D until weekday collections accumulate on that machine.
+
 ## What is NOT in the public repo
 Seeking Alpha cookies/sessions, GitHub tokens beyond Actions secrets (none required for static Pages from this machine’s push), `.env`, browser profiles, private raw pulls beyond published JSON fields.
