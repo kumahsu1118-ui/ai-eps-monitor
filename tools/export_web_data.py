@@ -566,6 +566,38 @@ def cagr_2628(e26, e28):
     return cagr_n_years(e26, e28, 2.0)
 
 
+GROWTH_ADJUSTED_PE_DOC = (
+    "Comparison tool only — not a fair value, score, or recommendation. "
+    "Growth-adjusted P/E = Forward P/E ÷ (Forward EPS CAGR as percent units). "
+    "Example: 20 / 25 → 0.80. Non-finite PE or CAGR ≤ 0 → N/M."
+)
+
+
+def default_comparison_year(years) -> str | None:
+    """Selector default: displayMappedYears[1] if present, else [0]. Never a calendar-year branch."""
+    ys = [y for y in (years or []) if y]
+    if len(ys) > 1:
+        return ys[1]
+    return ys[0] if ys else None
+
+
+def growth_adjusted_pe(forward_pe, cagr_fraction):
+    """Forward PE / (CAGR as percent units).
+
+    CAGR is stored as a fraction (0.25 = 25%). Percent units = fraction × 100.
+    20 / 25 → 0.80. Missing/non-finite PE or CAGR ≤ 0 → None (N/M). Never coerce missing to 0.
+    """
+    pe_v = to_num(forward_pe)
+    cagr_v = to_num(cagr_fraction)
+    if pe_v is None or cagr_v is None or cagr_v <= 0:
+        return None
+    pct_units = cagr_v * 100.0
+    if pct_units <= 0:
+        return None
+    result = pe_v / pct_units
+    return result if math.isfinite(result) else None
+
+
 def taipei_display_safe(iso_utc: str) -> str | None:
     s = (iso_utc or "").strip()
     if not s:
@@ -858,8 +890,10 @@ def build_valuation(
     Backward-compat flat keys (eps26/pe27/…) kept during transition when years match.
     """
     year_keys = year_keys or display_mapped_years()
-    # Use first three display years for primary table (Y, Y+1, Y+2)
-    display = list(year_keys[:3])
+    # All displayMappedYears become period keys (Comparison Year options).
+    # Forward EPS CAGR remains the Y0→Y2 mapped span (first and third slots).
+    display = list(year_keys)
+    cagr_span = list(year_keys[:3])
     rows = []
     for t in tickers:
         c = companies[t]
@@ -869,22 +903,29 @@ def build_valuation(
         for i, yk in enumerate(display):
             e = (c.get("eps") or {}).get(yk) or {}
             cons = e.get("consensus")
+            analysts = e.get("analysts")
+            if analysts is None:
+                analysts = e.get("analystCount")
             entry = {
                 "eps": cons,
                 "pe": pe(price, cons),
                 "rev1M": e.get("rev1M"),
                 "reportedFiscalLabel": e.get("reportedFiscalLabel"),
+                "reportedFiscalPeriodEnding": e.get("reportedFiscalLabel"),
                 "trueCalendarYearEps": e.get("trueCalendarYearEps"),
                 "growthFromPrior": growth_pct(prev_cons, cons) if i > 0 else None,
+                "analysts": to_num(analysts),
             }
             periods[yk] = entry
             prev_cons = cons
 
         cagr = None
-        if len(display) >= 3:
-            e0 = (periods.get(display[0]) or {}).get("eps")
-            e2 = (periods.get(display[2]) or {}).get("eps")
+        if len(cagr_span) >= 3:
+            e0 = (periods.get(cagr_span[0]) or {}).get("eps")
+            e2 = (periods.get(cagr_span[2]) or {}).get("eps")
             cagr = cagr_n_years(e0, e2, 2.0)
+        for entry in periods.values():
+            entry["growthAdjustedPe"] = growth_adjusted_pe(entry.get("pe"), cagr)
 
         row = {
             "ticker": t,
@@ -1323,6 +1364,170 @@ def build_revision_momentum(
 
     rows.sort(key=_sort_key)
     return rows
+
+
+def attach_internal_windows_to_valuation(
+    valuation_rows: list[dict] | None,
+    revision_momentum: list[dict] | None,
+) -> list[dict]:
+    """Nest Internal 30/60/90D onto valuation periods by ticker + fiscal identity.
+
+    Copies the public ``revisionMomentum`` payload (already computed via
+    ``revision_windows.compute_internal_window``). Does not reimplement window math
+    and does not join on mappedYear alone.
+    """
+    by_ident: dict[tuple[str, str], dict] = {}
+    for row in revision_momentum or []:
+        if not isinstance(row, dict):
+            continue
+        ident = row.get("identity") if isinstance(row.get("identity"), dict) else {}
+        key = fiscal_identity_key(
+            row.get("ticker") or ident.get("ticker"),
+            row.get("reportedFiscalPeriodEnding")
+            or row.get("reportedFiscalLabel")
+            or ident.get("reportedFiscalPeriodEnding"),
+        )
+        if key:
+            by_ident[key] = row
+    for vrow in valuation_rows or []:
+        if not isinstance(vrow, dict):
+            continue
+        ticker = vrow.get("ticker")
+        periods = vrow.get("periods") or {}
+        for period in periods.values():
+            if not isinstance(period, dict):
+                continue
+            key = fiscal_identity_key(
+                ticker,
+                period.get("reportedFiscalPeriodEnding") or period.get("reportedFiscalLabel"),
+            )
+            hit = by_ident.get(key) if key else None
+            if not hit:
+                continue
+            internal = hit.get("internal")
+            if isinstance(internal, dict):
+                period["internal"] = internal
+            if period.get("analysts") is None and "analysts" in hit:
+                period["analysts"] = hit.get("analysts")
+    return valuation_rows or []
+
+
+def _internal_window_pct(internal: dict | None, window_key: str):
+    """Public Internal window percent, or None when unavailable (never coerced to 0)."""
+    w = (internal or {}).get(window_key) or {}
+    if not isinstance(w, dict):
+        return None
+    if w.get("status") == "ok" and w.get("revisionPct") is not None:
+        return to_num(w.get("revisionPct"))
+    return None
+
+
+def valuation_comparison_fields(
+    row: dict,
+    year_key: str,
+    *,
+    revision_momentum: list[dict] | None = None,
+) -> dict:
+    """Derived public fields for one valuation comparison row × selected mapped year."""
+    period = ((row or {}).get("periods") or {}).get(year_key) or {}
+    if not isinstance(period, dict):
+        period = {}
+    cagr = (row or {}).get("cagrY0Y2")
+    pe_v = period.get("pe")
+    gap = period.get("growthAdjustedPe")
+    if gap is None:
+        gap = growth_adjusted_pe(pe_v, cagr)
+    analysts = period.get("analysts")
+    internal = period.get("internal") if isinstance(period.get("internal"), dict) else None
+    if revision_momentum:
+        key = fiscal_identity_key(
+            (row or {}).get("ticker"),
+            period.get("reportedFiscalPeriodEnding") or period.get("reportedFiscalLabel"),
+        )
+        if key:
+            for m in revision_momentum:
+                if not isinstance(m, dict):
+                    continue
+                ident = m.get("identity") if isinstance(m.get("identity"), dict) else {}
+                mk = fiscal_identity_key(
+                    m.get("ticker") or ident.get("ticker"),
+                    m.get("reportedFiscalPeriodEnding")
+                    or m.get("reportedFiscalLabel")
+                    or ident.get("reportedFiscalPeriodEnding"),
+                )
+                if mk != key:
+                    continue
+                if internal is None and isinstance(m.get("internal"), dict):
+                    internal = m.get("internal")
+                if analysts is None and "analysts" in m:
+                    analysts = m.get("analysts")
+                break
+    price = (row or {}).get("lastClose")
+    if price is None:
+        price = (row or {}).get("price")
+    return {
+        "ticker": (row or {}).get("ticker"),
+        "year": year_key,
+        "price": price,
+        "afterHours": (row or {}).get("afterHours"),
+        "eps": period.get("eps"),
+        "pe": pe_v,
+        "growthFromPrior": period.get("growthFromPrior"),
+        "cagrY0Y2": cagr,
+        "growthAdjustedPe": gap,
+        "internal30": _internal_window_pct(internal, "30D"),
+        "internal60": _internal_window_pct(internal, "60D"),
+        "internal90": _internal_window_pct(internal, "90D"),
+        "sourceReported1M": period.get("rev1M"),
+        "analysts": analysts,
+        "fiscalPeriod": period.get("reportedFiscalLabel") or period.get("reportedFiscalPeriodEnding"),
+        "revisionRegime": (row or {}).get("revisionRegime"),
+    }
+
+
+def comparison_sort_rows(rows: list[dict], *, key: str, direction: str = "asc") -> list[dict]:
+    """Sort comparison rows: numeric asc/desc, null/N/M last, ticker A–Z tie-break.
+
+    Display convenience only — not an investment ranking. Missing stays last in both
+    directions so empty values never masquerade as zeros at the top.
+    """
+    mul = -1 if str(direction).lower() == "desc" else 1
+
+    def is_miss(v) -> bool:
+        if v is None or v == "":
+            return True
+        if isinstance(v, bool):
+            return True
+        if isinstance(v, str) and v.strip() in {"—", "N/M", "Data unavailable"}:
+            return True
+        if isinstance(v, (int, float)) and not math.isfinite(float(v)):
+            return True
+        return False
+
+    def cmp_pair(a: dict, b: dict) -> int:
+        va, vb = a.get(key), b.get(key)
+        ma, mb = is_miss(va), is_miss(vb)
+        ta, tb = str(a.get("ticker") or ""), str(b.get("ticker") or "")
+        if ma and mb:
+            return (ta > tb) - (ta < tb)
+        if ma:
+            return 1
+        if mb:
+            return -1
+        if isinstance(va, str) or isinstance(vb, str):
+            base = (str(va) > str(vb)) - (str(va) < str(vb))
+        else:
+            try:
+                base = (float(va) > float(vb)) - (float(va) < float(vb))
+            except (TypeError, ValueError):
+                base = (str(va) > str(vb)) - (str(va) < str(vb))
+        if base == 0:
+            return (ta > tb) - (ta < tb)
+        return mul * base
+
+    from functools import cmp_to_key
+
+    return sorted(list(rows or []), key=cmp_to_key(cmp_pair))
 
 
 def _has_digest_content(obj: dict) -> bool:
@@ -2621,6 +2826,9 @@ def _main_locked() -> int:
         as_of=snap_utc,
         year_keys=year_keys,
     )
+    # Derived public fields only: copy Internal 30/60/90D onto valuation periods
+    # by ticker + fiscal identity (no second window implementation).
+    attach_internal_windows_to_valuation(valuation, revision_momentum)
 
     earnings = load_or_init_earnings(companies, tickers)
 

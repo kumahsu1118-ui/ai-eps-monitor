@@ -415,6 +415,14 @@ table.data .ticker a:hover {
   min-width: 7rem;
 }
 
+#comparison-year-controls {
+  margin-top: 0.15rem;
+}
+
+table.data.valuation-compare th[title] {
+  cursor: help;
+}
+
 .btn-group {
   display: inline-flex;
   border: 1px solid var(--border);

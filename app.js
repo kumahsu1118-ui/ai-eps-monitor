@@ -24,6 +24,7 @@
     chartTicker: null,
     chartYear: null, /* set from meta.displayMappedYears on load */
     chartMode: "absolute", /* absolute | index */
+    comparisonYear: null, /* displayMappedYears[1] else [0] */
   };
 
   /* ---------- utils ---------- */
@@ -107,6 +108,64 @@
     }
     if (y == null) y = new Date().getFullYear();
     return [y + "E", (y + 1) + "E", (y + 2) + "E", (y + 3) + "E"];
+  }
+
+  function defaultComparisonYear(years) {
+    const ys = Array.isArray(years) ? years.filter(function (y) { return y != null && y !== ""; }) : [];
+    if (ys.length > 1) return ys[1];
+    return ys.length ? ys[0] : null;
+  }
+
+  function selectedComparisonYear() {
+    const years = displayYearKeys();
+    const cur = state.comparisonYear;
+    if (cur && years.indexOf(cur) >= 0) return cur;
+    return defaultComparisonYear(years);
+  }
+
+  function finiteNum(v) {
+    if (isMissing(v) || typeof v === "string") return null;
+    const n = Number(v);
+    return Number.isFinite(n) ? n : null;
+  }
+
+  function growthAdjustedPe(forwardPe, cagrFraction) {
+    /* ForwardPE / (CAGR as percent units). 20 / 25 → 0.80. CAGR<=0 → N/M. */
+    const peV = finiteNum(forwardPe);
+    const cagrV = finiteNum(cagrFraction);
+    if (peV == null || cagrV == null || cagrV <= 0) return null;
+    const pctUnits = cagrV * 100;
+    if (!(pctUnits > 0)) return null;
+    const result = peV / pctUnits;
+    return Number.isFinite(result) ? result : null;
+  }
+
+  function fiscalIdentityKey(ticker, fiscal) {
+    const t = String(ticker || "").trim().toUpperCase();
+    const lab = String(fiscal || "").replace(/\s+/g, " ").trim();
+    if (!t || !lab) return null;
+    return t + "\0" + lab;
+  }
+
+  function revisionMomentumIdentityMap() {
+    const map = {};
+    (state.revisionMomentum || []).forEach(function (r) {
+      if (!r) return;
+      const ident = r.identity && typeof r.identity === "object" ? r.identity : {};
+      const key = fiscalIdentityKey(
+        r.ticker || ident.ticker,
+        r.reportedFiscalPeriodEnding || r.reportedFiscalLabel || ident.reportedFiscalPeriodEnding
+      );
+      if (key) map[key] = r;
+    });
+    return map;
+  }
+
+  function valuationPrice(r) {
+    if (!r) return null;
+    if (!isMissing(r.lastClose)) return r.lastClose;
+    if (!isMissing(r.price)) return r.price;
+    return null;
   }
 
   /* Schedule-aware freshness — mirrors export_web_data.compute_freshness
@@ -456,6 +515,9 @@
     if (!state.chartYear || dy.indexOf(state.chartYear) < 0) {
       state.chartYear = dy[1] || dy[0] || null;
     }
+    if (!state.comparisonYear || dy.indexOf(state.comparisonYear) < 0) {
+      state.comparisonYear = defaultComparisonYear(dy);
+    }
   }
 
   /* ---------- theme ---------- */
@@ -613,11 +675,11 @@
     rows.forEach((r) => {
       const p1 = periodOf(r, y1);
       const p2 = periodOf(r, y2);
-      const rev1 = p1.rev1M != null ? p1.rev1M : r.rev1M;
-      const rev2 = p2.rev1M != null ? p2.rev1M : r.rev1M28;
-      const pe1 = p1.pe != null ? p1.pe : r.pe27;
-      const cagr = r.cagrY0Y2 != null ? r.cagrY0Y2 : r.cagr2628;
-      const eps0 = (periodOf(r, y0).eps != null ? periodOf(r, y0).eps : r.eps26);
+      const rev1 = p1.rev1M != null ? p1.rev1M : null;
+      const rev2 = p2.rev1M != null ? p2.rev1M : null;
+      const pe1 = p1.pe != null ? p1.pe : null;
+      const cagr = r.cagrY0Y2 != null ? r.cagrY0Y2 : null;
+      const eps0 = periodOf(r, y0).eps;
 
       if (rev1 != null && !Number.isNaN(Number(rev1))) {
         if (Number(rev1) > 0 && (!largestUp || Number(rev1) > Number(largestUp._rev))) {
@@ -941,32 +1003,175 @@
   }
 
   /* ---------- valuation ---------- */
-  function sortValuation(rows) {
-    const { key, dir } = state.sort;
-    const mul = dir === "asc" ? 1 : -1;
-    return rows.slice().sort((a, b) => {
-      let va = a[key];
-      let vb = b[key];
-      if (va == null && vb == null) return 0;
-      if (va == null) return 1;
-      if (vb == null) return -1;
-      if (typeof va === "string") return mul * va.localeCompare(vb);
-      return mul * (Number(va) - Number(vb));
-    });
+  const VALUATION_COL_KEYS = {
+    ticker: 1,
+    price: 1,
+    eps: 1,
+    pe: 1,
+    growth: 1,
+    cagr: 1,
+    growthAdjPe: 1,
+    internal30: 1,
+    internal60: 1,
+    internal90: 1,
+    source1M: 1,
+    analysts: 1,
+    fiscal: 1,
+    regime: 1,
+  };
+
+  const GROWTH_ADJ_PE_TITLE =
+    "Comparison tool only — not a fair value, score, or recommendation. Forward P/E ÷ (Forward EPS CAGR as percent units), e.g. 20 / 25 → 0.80.";
+
+  function companyEpsEntry(ticker, yearKey) {
+    const c = (state.companies || {})[ticker] || {};
+    return ((c.eps || {})[yearKey]) || {};
+  }
+
+  function comparisonPeriod(row, yearKey) {
+    const p = periodOf(row, yearKey);
+    return p && typeof p === "object" ? p : {};
+  }
+
+  function comparisonMomentumRow(row, yearKey, identMap) {
+    const p = comparisonPeriod(row, yearKey);
+    const key = fiscalIdentityKey(
+      row && row.ticker,
+      p.reportedFiscalPeriodEnding || p.reportedFiscalLabel
+    );
+    if (!key) return null;
+    return (identMap || {})[key] || null;
+  }
+
+  function comparisonFields(row, yearKey, identMap) {
+    const p = comparisonPeriod(row, yearKey);
+    const mom = comparisonMomentumRow(row, yearKey, identMap);
+    const cagr = row && row.cagrY0Y2 != null ? row.cagrY0Y2 : null;
+    const peV = p.pe;
+    let analysts = p.analysts;
+    if (analysts == null) {
+      const ce = companyEpsEntry(row && row.ticker, yearKey);
+      analysts = ce.analysts != null ? ce.analysts : ce.analystCount;
+    }
+    if (analysts == null && mom && "analysts" in mom) analysts = mom.analysts;
+    const internal = (p.internal && typeof p.internal === "object" ? p.internal : null) ||
+      (mom && mom.internal) ||
+      null;
+    return {
+      ticker: row && row.ticker,
+      price: valuationPrice(row),
+      afterHours: row && row.afterHours,
+      eps: p.eps,
+      pe: peV,
+      growth: p.growthFromPrior,
+      cagr: cagr,
+      growthAdjPe: p.growthAdjustedPe != null ? p.growthAdjustedPe : growthAdjustedPe(peV, cagr),
+      internal: internal,
+      source1M: p.rev1M,
+      analysts: analysts,
+      fiscal: p.reportedFiscalLabel || p.reportedFiscalPeriodEnding || (mom && (mom.reportedFiscalPeriodEnding || mom.reportedFiscalLabel)),
+      regime: row && row.revisionRegime,
+    };
+  }
+
+  function comparisonSortValue(fields, key) {
+    if (!fields) return null;
+    if (key === "ticker") return fields.ticker;
+    if (key === "price") return finiteNum(fields.price);
+    if (key === "eps") return finiteNum(fields.eps);
+    if (key === "pe") return finiteNum(fields.pe);
+    if (key === "growth") {
+      return typeof fields.growth === "string" ? fields.growth : finiteNum(fields.growth);
+    }
+    if (key === "cagr") return finiteNum(fields.cagr);
+    if (key === "growthAdjPe") return finiteNum(fields.growthAdjPe);
+    if (key === "internal30") return internalSortPct(fields.internal && fields.internal["30D"]);
+    if (key === "internal60") return internalSortPct(fields.internal && fields.internal["60D"]);
+    if (key === "internal90") return internalSortPct(fields.internal && fields.internal["90D"]);
+    if (key === "source1M") return finiteNum(fields.source1M);
+    if (key === "analysts") return finiteNum(fields.analysts);
+    if (key === "fiscal") return fields.fiscal || null;
+    if (key === "regime") return fields.regime || null;
+    return null;
+  }
+
+  function internalSortPct(win) {
+    const w = win || {};
+    if (w.status === "ok" && w.revisionPct != null) return finiteNum(w.revisionPct);
+    return null;
+  }
+
+  function sortMissing(v) {
+    if (v == null || v === "") return true;
+    if (typeof v === "number" && !Number.isFinite(v)) return true;
+    if (v === "N/M" || v === "—") return true;
+    return false;
+  }
+
+  function compareComparisonRows(aFields, bFields, key, dir, aTicker, bTicker) {
+    /* null/N/M last regardless of direction; ticker A–Z tie-break. Display sort, not a ranking. */
+    const mul = dir === "desc" ? -1 : 1;
+    const va = comparisonSortValue(aFields, key);
+    const vb = comparisonSortValue(bFields, key);
+    const ma = sortMissing(va);
+    const mb = sortMissing(vb);
+    const ta = String(aTicker || "");
+    const tb = String(bTicker || "");
+    if (ma && mb) return ta.localeCompare(tb);
+    if (ma) return 1;
+    if (mb) return -1;
+    let base;
+    if (typeof va === "string" || typeof vb === "string") {
+      base = String(va).localeCompare(String(vb));
+    } else {
+      base = Number(va) - Number(vb);
+    }
+    if (base === 0) return ta.localeCompare(tb);
+    return mul * (base > 0 ? 1 : base < 0 ? -1 : 0);
+  }
+
+  function peDisplayCell(eps, peV) {
+    if (!isMissing(eps) && Number(eps) <= 0) {
+      return naCell("N/M", "EPS ≤ 0 — P/E not meaningful (never shown as a negative multiple)");
+    }
+    if (isMissing(peV) || !Number.isFinite(Number(peV))) return naCell();
+    return numCell(peV, 2);
+  }
+
+  function analystsDisplayCell(v) {
+    if (v === null || v === undefined || v === "") return naCell();
+    const n = Number(v);
+    if (!Number.isFinite(n)) return naCell();
+    return numCell(n, 0);
+  }
+
+  function growthAdjPeCell(peV, cagrV, stored) {
+    const v = stored != null ? finiteNum(stored) : growthAdjustedPe(peV, cagrV);
+    if (v == null) return naCell("N/M", GROWTH_ADJ_PE_TITLE);
+    return el("span", { text: fmtNum(v, 2), title: GROWTH_ADJ_PE_TITLE });
   }
 
   function renderValuation() {
-    const root = el("div", { className: "section" });
-    root.appendChild(el("h2", { className: "section-title", text: "Valuation" }));
-    const years = displayYearKeys().slice(0, 3);
+    const root = el("div", { className: "section", id: "valuation-comparison" });
+    root.appendChild(el("h2", { className: "section-title", text: "Valuation × EPS Growth" }));
+    const years = displayYearKeys();
     const y0 = years[0] || "";
-    const y1 = years[1] || "";
-    const y2 = years[2] || "";
+    const y2 = years[2] || years[years.length - 1] || "";
+    const year = selectedComparisonYear();
+    state.comparisonYear = year;
+
+    const known = VALUATION_COL_KEYS;
+    if (!state.sort.key || !known[state.sort.key]) {
+      state.sort = { key: "pe", dir: "asc" };
+    }
+
     root.appendChild(
       el("p", {
         className: "section-note",
         text:
-          "Forward PE = Last Close / Mapped Consensus EPS. Mapped CAGR " +
+          "Comparison of current valuation with mapped EPS growth and revision state. Not an investment rating. " +
+          "Forward P/E = Last Close / selected mapped consensus EPS (EPS ≤ 0 → N/M). " +
+          "Forward EPS CAGR " +
           y0 +
           "–" +
           y2 +
@@ -974,70 +1179,63 @@
           y2 +
           "/EPS" +
           y0 +
-          ")^(1/2)−1. FY labels under EPS/PE. Click headers to sort. Years from meta.displayMappedYears.",
+          ")^(1/2)−1. Growth-adjusted P/E = Forward P/E ÷ (CAGR as percent units). " +
+          "Internal 30/60/90D from daily history by ticker + Reported Fiscal Period Ending; Source-reported 1M is Seeking Alpha 1M and is never treated as Internal 30D. " +
+          "Missing values stay — (never 0). Default Comparison Year is displayMappedYears[1] else [0]. " +
+          "Sort is a table convenience (default Forward P/E ascending; null/N/M last; ticker A–Z tie-break), not a ranking. " +
+          "Revenue growth is omitted: no forward revenue consensus is aligned to mapped fiscal periods (earnings revenue is historical transcript text; rev1M is EPS revision %, not revenue).",
       })
     );
 
+    const controls = el("div", { className: "controls", id: "comparison-year-controls" });
+    const yearWrap = el("div");
+    yearWrap.appendChild(el("span", { className: "section-note", text: "Comparison Year  ", style: "margin:0" }));
+    const btnGroup = el("div", { className: "btn-group", id: "comparison-year" });
+    years.forEach((y) => {
+      btnGroup.appendChild(
+        el("button", {
+          type: "button",
+          className: year === y ? "active" : "",
+          text: y,
+          "data-year": y,
+          onClick: () => {
+            state.comparisonYear = y;
+            route();
+          },
+        })
+      );
+    });
+    yearWrap.appendChild(btnGroup);
+    controls.appendChild(yearWrap);
+    root.appendChild(controls);
+
+    const cagrLabel = "Forward EPS CAGR";
+    const cagrTitle =
+      "Mapped " +
+      y0 +
+      "–" +
+      y2 +
+      " CAGR from consensus EPS. Company-level (does not change with Comparison Year). Non-positive endpoints → N/M.";
     const cols = [
       { key: "ticker", label: "Ticker", align: "left" },
-      { key: "lastClose", label: "Last Close" },
-      { key: "eps:" + y0, label: "Mapped " + y0, year: y0, field: "eps" },
-      { key: "eps:" + y1, label: "Mapped " + y1, year: y1, field: "eps" },
-      { key: "eps:" + y2, label: "Mapped " + y2, year: y2, field: "eps" },
-      { key: "pe:" + y0, label: y0 + " PE", year: y0, field: "pe" },
-      { key: "pe:" + y1, label: y1 + " PE", year: y1, field: "pe" },
-      { key: "pe:" + y2, label: y2 + " PE", year: y2, field: "pe" },
-      { key: "growth:" + y1, label: y1 + " Growth", year: y1, field: "growthFromPrior" },
-      { key: "growth:" + y2, label: y2 + " Growth", year: y2, field: "growthFromPrior" },
-      { key: "cagrY0Y2", label: "Mapped CAGR " + y0.replace("E", "") + "–" + y2.replace("E", "") },
-      { key: "rev1M:" + y1, label: "1M Rev " + y1, year: y1, field: "rev1M" },
-      { key: "momentum", label: "Momentum", align: "left" },
+      { key: "price", label: "Price", title: "Last close; after-hours shown underneath when present. Same price is the P/E numerator." },
+      { key: "eps", label: "EPS " + (year || "") },
+      { key: "pe", label: "Forward P/E " + (year || ""), title: "Last Close / selected mapped EPS. Missing → —. EPS ≤ 0 → N/M." },
+      { key: "growth", label: "EPS Growth", title: "Vs prior mapped year (growthFromPrior). Turn profitable / turn loss when the series crosses zero. No growth math on a zero prior." },
+      { key: "cagr", label: cagrLabel, title: cagrTitle },
+      { key: "growthAdjPe", label: "Growth-adjusted P/E", title: GROWTH_ADJ_PE_TITLE },
+      { key: "internal30", label: "Internal 30D", title: "Internal 30D from daily EPS history (ticker + Reported Fiscal Period Ending). Insufficient history → —. Never aliased to Source-reported 1M." },
+      { key: "internal60", label: "Internal 60D", title: "Internal 60D from daily EPS history (ticker + Reported Fiscal Period Ending). Insufficient history → —." },
+      { key: "internal90", label: "Internal 90D", title: "Internal 90D from daily EPS history (ticker + Reported Fiscal Period Ending). Insufficient history → —." },
+      { key: "source1M", label: "Source-reported 1M", title: "Seeking Alpha 1M revision % on the selected mapped year. Separate from Internal 30D." },
+      { key: "analysts", label: "Analysts", title: "Analyst count paired to this fiscal identity. Null → —. 0 only when the source reported 0." },
+      { key: "fiscal", label: "Fiscal Period", align: "left", title: "Reported Fiscal Period Ending for the selected mapped year. Identity key with ticker for revisions." },
+      { key: "regime", label: "Revision Regime", align: "left", title: "Company-level regime from mapped Y+1 vs Y+2 Seeking Alpha 1M (not year-specific)." },
     ];
 
-    if (!state.sort.key || String(state.sort.key).indexOf("pe27") >= 0 || state.sort.key === "pe27") {
-      state.sort = { key: "pe:" + y1, dir: "asc" };
-    }
-
-    function cellValue(r, c) {
-      if (c.year && c.field) {
-        const p = periodOf(r, c.year);
-        if (p && p[c.field] != null) return p[c.field];
-        /* legacy flat fallback */
-        if (c.field === "eps") {
-          if (c.year === y0) return r.eps26;
-          if (c.year === y1) return r.eps27;
-          if (c.year === y2) return r.eps28;
-        }
-        if (c.field === "pe") {
-          if (c.year === y0) return r.pe26;
-          if (c.year === y1) return r.pe27;
-          if (c.year === y2) return r.pe28;
-        }
-        if (c.field === "rev1M") {
-          if (c.year === y1) return r.rev1M;
-          if (c.year === y2) return r.rev1M28;
-        }
-        if (c.field === "growthFromPrior") {
-          if (c.year === y1) return r.growth27;
-          if (c.year === y2) return r.growth28;
-        }
-        return null;
-      }
-      if (c.key === "cagrY0Y2") return r.cagrY0Y2 != null ? r.cagrY0Y2 : r.cagr2628;
-      return r[c.key];
-    }
-
-    function fyLabel(r, year) {
-      const p = periodOf(r, year);
-      if (p && p.reportedFiscalLabel) return p.reportedFiscalLabel;
-      if (year === y0) return r.reportedFy26;
-      if (year === y1) return r.reportedFy27;
-      if (year === y2) return r.reportedFy28;
-      return null;
-    }
-
+    const identMap = revisionMomentumIdentityMap();
     const tableWrap = el("div", { className: "table-wrap" });
-    const table = el("table", { className: "data" });
+    const table = el("table", { className: "data valuation-compare", id: "valuation-compare-table" });
     const thead = el("thead");
     const hr = el("tr");
     cols.forEach((c) => {
@@ -1047,6 +1245,7 @@
           (c.align === "left" ? " left" : "") +
           (state.sort.key === c.key ? (state.sort.dir === "asc" ? " sorted-asc" : " sorted-desc") : ""),
         text: c.label,
+        title: c.title || undefined,
         onClick: () => {
           if (state.sort.key === c.key) {
             state.sort.dir = state.sort.dir === "asc" ? "desc" : "asc";
@@ -1063,42 +1262,76 @@
     table.appendChild(thead);
 
     const tbody = el("tbody");
-    const rows = state.valuation.slice().sort((a, b) => {
-      const { key, dir } = state.sort;
-      const mul = dir === "asc" ? 1 : -1;
-      const ca = cols.find((x) => x.key === key) || { key: key };
-      let va = cellValue(a, ca);
-      let vb = cellValue(b, ca);
-      if (va == null && vb == null) return 0;
-      if (va == null) return 1;
-      if (vb == null) return -1;
-      if (typeof va === "string") return mul * va.localeCompare(vb);
-      return mul * (Number(va) - Number(vb));
-    });
-    rows.forEach((r) => {
-      const tr = el("tr");
+    const decorated = (state.valuation || []).map((r) => ({
+      row: r,
+      fields: comparisonFields(r, year, identMap),
+    }));
+    decorated.sort((a, b) =>
+      compareComparisonRows(
+        a.fields,
+        b.fields,
+        state.sort.key,
+        state.sort.dir,
+        a.row && a.row.ticker,
+        b.row && b.row.ticker
+      )
+    );
+    decorated.forEach((item) => {
+      const r = item.row;
+      const f = item.fields;
+      const tr = el("tr", { "data-ticker": r.ticker, "data-year": year });
       cols.forEach((c) => {
-        const td = el("td", { className: c.align === "left" ? "left" : "" });
-        const v = cellValue(r, c);
+        const td = el("td", { className: c.align === "left" ? "left" : "", "data-col": c.key });
         if (c.key === "ticker") {
           td.classList.add("ticker");
           td.appendChild(el("a", { href: "#/company/" + r.ticker, text: r.ticker }));
-        } else if (c.field === "rev1M") {
-          td.appendChild(revCell(v));
-        } else if (c.field === "growthFromPrior" || c.key === "cagrY0Y2") {
-          td.appendChild(c.key === "cagrY0Y2" ? cagrCell(v) : growthCell(v));
-        } else if (c.key === "momentum") {
-          td.appendChild(momentumCell(v, r.revisionRegime));
-        } else if (c.key === "lastClose" || c.key === "price") {
-          const px = r.lastClose != null ? r.lastClose : r.price;
-          td.appendChild(numCell(px, 2));
-          if (!isMissing(r.afterHours)) {
-            td.appendChild(el("span", { className: "price-sub", text: "AH " + fmtNum(r.afterHours, 2) }));
+        } else if (c.key === "price") {
+          td.appendChild(isMissing(f.price) ? naCell() : numCell(f.price, 2));
+          if (!isMissing(f.afterHours)) {
+            td.appendChild(el("span", { className: "price-sub", text: "AH " + fmtNum(f.afterHours, 2) }));
           }
-        } else if (c.field === "eps" || c.field === "pe") {
-          td.appendChild(valueWithFy(numCell(v, 2), fyLabel(r, c.year)));
+        } else if (c.key === "eps") {
+          td.appendChild(isMissing(f.eps) ? naCell() : numCell(f.eps, 2));
+        } else if (c.key === "pe") {
+          td.appendChild(peDisplayCell(f.eps, f.pe));
+        } else if (c.key === "growth") {
+          td.appendChild(growthCell(f.growth));
+        } else if (c.key === "cagr") {
+          const node = cagrCell(f.cagr);
+          if (node && node.setAttribute) node.setAttribute("title", cagrTitle);
+          td.appendChild(node);
+        } else if (c.key === "growthAdjPe") {
+          td.appendChild(growthAdjPeCell(f.pe, f.cagr, f.growthAdjPe));
+        } else if (c.key === "internal30") {
+          td.appendChild(internalWindowCell(f.internal && f.internal["30D"]));
+        } else if (c.key === "internal60") {
+          td.appendChild(internalWindowCell(f.internal && f.internal["60D"]));
+        } else if (c.key === "internal90") {
+          td.appendChild(internalWindowCell(f.internal && f.internal["90D"]));
+        } else if (c.key === "source1M") {
+          td.appendChild(sourceWindowCell({
+            revisionPct: f.source1M,
+            windowLabel: "Source-reported · Seeking Alpha 1M",
+            sourceWindow: "Seeking Alpha 1M",
+          }));
+        } else if (c.key === "analysts") {
+          td.appendChild(analystsDisplayCell(f.analysts));
+        } else if (c.key === "fiscal") {
+          if (isMissing(f.fiscal)) td.appendChild(naCell());
+          else td.textContent = f.fiscal;
+        } else if (c.key === "regime") {
+          if (isMissing(f.regime)) td.appendChild(naCell());
+          else {
+            td.appendChild(
+              el("span", {
+                className: "revision-regime",
+                text: String(f.regime),
+                title: "Company-level revision regime from mapped Y+1 vs Y+2 Seeking Alpha 1M — not specific to Comparison Year.",
+              })
+            );
+          }
         } else {
-          td.appendChild(numCell(v, 2));
+          td.appendChild(naCell());
         }
         tr.appendChild(td);
       });
@@ -2288,9 +2521,6 @@
     let view;
     try {
       if (r.name === "valuation") {
-        if (!state.sort.key || state.sort.key === "ticker") {
-          /* keep user sort; default pe27 asc on first visit via flag */
-        }
         view = renderValuation();
       } else if (r.name === "revisions") view = renderRevisions();
       else if (r.name === "earnings") view = renderEarnings();
@@ -2307,8 +2537,8 @@
 
   async function boot() {
     initTheme();
-    // default valuation sort
-    state.sort = { key: "pe:" + (displayYearKeys()[1] || ""), dir: "asc" };
+    // default valuation sort: Forward P/E ascending (table convenience, not a ranking)
+    state.sort = { key: "pe", dir: "asc" };
     const app = $("#app");
     try {
       await loadAll();
