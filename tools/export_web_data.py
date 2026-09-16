@@ -767,8 +767,10 @@ INTERNAL_REVISION_WINDOWS = (30, 60, 90)
 INTERNAL_WINDOW_START_SLACK_DAYS = 2
 INTERNAL_REVISION_NOTE = (
     "Internal 30D/60D/90D are computed from daily EPS history keyed by "
-    "ticker + reportedFiscalPeriodEnding (normalized). Insufficient history "
-    "→ unavailable (never substitute the oldest observation). "
+    "ticker + reportedFiscalPeriodEnding (normalized). Each window is anchored "
+    "on the latest valid observation for that identity (targetDate = latestDate − N days), "
+    "not the snapshot timestamp. Insufficient history → unavailable "
+    "(never substitute the oldest observation). "
     "Seeking Alpha 1M/3M/6M are Source-reported windows and are never treated "
     "as Internal 30/60/90D. Up/Down Analyst counts are unavailable unless "
     "present as source-native fields (captured SA sources in this repo do not "
@@ -1378,10 +1380,14 @@ def compute_internal_window(
 ) -> dict:
     """Internal N-day consensus revision from real daily history.
 
-    Uses the nearest valid observation at or before window start (within slack)
-    vs the latest observation at or before as_of, for one fiscal identity.
-    Insufficient history → unavailable. Never substitutes the oldest observation
-    when it is outside the window-start slack.
+    Anchor: latest valid observation at or before as_of for this fiscal identity.
+    targetDate = latestDate − N days. Snapshot/as_of is only a cutoff for which
+    points are eligible — it is not the window origin when it is ahead of the
+    latest usable daily observation (weekend, stale/partial, missing ticker day).
+
+    Baseline = nearest valid observation at or before targetDate (within slack)
+    vs that latest observation. Insufficient history → unavailable. Never
+    substitutes the oldest observation when it is outside the window-start slack.
     Zero baseline → unavailable (no division by zero).
     """
     label = f"Internal {int(window_days)}D"
@@ -1395,11 +1401,12 @@ def compute_internal_window(
         "endEps": None,
         "startDate": None,
         "endDate": None,
+        "anchorDate": None,
+        "targetDate": None,
     }
     if as_of.tzinfo is None:
         as_of = as_of.replace(tzinfo=timezone.utc)
     as_of = as_of.astimezone(timezone.utc)
-    window_start = as_of - timedelta(days=int(window_days))
     pts = list(points or [])
     if not pts:
         return dict(unavailable)
@@ -1407,6 +1414,8 @@ def compute_internal_window(
     if not latest_candidates:
         return dict(unavailable)
     latest = latest_candidates[-1]
+    # Derive the N-day target from the latest observation, not snapshot as_of.
+    window_start = latest[0] - timedelta(days=int(window_days))
     before = [p for p in pts if p[0] <= window_start]
     start_pt = before[-1] if before else None
     if start_pt is not None and (window_start - start_pt[0]).days > max_start_slack_days:
@@ -1415,6 +1424,8 @@ def compute_internal_window(
     end_meta = {
         "endEps": latest[1],
         "endDate": latest[0].strftime("%Y-%m-%d"),
+        "anchorDate": latest[0].strftime("%Y-%m-%d"),
+        "targetDate": window_start.strftime("%Y-%m-%d"),
     }
     if start_pt is None:
         return {**unavailable, **end_meta}
@@ -1518,6 +1529,9 @@ def build_revision_momentum(
                 for w in INTERNAL_REVISION_WINDOWS
             }
             direction = _sa.source_analyst_direction(packed)
+            analysts = to_num(packed.get("analysts"))
+            if analysts is None:
+                analysts = to_num(packed.get("analystCount"))
             rows.append(
                 {
                     "ticker": ident_ticker,
@@ -1527,6 +1541,7 @@ def build_revision_momentum(
                     "calendarAlignment": packed.get("calendarAlignment"),
                     "asOf": as_of_dt.strftime("%Y-%m-%d"),
                     "currentEps": to_num(packed.get("consensus")),
+                    "analysts": analysts,
                     "identity": {
                         "ticker": ident_ticker,
                         "reportedFiscalPeriodEnding": ident_fiscal,

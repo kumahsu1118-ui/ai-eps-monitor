@@ -5148,6 +5148,7 @@ def test_internal_revision_windows_from_daily_history(fixture: Path) -> None:
             "eps": {
                 "2027E": {
                     "consensus": 15.0,
+                    "analysts": 53,
                     "rev1M": 1.37,
                     "rev3M": 22.85,
                     "rev6M": 40.57,
@@ -5159,6 +5160,7 @@ def test_internal_revision_windows_from_daily_history(fixture: Path) -> None:
             "epsByFiscal": {
                 fiscal: {
                     "consensus": 15.0,
+                    "analysts": 53,
                     "rev1M": 1.37,
                     "rev3M": 22.85,
                     "rev6M": 40.57,
@@ -5175,6 +5177,8 @@ def test_internal_revision_windows_from_daily_history(fixture: Path) -> None:
     if hit:
         ok = ok and abs(float(hit[0]["internal"]["30D"]["revisionPct"]) - 25.0) < 1e-6
         ok = ok and hit[0]["identity"] == {"ticker": ticker, "reportedFiscalPeriodEnding": fiscal}
+        ok = ok and hit[0].get("currentEps") == 15.0
+        ok = ok and hit[0].get("analysts") == 53
     record(
         "internal_revision_windows_from_daily_history_test",
         ok,
@@ -5219,10 +5223,11 @@ def test_internal_revision_fiscal_rollover_identity(fixture: Path) -> None:
     """Identity is ticker + reported fiscal period ending, not mappedYear/slot."""
     exp = import_mod(fixture, "export_web_data")
     as_of = datetime(2026, 9, 15, tzinfo=timezone.utc)
+    latest_old = as_of - timedelta(days=40)
     # Same mapped slot 2027E, two fiscal identities (rollover).
     daily = [
-        _daily_pt((as_of - timedelta(days=90)).strftime("%Y-%m-%d"), "NVDA", "Jan 2027", 9.0, "2027E"),
-        _daily_pt((as_of - timedelta(days=40)).strftime("%Y-%m-%d"), "NVDA", "Jan 2027", 9.2, "2027E"),
+        _daily_pt((latest_old - timedelta(days=90)).strftime("%Y-%m-%d"), "NVDA", "Jan 2027", 9.0, "2027E"),
+        _daily_pt(latest_old.strftime("%Y-%m-%d"), "NVDA", "Jan 2027", 9.2, "2027E"),
         _daily_pt((as_of - timedelta(days=30)).strftime("%Y-%m-%d"), "NVDA", "Jan 2028", 15.0, "2027E"),
         _daily_pt(as_of.strftime("%Y-%m-%d"), "NVDA", "Jan 2028", 16.0, "2027E"),
     ]
@@ -5368,6 +5373,9 @@ def test_source_windows_separated_from_internal(fixture: Path) -> None:
     ok = ok and "Internal 30D" in app and "Internal 60D" in app and "Internal 90D" in app
     ok = ok and "Source-reported" in app
     ok = ok and "Seeking Alpha 1M" in app
+    ok = ok and 'text: "Current EPS"' in app
+    ok = ok and 'text: "Analysts"' in app
+    ok = ok and 'text: "Up / Down"' in app
     record(
         "source_windows_separated_from_internal_test",
         ok,
@@ -5423,6 +5431,107 @@ def test_analyst_direction_unavailable_when_not_in_source(fixture: Path) -> None
         "analyst_direction_unavailable_when_not_in_source_test",
         ok,
         f"status={hit.get('analystDirectionStatus')} derived_blocked={hit.get('upAnalysts') is None}",
+    )
+
+
+def test_internal_revision_anchor_latest_observation(fixture: Path) -> None:
+    """Snapshot/as_of later than latest daily obs: window uses latestDate, not as_of."""
+    exp = import_mod(fixture, "export_web_data")
+    latest = datetime(2026, 9, 11, tzinfo=timezone.utc)  # Friday
+    as_of = datetime(2026, 9, 15, 1, 36, tzinfo=timezone.utc)  # later snapshot (weekend gap)
+    ticker, fiscal = "KEYS", "Oct 2027"
+    as_of_target = (as_of - timedelta(days=30)).strftime("%Y-%m-%d")  # 2026-08-16
+    latest_target = (latest - timedelta(days=30)).strftime("%Y-%m-%d")  # 2026-08-12
+    ok = as_of_target != latest_target
+    daily = [
+        _daily_pt(latest_target, ticker, fiscal, 10.0, "2027E"),
+        _daily_pt(as_of_target, ticker, fiscal, 11.0, "2027E"),
+        _daily_pt(latest.strftime("%Y-%m-%d"), ticker, fiscal, 12.0, "2027E"),
+    ]
+    pts = exp.group_daily_by_fiscal_identity(daily)[exp.fiscal_identity_key(ticker, fiscal)]
+    w30 = exp.compute_internal_window(pts, as_of=as_of, window_days=30)
+    wrong_as_of_pct = (12.0 - 11.0) / 11.0 * 100.0
+    right_latest_pct = (12.0 - 10.0) / 10.0 * 100.0
+    ok = ok and w30.get("status") == "ok"
+    ok = ok and w30.get("anchorDate") == latest.strftime("%Y-%m-%d")
+    ok = ok and w30.get("endDate") == latest.strftime("%Y-%m-%d")
+    ok = ok and w30.get("targetDate") == latest_target
+    ok = ok and w30.get("startDate") == latest_target
+    ok = ok and abs(float(w30["revisionPct"]) - right_latest_pct) < 1e-6
+    ok = ok and abs(float(w30["revisionPct"]) - wrong_as_of_pct) > 1.0
+    companies = {
+        ticker: {
+            "epsByFiscal": {
+                fiscal: {
+                    "consensus": 12.0,
+                    "analysts": 12,
+                    "reportedFiscalLabel": fiscal,
+                    "mappedYear": "2027E",
+                }
+            },
+            "eps": {},
+        }
+    }
+    rows = exp.build_revision_momentum(companies, [ticker], daily, as_of=as_of, year_keys=["2027E"])
+    hit = rows[0] if rows else {}
+    w30b = (hit.get("internal") or {}).get("30D") or {}
+    ok = ok and abs(float(w30b.get("revisionPct")) - right_latest_pct) < 1e-6
+    ok = ok and w30b.get("anchorDate") == latest.strftime("%Y-%m-%d")
+    record(
+        "internal_revision_anchor_latest_observation_test",
+        ok,
+        f"pct={w30.get('revisionPct')} anchor={w30.get('anchorDate')} target={w30.get('targetDate')} as_of_target={as_of_target}",
+    )
+
+
+def test_revision_momentum_public_schema(fixture: Path) -> None:
+    """Public revisionMomentum rows + UI expose Current EPS and total Analysts."""
+    exp = import_mod(fixture, "export_web_data")
+    as_of = datetime(2026, 9, 15, tzinfo=timezone.utc)
+    ticker, fiscal = "NVDA", "Jan 2028"
+    daily = [
+        _daily_pt((as_of - timedelta(days=30)).strftime("%Y-%m-%d"), ticker, fiscal, 15.0, "2027E"),
+        _daily_pt(as_of.strftime("%Y-%m-%d"), ticker, fiscal, 16.0, "2027E"),
+    ]
+    companies = {
+        ticker: {
+            "eps": {
+                "2027E": {
+                    "consensus": 16.0,
+                    "analysts": 53,
+                    "rev1M": 1.37,
+                    "reportedFiscalLabel": fiscal,
+                    "mappedYear": "2027E",
+                }
+            },
+            "epsByFiscal": {
+                fiscal: {
+                    "consensus": 16.0,
+                    "analysts": 53,
+                    "rev1M": 1.37,
+                    "reportedFiscalLabel": fiscal,
+                    "mappedYear": "2027E",
+                }
+            },
+        }
+    }
+    rows = exp.build_revision_momentum(companies, [ticker], daily, as_of=as_of, year_keys=["2027E"])
+    ok = len(rows) == 1
+    hit = rows[0] if rows else {}
+    ok = ok and "currentEps" in hit and abs(float(hit["currentEps"]) - 16.0) < 1e-9
+    ok = ok and "analysts" in hit and hit.get("analysts") == 53
+    ok = ok and hit.get("upAnalysts") is None and hit.get("downAnalysts") is None
+    app = spa_js_text(fixture)
+    ok = ok and 'text: "Current EPS"' in app
+    ok = ok and 'text: "Analysts"' in app
+    ok = ok and 'text: "Up / Down"' in app
+    ok = ok and "— / —" in app
+    src = (ROOT / "web" / "app.js").read_text(encoding="utf-8")
+    ok = ok and "r.currentEps" in src and "r.analysts" in src
+    record(
+        "revision_momentum_public_schema_test",
+        ok,
+        f"eps={hit.get('currentEps')} analysts={hit.get('analysts')}",
     )
 
 
@@ -5625,6 +5734,8 @@ def _all_suite_tests():
         ("test_internal_revision_zero_baseline_unavailable", test_internal_revision_zero_baseline_unavailable),
         ("test_source_windows_separated_from_internal", test_source_windows_separated_from_internal),
         ("test_analyst_direction_unavailable_when_not_in_source", test_analyst_direction_unavailable_when_not_in_source),
+        ("test_internal_revision_anchor_latest_observation", test_internal_revision_anchor_latest_observation),
+        ("test_revision_momentum_public_schema", test_revision_momentum_public_schema),
     ]
 
 

@@ -21,7 +21,7 @@ Repo: https://github.com/kumahsu1118-ui/ai-eps-monitor
 
 ### 3. Pull consensus & prices
 - For each ticker: earnings estimates & revisions (SA **1M/3M/6M** only; never invent SA 7D/30D/90D; never treat **1M as 30D** or **3M as 90D**).
-- **Internal 30D/60D/90D** are computed later at export from `data/daily_eps_snapshots/daily.jsonl` (identity = ticker + Reported Fiscal Period Ending). Insufficient history → unavailable.
+- **Internal 30D/60D/90D** are computed later at export from `data/daily_eps_snapshots/daily.jsonl` (identity = ticker + Reported Fiscal Period Ending). Each window is anchored on the **latest valid observation** for that identity (`targetDate = latestDate − N days`), not the snapshot timestamp. Insufficient history → unavailable.
 - Record **Last Close** (regular session) and **After Hours** separately if shown.
 - Preserve **Reported Fiscal Period Ending**; map only to FY-mapped calendar **slots** (not true CY EPS).
 
@@ -112,5 +112,6 @@ Seeking Alpha cookies/sessions, GitHub tokens beyond Actions secrets (none requi
 - Computed in `export_web_data.py` from append-only `daily.jsonl` during the ingest export/read path (no second persistent writer).
 - Identity = ticker + normalized `reportedFiscalPeriodEnding`. Mapped year/slot is display-only.
 - Windows are independent: missing 30D history does not borrow 60D/90D or the oldest observation.
+- Window origin = latest valid daily observation for that fiscal identity; `targetDate = latestDate − N days` (snapshot `as_of` is only a cutoff).
 - SA **1M/3M/6M** remain Source-reported on `#/revisions` and are never copied onto Internal 30/60/90D.
 - Up/Down Analyst counts: captured SA sources in this repo do not include them → `null` / unavailable (never derived from EPS moves).

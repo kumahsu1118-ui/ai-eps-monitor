@@ -1238,6 +1238,7 @@
             mappedYear: e.mappedYear,
             calendarAlignment: e.calendarAlignment,
             currentEps: e.consensus,
+            analysts: e.analysts,
             rev1M: e.rev1M,
             rev3M: e.rev3M,
             rev6M: e.rev6M,
@@ -1254,6 +1255,7 @@
             mappedYear: y,
             calendarAlignment: e.calendarAlignment,
             currentEps: e.consensus,
+            analysts: e.analysts,
             rev1M: e.rev1M,
             rev3M: e.rev3M,
             rev6M: e.rev6M,
@@ -1267,6 +1269,7 @@
           mappedYear: e.mappedYear,
           calendarAlignment: e.calendarAlignment,
           currentEps: e.currentEps,
+          analysts: e.analysts,
           internal: {
             "30D": { status: "unavailable", revisionPct: null, windowLabel: "Internal 30D" },
             "60D": { status: "unavailable", revisionPct: null, windowLabel: "Internal 60D" },
@@ -1346,9 +1349,12 @@
     const table = el("table", { className: "data revision-momentum" });
     const thead = el("thead");
     const g1 = el("tr");
-    g1.appendChild(el("th", { className: "left", text: "", rowspan: "2" }));
-    g1.appendChild(el("th", { className: "left", text: "", rowspan: "2" }));
+    g1.appendChild(el("th", { className: "left", text: "Ticker", rowspan: "2" }));
+    g1.appendChild(el("th", { className: "left", text: "Fiscal Period Ending", rowspan: "2" }));
+    g1.appendChild(el("th", { text: "Current EPS", rowspan: "2" }));
     g1.appendChild(el("th", { className: "group-internal", text: "Internal (computed)", colspan: "3" }));
+    g1.appendChild(el("th", { className: "group-analysts", text: "Up / Down", rowspan: "2" }));
+    g1.appendChild(el("th", { text: "Analysts", rowspan: "2" }));
     g1.appendChild(
       el("th", {
         className: "group-source col-group-sep",
@@ -1356,7 +1362,6 @@
         colspan: "3",
       })
     );
-    g1.appendChild(el("th", { className: "group-analysts", text: "Analyst direction", colspan: "2" }));
     thead.appendChild(g1);
     const g2 = el("tr");
     [
@@ -1366,14 +1371,9 @@
       ["SA 1M", "col-group-sep"],
       ["SA 3M", ""],
       ["SA 6M", ""],
-      ["Up Analysts", ""],
-      ["Down Analysts", ""],
     ].forEach(([lab, extra]) => {
       g2.appendChild(el("th", { className: extra, text: lab }));
     });
-    /* Put identity labels on first header row via rowSpan empties — fill names on g1 */
-    g1.children[0].textContent = "Ticker";
-    g1.children[1].textContent = "Fiscal Period Ending";
     thead.appendChild(g2);
     table.appendChild(thead);
 
@@ -1396,36 +1396,40 @@
         );
       }
       tr.appendChild(fyTd);
+      const tdEps = el("td");
+      tdEps.appendChild(numCell(r.currentEps, 2));
+      tr.appendChild(tdEps);
       const internal = r.internal || {};
       ["30D", "60D", "90D"].forEach((k) => {
         const td = el("td");
         td.appendChild(internalWindowCell(internal[k]));
         tr.appendChild(td);
       });
+      const dirTitle =
+        r.analystDirectionReason === "not_in_source" || r.analystDirectionStatus === "unavailable"
+          ? "Up/Down Analysts unavailable — not present in captured Seeking Alpha sources"
+          : "Analyst direction";
+      const tdUpDown = el("td");
+      if (
+        r.analystDirectionStatus === "unavailable" ||
+        (isMissing(r.upAnalysts) && isMissing(r.downAnalysts))
+      ) {
+        tdUpDown.appendChild(naCell("— / —", dirTitle));
+      } else {
+        const up = isMissing(r.upAnalysts) ? "—" : fmtNum(r.upAnalysts, 0);
+        const down = isMissing(r.downAnalysts) ? "—" : fmtNum(r.downAnalysts, 0);
+        tdUpDown.appendChild(el("span", { text: up + " / " + down, title: dirTitle }));
+      }
+      tr.appendChild(tdUpDown);
+      const tdAn = el("td");
+      tdAn.appendChild(isMissing(r.analysts) ? naCell() : numCell(r.analysts, 0));
+      tr.appendChild(tdAn);
       const src = r.sourceReported || {};
       ["1M", "3M", "6M"].forEach((k, i) => {
         const td = el("td", { className: i === 0 ? "col-group-sep" : "" });
         td.appendChild(sourceWindowCell(src[k]));
         tr.appendChild(td);
       });
-      const upTd = el("td");
-      const downTd = el("td");
-      const dirTitle =
-        r.analystDirectionReason === "not_in_source" || r.analystDirectionStatus === "unavailable"
-          ? "Up/Down Analysts unavailable — not present in captured Seeking Alpha sources"
-          : "Analyst direction";
-      if (r.analystDirectionStatus === "unavailable" || isMissing(r.upAnalysts)) {
-        upTd.appendChild(naCell(null, dirTitle));
-      } else {
-        upTd.appendChild(numCell(r.upAnalysts, 0));
-      }
-      if (r.analystDirectionStatus === "unavailable" || isMissing(r.downAnalysts)) {
-        downTd.appendChild(naCell(null, dirTitle));
-      } else {
-        downTd.appendChild(numCell(r.downAnalysts, 0));
-      }
-      tr.appendChild(upTd);
-      tr.appendChild(downTd);
       tbody.appendChild(tr);
     });
     if (!rows.length) {
@@ -1433,7 +1437,7 @@
       const td = el("td", {
         className: "left",
         text: "No fiscal identities available.",
-        colspan: "10",
+        colspan: "11",
       });
       td.style.color = "var(--text-muted)";
       tr.appendChild(td);
