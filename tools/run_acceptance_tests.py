@@ -746,9 +746,9 @@ def test_cumulative_30d_window(fixture: Path) -> None:
         and a.get("ticker") == "TSM"
         and a.get("lookbackDays") == 30
     ]
-    # Must NOT emit a >5% 30D alert from all-history fallback
-    ok = len(insuff) >= 1 and len(fake_30d) == 0
-    ok = ok and any("insufficient history" in str(a.get("status") or a.get("message") or "").lower() for a in insuff)
+    # Must NOT emit a >5% 30D alert from revision-event / all-history fallback.
+    # Internal 30D is daily.jsonl only; empty daily_rows fail closed (no TSM window).
+    ok = len(fake_30d) == 0
     record("cumulative_30d_window_test", ok, f"insuff={len(insuff)} fake30d={len(fake_30d)}")
 
 
@@ -5643,6 +5643,12 @@ def test_revision_window_same_day_prefers_latest_updatetime(fixture: Path) -> No
     ok = w30.get("status") == "ok"
     ok = ok and abs(float(w30["revisionPct"]) - 20.0) < 1e-6  # 10 → 12, not 10 → 10.5
     ok = ok and abs(float(w30["endEps"]) - 12.0) < 1e-9
+    # Cutoff-aware: as_of=12:00 must keep 08:00 (10.5), not look ahead to 18:00 (12.0).
+    as_of_noon = datetime(2026, 9, 15, 12, 0, tzinfo=timezone.utc)
+    w_noon = exp.compute_internal_window(pts, as_of=as_of_noon, window_days=30)
+    ok = ok and w_noon.get("status") == "ok"
+    ok = ok and abs(float(w_noon["endEps"]) - 10.5) < 1e-9
+    ok = ok and abs(float(w_noon["revisionPct"]) - 5.0) < 1e-6  # 10 → 10.5
     # No updateTime: last append order wins (10.5).
     daily_append = [
         _daily_pt(d30, ticker, fiscal, 10.0, "2027E"),
@@ -5657,7 +5663,7 @@ def test_revision_window_same_day_prefers_latest_updatetime(fixture: Path) -> No
     record(
         "revision_window_same_day_prefers_latest_updatetime_test",
         ok,
-        f"timed_end={w30.get('endEps')} append_end={w30b.get('endEps')}",
+        f"timed_end={w30.get('endEps')} noon_end={w_noon.get('endEps')} append_end={w30b.get('endEps')}",
     )
 
 
@@ -5715,6 +5721,113 @@ def test_export_30d_matches_alert_engine_30d(fixture: Path) -> None:
         "export_30d_matches_alert_engine_30d_test",
         ok,
         f"exp={w30.get('revisionPct')} alert={(hits[0].get('cumulativePct') if hits else None)} module={getattr(exp.compute_internal_window, '__module__', None)}",
+    )
+
+
+def test_revision_window_same_day_as_of_cutoff(fixture: Path) -> None:
+    """08:00 EPS=10 + 18:00 EPS=12 same day: as_of=12:00 keeps 08:00; as_of=20:00 keeps 18:00."""
+    exp = import_mod(fixture, "export_web_data")
+    ba = import_mod(fixture, "build_alerts")
+    ticker, fiscal = "AVGO", "Oct 2027"
+    d0 = "2026-09-15"
+    d30 = "2026-08-16"
+    daily = [
+        _daily_pt(d30, ticker, fiscal, 9.0, "2027E"),
+        {**_daily_pt(d0, ticker, fiscal, 10.0, "2027E"), "updateTime": "2026-09-15T08:00:00Z"},
+        {**_daily_pt(d0, ticker, fiscal, 12.0, "2027E"), "updateTime": "2026-09-15T18:00:00Z"},
+    ]
+    pts = exp.group_daily_by_fiscal_identity(daily)[exp.fiscal_identity_key(ticker, fiscal)]
+    noon = datetime(2026, 9, 15, 12, 0, tzinfo=timezone.utc)
+    evening = datetime(2026, 9, 15, 20, 0, tzinfo=timezone.utc)
+    w_noon = exp.compute_internal_window(pts, as_of=noon, window_days=30)
+    w_eve = exp.compute_internal_window(pts, as_of=evening, window_days=30)
+    ok = w_noon.get("status") == "ok" and abs(float(w_noon["endEps"]) - 10.0) < 1e-9
+    ok = ok and abs(float(w_noon["revisionPct"]) - ((10.0 - 9.0) / 9.0 * 100.0)) < 1e-6
+    ok = ok and w_eve.get("status") == "ok" and abs(float(w_eve["endEps"]) - 12.0) < 1e-9
+    ok = ok and abs(float(w_eve["revisionPct"]) - ((12.0 - 9.0) / 9.0 * 100.0)) < 1e-6
+    # Alert engine must not look ahead either.
+    out_noon, _ = ba.rule2_cumulative(history=[], lookback_days=30, daily_rows=daily, now=noon, prior_history=[])
+    noon_hits = [a for a in out_noon if a.get("ticker") == ticker and a.get("rule") == "cumulative_revision_gt_5pct"]
+    # 9→10 is ~11.11% ≥ 5%, so an alert may open; endEps must be 10 not 12.
+    if noon_hits:
+        ok = ok and abs(float(noon_hits[0].get("endEps")) - 10.0) < 1e-9
+        ok = ok and abs(float(noon_hits[0].get("cumulativePct")) - float(w_noon["revisionPct"])) < 1e-12
+    record(
+        "revision_window_same_day_as_of_cutoff_test",
+        ok,
+        f"noon_end={w_noon.get('endEps')} eve_end={w_eve.get('endEps')} noon_alerts={len(noon_hits)}",
+    )
+
+
+def test_internal_30d_no_revision_event_fallback(fixture: Path) -> None:
+    """Revision events alone cannot create an Internal 30D alert when daily history is absent."""
+    ba = import_mod(fixture, "build_alerts")
+    exp = import_mod(fixture, "export_web_data")
+    now = datetime(2026, 9, 15, 12, 0, tzinfo=timezone.utc)
+    ticker, fiscal = "NVDA", "Jan 2028"
+    history = [
+        {
+            "Date": (now - timedelta(days=30)).strftime("%Y-%m-%d"),
+            "Ticker": ticker,
+            "Fiscal Year": fiscal,
+            "Calendar Alignment": "CY2027",
+            "Previous EPS": "n/a (baseline)",
+            "Current EPS": 10.0,
+            "Revision %": "n/a (baseline)",
+            "Reason": "baseline",
+            "Update Time": (now - timedelta(days=30)).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        },
+        {
+            "Date": now.strftime("%Y-%m-%d"),
+            "Ticker": ticker,
+            "Fiscal Year": fiscal,
+            "Calendar Alignment": "CY2027",
+            "Previous EPS": 10.0,
+            "Current EPS": 16.0,
+            "Revision %": 60.0,
+            "Reason": "upgrade",
+            "Update Time": now.strftime("%Y-%m-%dT%H:%M:%SZ"),
+        },
+    ]
+    out, diag = ba.rule2_cumulative(
+        history=history, lookback_days=30, daily_rows=[], now=now, prior_history=[]
+    )
+    internal_opens = [
+        a
+        for a in out
+        if a.get("rule") == "cumulative_revision_gt_5pct"
+        and str(a.get("lifecycleEvent") or a.get("status") or "").lower() not in {"resolved"}
+    ]
+    labeled = [a for a in out if "Internal 30D" in str(a.get("windowLabel") or a.get("message") or "")]
+    # Exporter also has no history fallback: empty daily → unavailable, not 60%.
+    w30 = exp.compute_internal_window([], as_of=now, window_days=30)
+    ok = len(internal_opens) == 0
+    ok = ok and not any(str(a.get("lifecycleEvent") or "").lower() == "open" for a in labeled)
+    ok = ok and w30.get("status") == "unavailable" and w30.get("revisionPct") is None
+    # Also via evaluate_alerts with empty daily.jsonl + revision history on disk.
+    hist_path = fixture / "data" / "revisions" / "history.jsonl"
+    hist_path.write_text("\n".join(json.dumps(r) for r in history) + "\n", encoding="utf-8")
+    jsonl = fixture / "data" / "daily_eps_snapshots" / "daily.jsonl"
+    jsonl.parent.mkdir(parents=True, exist_ok=True)
+    if jsonl.exists():
+        jsonl.write_text("", encoding="utf-8")
+    (fixture / "data" / "alerts" / "index.json").write_text(
+        json.dumps({"alerts": [], "activeAlerts": [], "alertHistory": []}, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    payload = ba.evaluate_alerts(now=now)
+    hist_alerts = [
+        a
+        for a in (payload.get("alertHistory") or []) + (payload.get("activeAlerts") or [])
+        if a.get("rule") == "cumulative_revision_gt_5pct"
+        and a.get("ticker") == ticker
+        and str(a.get("lifecycleEvent") or a.get("status") or "").lower() not in {"resolved"}
+    ]
+    ok = ok and len(hist_alerts) == 0
+    record(
+        "internal_30d_no_revision_event_fallback_test",
+        ok,
+        f"opens={len(internal_opens)} labeled={len(labeled)} eval={len(hist_alerts)} exp={w30.get('status')} diag={len(diag)}",
     )
 
 
@@ -5923,6 +6036,8 @@ def _all_suite_tests():
         ("test_revision_window_too_old_baseline_unavailable", test_revision_window_too_old_baseline_unavailable),
         ("test_revision_window_same_day_prefers_latest_updatetime", test_revision_window_same_day_prefers_latest_updatetime),
         ("test_export_30d_matches_alert_engine_30d", test_export_30d_matches_alert_engine_30d),
+        ("test_revision_window_same_day_as_of_cutoff", test_revision_window_same_day_as_of_cutoff),
+        ("test_internal_30d_no_revision_event_fallback", test_internal_30d_no_revision_event_fallback),
     ]
 
 

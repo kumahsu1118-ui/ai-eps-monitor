@@ -23,9 +23,18 @@ Window identity and anchor
 
 Same-day normalization
 ----------------------
-For ``(ticker, reportedFiscalPeriodEnding, date)`` keep one row:
-1. Prefer the observation with the latest ``updateTime``.
-2. If ``updateTime`` is missing or tied, last append order wins.
+For ``(ticker, reportedFiscalPeriodEnding, date)`` keep one row **after**
+applying the ``as_of`` cutoff:
+
+1. Effective observation time = ``updateTime`` when present, else the
+   calendar ``date`` at midnight UTC. Calendar ``date`` is still the day
+   bucket; the effective time is what ``as_of`` compares against.
+2. Drop observations with effective time ``> as_of`` (do not look ahead).
+3. Among remaining rows that day: prefer latest ``updateTime``; if
+   ``updateTime`` is missing or tied, last append order wins.
+
+So 08:00 EPS=10 and 18:00 EPS=12 on the same date with ``as_of=12:00``
+keeps the 08:00 row, not the 18:00 row.
 
 Schedule-aware / bounded-gap baseline (fail-closed)
 ---------------------------------------------------
@@ -200,6 +209,26 @@ def baseline_gap_allowed(obs_date: date, target_date: date) -> bool:
     return weekday_gap(obs_date, target_date) <= MAX_BASELINE_WEEKDAY_GAP
 
 
+def effective_observation_datetime(row: dict | None, fallback: datetime | None = None) -> datetime | None:
+    """Timestamp used for as_of cutoff.
+
+    Prefer ``updateTime``; otherwise the calendar ``date`` (midnight UTC).
+    Calendar date remains the same-day bucket via ``observation_calendar_date``.
+    """
+    if isinstance(row, dict):
+        ut = parse_obs_datetime(row.get("updateTime") or row.get("Update Time"))
+        if ut is not None:
+            return ut
+        d = parse_obs_datetime(row.get("date") or row.get("Date"))
+        if d is not None:
+            return d
+    if fallback is None:
+        return None
+    if fallback.tzinfo is None:
+        fallback = fallback.replace(tzinfo=timezone.utc)
+    return fallback.astimezone(timezone.utc)
+
+
 def _row_update_time(row: Any) -> datetime | None:
     if not isinstance(row, dict):
         return None
@@ -210,9 +239,7 @@ def _coerce_point(item) -> tuple[datetime, float | None, Any] | None:
     if item is None:
         return None
     if isinstance(item, dict):
-        dt = parse_obs_datetime(
-            item.get("date") or item.get("Date") or item.get("updateTime") or item.get("Update Time")
-        )
+        dt = effective_observation_datetime(item)
         cons = to_num(item.get("consensus") if "consensus" in item else item.get("Current EPS"))
         if dt is None:
             return None
@@ -225,27 +252,36 @@ def _coerce_point(item) -> tuple[datetime, float | None, Any] | None:
         return None
     if not isinstance(dt, datetime):
         dt = parse_obs_datetime(dt)
+    dt = effective_observation_datetime(row if isinstance(row, dict) else None, fallback=dt)
     if dt is None:
         return None
-    if dt.tzinfo is None:
-        dt = dt.replace(tzinfo=timezone.utc)
-    else:
-        dt = dt.astimezone(timezone.utc)
     if cons is not None and not isinstance(cons, (int, float)):
         cons = to_num(cons)
     return (dt, cons, row)
 
 
-def normalize_same_day_observations(points: list | None) -> list[tuple[datetime, float | None, Any]]:
+def normalize_same_day_observations(
+    points: list | None,
+    as_of: datetime | None = None,
+) -> list[tuple[datetime, float | None, Any]]:
     """Collapse ``(identity already grouped, date)`` to one observation.
 
-    Input order is append order. Winner: latest updateTime, else last append.
-    Output is sorted by observation datetime.
+    Input order is append order. Observations with effective time ``> as_of``
+    are dropped before the winner is chosen (cutoff-aware; no look-ahead).
+    Winner among remaining: latest updateTime, else last append.
+    Output is sorted by effective observation datetime. The stored datetime
+    is the winner's effective time (updateTime or date-midnight).
     """
+    if as_of is not None:
+        if as_of.tzinfo is None:
+            as_of = as_of.replace(tzinfo=timezone.utc)
+        as_of = as_of.astimezone(timezone.utc)
     coerced: list[tuple[int, datetime, float | None, Any]] = []
     for idx, raw in enumerate(points or []):
         pt = _coerce_point(raw)
         if pt is None:
+            continue
+        if as_of is not None and pt[0] > as_of:
             continue
         coerced.append((idx, pt[0], pt[1], pt[2]))
     by_day: dict[date, list[tuple[int, datetime, float | None, Any]]] = {}
@@ -254,14 +290,14 @@ def normalize_same_day_observations(points: list | None) -> list[tuple[datetime,
         by_day.setdefault(d, []).append(item)
     collapsed: list[tuple[datetime, float | None, Any]] = []
     for _day, items in by_day.items():
-        timed = [( _row_update_time(it[3]), it) for it in items]
+        timed = [(_row_update_time(it[3]), it) for it in items]
         with_time = [(ts, it) for ts, it in timed if ts is not None]
         if with_time:
-            # Latest updateTime; append index breaks ties.
+            # Latest updateTime among rows already <= as_of; append index breaks ties.
             with_time.sort(key=lambda x: (x[0], x[1][0]))
             winner = with_time[-1][1]
         else:
-            winner = items[-1]  # last append order
+            winner = items[-1]  # last append order among remaining
         collapsed.append((winner[1], winner[2], winner[3]))
     collapsed.sort(key=lambda x: x[0])
     return collapsed
@@ -270,8 +306,11 @@ def normalize_same_day_observations(points: list | None) -> list[tuple[datetime,
 def group_daily_by_fiscal_identity(daily_rows: list[dict] | None) -> dict[tuple[str, str], list]:
     """Group daily.jsonl observations by (ticker, reportedFiscalPeriodEnding).
 
-    Preserves append order until same-day collapse, then one row per calendar
-    date, sorted by datetime.
+    Preserves append order and **does not** collapse same-day rows. Same-day
+    collapse is cutoff-aware and happens in ``evaluate_internal_window`` /
+    ``compute_internal_window`` so an 18:00 observation cannot leak into an
+    ``as_of=12:00`` window. Point datetime is the effective observation time
+    (updateTime, else date at midnight UTC).
     """
     groups: dict[tuple[str, str], list] = {}
     for row in daily_rows or []:
@@ -290,13 +329,11 @@ def group_daily_by_fiscal_identity(daily_rows: list[dict] | None) -> dict[tuple[
         cons = to_num(row.get("consensus") if "consensus" in row else row.get("Current EPS"))
         if cons is None:
             continue
-        dt = parse_obs_datetime(
-            row.get("date") or row.get("Date") or row.get("updateTime") or row.get("Update Time")
-        )
+        dt = effective_observation_datetime(row)
         if dt is None:
             continue
         groups.setdefault(key, []).append((dt, cons, row))
-    return {key: normalize_same_day_observations(pts) for key, pts in groups.items()}
+    return groups
 
 
 def _unavailable_window(window_days: int, extra: dict | None = None, *, reason: str = "insufficient_history") -> dict:
@@ -340,7 +377,7 @@ def evaluate_internal_window(
     if as_of.tzinfo is None:
         as_of = as_of.replace(tzinfo=timezone.utc)
     as_of = as_of.astimezone(timezone.utc)
-    pts = normalize_same_day_observations(list(points or []))
+    pts = normalize_same_day_observations(list(points or []), as_of=as_of)
     empty = {
         "window": _unavailable_window(window_days),
         "start": None,

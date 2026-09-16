@@ -113,8 +113,9 @@ Seeking Alpha cookies/sessions, GitHub tokens beyond Actions secrets (none requi
 - Identity = ticker + normalized `reportedFiscalPeriodEnding`. Mapped year/slot is display-only.
 - Windows are independent: missing 30D history does not borrow 60D/90D or the oldest observation.
 - Window origin = latest valid daily observation for that fiscal identity; `targetDate = latestDate − N days` (snapshot `as_of` is only a cutoff).
-- Same-day `(ticker, reportedFiscalPeriodEnding, date)`: prefer latest `updateTime`, else last append order.
+- Same-day `(ticker, reportedFiscalPeriodEnding, date)`: effective time is `updateTime` when present (else date midnight). Collapse is **cutoff-aware**: latest `updateTime` at or before `as_of`, else last append among remaining rows. An 18:00 observation must not leak into an `as_of=12:00` window.
 - Baseline admission is a **schedule-aware weekday-gap** rule (`MAX_BASELINE_WEEKDAY_GAP = 1` weekdays in `(baselineDate, targetDate]`). Collection is weekdays 08:00 Taipei, so Friday→Monday is valid. An observation many collection days before `targetDate` is fail-closed unavailable and cannot masquerade as a 30D baseline. Documented in `tools/revision_windows.py`.
+- Internal 30D alerts use the same helper and **daily.jsonl only**. Revision-event history is never substituted when daily observations are absent (fail closed).
 - SA **1M/3M/6M** remain Source-reported on `#/revisions` and are never copied onto Internal 30/60/90D.
 - Up/Down Analyst counts: captured SA sources in this repo do not include them → `null` / unavailable (never derived from EPS moves).
 

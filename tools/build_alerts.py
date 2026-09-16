@@ -11,6 +11,7 @@ Rules (documented, no ML / no invented thresholds beyond these):
      stays >=5% Update same alert ID; |pct|<4% Resolve. History only Open /
      material Update / Resolved (no daily spam).
      If <2 usable daily points in window → alertDiagnostics only (NOT alertHistory).
+     NEVER reconstruct Internal 30D from revision-event history when daily.jsonl is empty.
   2b. Source-reported SA 1M |rev1M|>=5% → source_reported_1m_revision
      labeled "Source window: Seeking Alpha 1M" (NEVER Internal 30D).
   3. Results vs consensus (resultsVsConsensus) and guidance vs consensus
@@ -407,6 +408,9 @@ def rule2_cumulative(
     (ticker, reportedFiscalPeriodEnding) via shared revision_windows.py.
     Latest-observation anchor; schedule-aware weekday-gap baseline (not 2-day
     calendar slack). Friday→Monday is valid; ancient obs cannot fake 30D.
+    NEVER substitute revision-event history when daily.jsonl has no groups —
+    Internal 30D is fail-closed without daily observations (exporter has no
+    equivalent fallback).
 
     Stateful hysteresis (Internal 30D — never SA 1M):
       |pct| >= 5% → Open (or Update same active alert ID while stays >=5%)
@@ -426,26 +430,10 @@ def rule2_cumulative(
 
     rows = daily_rows if daily_rows is not None else load_daily_jsonl()
     groups = group_daily_by_fiscal_identity(rows)
-
-    # Fallback: if no daily rows at all, derive sparse points from revision history
-    if not groups and history:
-        hist_daily = []
-        for row in history:
-            hist_daily.append(
-                {
-                    "ticker": row.get("Ticker") or row.get("ticker"),
-                    "reportedFiscalPeriodEnding": (
-                        row.get("Fiscal Year")
-                        or row.get("reportedFiscalPeriodEnding")
-                        or row.get("reportedFiscalLabel")
-                        or row.get("Calendar Alignment")
-                    ),
-                    "consensus": row.get("Current EPS") if row.get("Current EPS") is not None else row.get("consensus"),
-                    "date": row.get("Date") or row.get("date"),
-                    "updateTime": row.get("Update Time") or row.get("updateTime"),
-                }
-            )
-        groups = group_daily_by_fiscal_identity(hist_daily)
+    # history (revision events) is intentionally unused for Internal 30D.
+    # Exporter has no revision-event fallback; labeling a history-derived
+    # move "Internal 30D" would disagree with the UI on a lost daily.jsonl.
+    _ = history
 
     # Index prior open cumulative alerts by normalized (ticker, fiscal)
     prior_open: dict[tuple, dict] = {}

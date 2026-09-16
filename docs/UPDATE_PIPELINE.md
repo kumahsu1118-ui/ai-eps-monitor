@@ -112,8 +112,9 @@ Shared helper: `tools/revision_windows.py` — used by both `export_web_data.py`
 
 - Identity = ticker + normalized `reportedFiscalPeriodEnding`.
 - Anchor = latest valid daily observation ≤ `as_of`; `targetDate = latestDate − N days`.
-- Same-day collapse: latest `updateTime`, else last append order.
+- Same-day collapse is cutoff-aware: latest `updateTime` ≤ `as_of`, else last append among remaining rows. Calendar `date` is the day bucket.
 - Baseline: schedule-aware weekday-gap (`MAX_BASELINE_WEEKDAY_GAP = 1`). Friday→Monday is valid; ancient observations cannot fake a 30D baseline. See the helper module docstring.
+- Internal 30D is **daily.jsonl only** — revision-event history is never substituted when daily observations are absent.
 
 ## daily.jsonl persistence
 
