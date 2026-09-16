@@ -15,7 +15,7 @@ Buy-side monitor for NVDA, AVGO, TSM, MSFT, BE, KEYS.
 
 | Path | Role |
 |------|------|
-| `tools/` | Exporter, alert engine, SA parser, acceptance tests, publish, canonical history writer/materializer, migrate/rebuild |
+| `tools/` | Exporter, alert engine, SA parser, acceptance tests, publish, canonical history writer/materializer, migrate/rebuild, read-only health check |
 | `web/` | SPA (`index.html`, `app.js`, `styles.css`) + exported `web/data/*.json` |
 | `data/history/eps_daily/` | **Canonical durable EPS daily history** (Git-tracked monthly JSONL). Fresh clone SoT for Internal 30D/60D/90D. |
 | `data/daily_eps_snapshots/daily.jsonl` | Runtime cache materialized from canonical history (not sole durable SoT; not Git-tracked). Rebuildable. |
@@ -47,6 +47,7 @@ python3 tools/migrate_eps_history.py --apply
 python3 tools/run_acceptance_tests.py              # all
 python3 tools/run_unit_tests.py                    # unit (in-process)
 python3 tools/run_integration_tests.py             # integration (subprocess timeouts)
+python3 tools/health_check.py                      # read-only pipeline / canonical history health
 ```
 
 Isolated tempfile suite — does not mutate production `data/` or `web/data`. Creates synthetic fixtures when needed; ships `tests/fixtures/` so universe/snapshots are not hand-added. Runners exit 0 only when every named test PASSes (do not grep logs).
@@ -68,8 +69,11 @@ python3 tools/run_integration_tests.py
 python3 tools/run_acceptance_tests.py
 python3 tools/canonical_eps_history.py --materialize   # or: python3 tools/rebuild_daily_history.py
 python3 tools/migrate_eps_history.py --audit
+python3 tools/health_check.py --allow-degraded         # read-only; FAIL only on FAILED
 git diff --exit-code
 ```
+
+`python3 tools/health_check.py` never mutates production state (no materialize, ingest, SA fetch, canonical git persist, or Pages publish). It prints a human summary plus JSON. Final status is exactly `HEALTHY` / `DEGRADED` / `FAILED`. Exit codes: `HEALTHY=0`, `DEGRADED=1`, `FAILED=2`. CI uses `--allow-degraded` so a fresh clone (missing `CURRENT.json` / runtime `daily.jsonl`, incomplete 30/60/90D) is not a red gate; only `FAILED` fails the job. Collection freshness is recomputed from `lastSuccessfulCollection` vs now (optional `--now`); canonical git sync also flags unpushed canonical-history commits.
 
 Materialize is fail-closed and does not require `generations/`, `daily_eps_snapshots/`, or `CURRENT.json`. It writes untracked runtime `data/daily_eps_snapshots/daily.jsonl` — do not commit it. `--audit` is read-only (takes `data/.pipeline.lock` only) and is valid on a fresh clone because Git-tracked `data/history/eps_daily/` is the canonical SoT. CI never ingests, fetches Seeking Alpha, persists canonical git history, publishes Pages, or creates commits.
 
