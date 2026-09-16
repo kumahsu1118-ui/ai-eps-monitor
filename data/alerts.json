@@ -23,7 +23,7 @@
       "sourceWindow": "Seeking Alpha 1M",
       "windowLabel": "Source window: Seeking Alpha 1M",
       "neverInternal30D": true,
-      "ageDays": 0,
+      "ageDays": 1,
       "analystCount": 33,
       "consensusLow": 25.22,
       "consensusHigh": 34.25,
@@ -34,8 +34,8 @@
       "status": "Open",
       "lifecycleStatus": "Open",
       "lifecycleEvent": "Hold",
-      "updatedAt": "2026-09-15T01:36:00Z",
-      "lastObservedAt": "2026-09-15T01:36:00Z"
+      "updatedAt": "2026-09-16T01:02:34Z",
+      "lastObservedAt": "2026-09-16T01:02:34Z"
     },
     {
       "id": "source_reported_1m_revision:KEYS:Oct_2028:2026-09-15:sa1m_2028E",
@@ -60,7 +60,7 @@
       "sourceWindow": "Seeking Alpha 1M",
       "windowLabel": "Source window: Seeking Alpha 1M",
       "neverInternal30D": true,
-      "ageDays": 0,
+      "ageDays": 1,
       "analystCount": 10,
       "consensusLow": 14.04,
       "consensusHigh": 19.51,
@@ -71,8 +71,8 @@
       "status": "Open",
       "lifecycleStatus": "Open",
       "lifecycleEvent": "Hold",
-      "updatedAt": "2026-09-15T01:36:00Z",
-      "lastObservedAt": "2026-09-15T01:36:00Z"
+      "updatedAt": "2026-09-16T01:02:34Z",
+      "lastObservedAt": "2026-09-16T01:02:34Z"
     },
     {
       "id": "gross_margin_pressure:AVGO:Q3_2026_(fiscal_2026):2026-09-02:gm_pressure_-210",
@@ -91,7 +91,7 @@
       "activeUntil": "2026-09-23T00:00:00Z",
       "oneshot": true,
       "bpsChange": -210.0,
-      "ageDays": 13
+      "ageDays": 14
     },
     {
       "id": "driver_status_change:AVGO:na:2026-09-02:gross_margin",
@@ -114,53 +114,7 @@
       "previousStatus": "unchanged",
       "currentStatus": "deteriorating",
       "sourceUrl": "https://investors.broadcom.com/news-releases/news-release-details/broadcom-inc-announces-third-quarter-fiscal-year-2026-financial",
-      "ageDays": 13
-    },
-    {
-      "id": "driver_status_change:NVDA:na:2026-08-26:HBM_supply",
-      "rule": "driver_status_change",
-      "severity": "high",
-      "ticker": "NVDA",
-      "message": "NVDA driver 'HBM supply': unchanged → deteriorating — Memory pricing rising sharply; GM guide reset with Q4 trough 71%-72% tied to memory scarcity (digest negatives).",
-      "title": "NVDA driver 'HBM supply': unchanged → deteriorating — Memory pricing rising sharply; GM guide reset with Q4 trough 71%-72% tied to memory scarcity (digest negatives).",
-      "fiscalPeriod": "na",
-      "eventPeriod": "na",
-      "eventDate": "2026-08-26",
-      "eventKey": "HBM supply",
-      "eventAt": "2026-08-26T00:00:00Z",
-      "createdAt": "2026-09-15T06:45:02Z",
-      "expiresAt": "2026-09-16T00:00:00Z",
-      "activeUntil": "2026-09-16T00:00:00Z",
-      "oneshot": true,
-      "driver": "HBM supply",
-      "driverName": "HBM supply",
-      "previousStatus": "unchanged",
-      "currentStatus": "deteriorating",
-      "sourceUrl": "https://investor.nvidia.com/news/press-release-details/2026/NVIDIA-Announces-Financial-Results-for-Second-Quarter-Fiscal-2027/default.aspx",
-      "ageDays": 20
-    },
-    {
-      "id": "driver_status_change:NVDA:na:2026-08-26:gross_margin",
-      "rule": "driver_status_change",
-      "severity": "high",
-      "ticker": "NVDA",
-      "message": "NVDA driver 'gross margin': unchanged → deteriorating — Q3 GM guided 74% ±50 bps; Q4 trough expected 71%-72% vs Q2 reported 75% — memory-driven reset (IR guidance).",
-      "title": "NVDA driver 'gross margin': unchanged → deteriorating — Q3 GM guided 74% ±50 bps; Q4 trough expected 71%-72% vs Q2 reported 75% — memory-driven reset (IR guidance).",
-      "fiscalPeriod": "na",
-      "eventPeriod": "na",
-      "eventDate": "2026-08-26",
-      "eventKey": "gross margin",
-      "eventAt": "2026-08-26T00:00:00Z",
-      "createdAt": "2026-09-15T06:45:02Z",
-      "expiresAt": "2026-09-16T00:00:00Z",
-      "activeUntil": "2026-09-16T00:00:00Z",
-      "oneshot": true,
-      "driver": "gross margin",
-      "driverName": "gross margin",
-      "previousStatus": "unchanged",
-      "currentStatus": "deteriorating",
-      "sourceUrl": "https://investor.nvidia.com/news/press-release-details/2026/NVIDIA-Announces-Financial-Results-for-Second-Quarter-Fiscal-2027/default.aspx",
-      "ageDays": 20
+      "ageDays": 14
     },
     {
       "id": "source_reported_1m_revision:NVDA:Jan_2030:2026-09-15:sa1m_2029E",
@@ -185,7 +139,7 @@
       "sourceWindow": "Seeking Alpha 1M",
       "windowLabel": "Source window: Seeking Alpha 1M",
       "neverInternal30D": true,
-      "ageDays": 0,
+      "ageDays": 1,
       "analystCount": 4,
       "consensusLow": 17.9,
       "consensusHigh": 30.37,
@@ -196,8 +150,8 @@
       "status": "Open",
       "lifecycleStatus": "Open",
       "lifecycleEvent": "Hold",
-      "updatedAt": "2026-09-15T01:36:00Z",
-      "lastObservedAt": "2026-09-15T01:36:00Z"
+      "updatedAt": "2026-09-16T01:02:34Z",
+      "lastObservedAt": "2026-09-16T01:02:34Z"
     },
     {
       "id": "source_reported_1m_revision:AVGO:Oct_2029:2026-09-15:sa1m_2029E",
@@ -222,7 +176,7 @@
       "sourceWindow": "Seeking Alpha 1M",
       "windowLabel": "Source window: Seeking Alpha 1M",
       "neverInternal30D": true,
-      "ageDays": 0,
+      "ageDays": 1,
       "analystCount": 4,
       "consensusLow": 30.54,
       "consensusHigh": 50.5,
@@ -233,8 +187,8 @@
       "status": "Open",
       "lifecycleStatus": "Open",
       "lifecycleEvent": "Hold",
-      "updatedAt": "2026-09-15T01:36:00Z",
-      "lastObservedAt": "2026-09-15T01:36:00Z"
+      "updatedAt": "2026-09-16T01:02:34Z",
+      "lastObservedAt": "2026-09-16T01:02:34Z"
     },
     {
       "id": "source_reported_1m_revision:KEYS:Oct_2029:2026-09-15:sa1m_2029E",
@@ -259,7 +213,7 @@
       "sourceWindow": "Seeking Alpha 1M",
       "windowLabel": "Source window: Seeking Alpha 1M",
       "neverInternal30D": true,
-      "ageDays": 0,
+      "ageDays": 1,
       "analystCount": 1,
       "consensusLow": 21.99,
       "consensusHigh": 21.99,
@@ -270,8 +224,8 @@
       "status": "Open",
       "lifecycleStatus": "Open",
       "lifecycleEvent": "Hold",
-      "updatedAt": "2026-09-15T01:36:00Z",
-      "lastObservedAt": "2026-09-15T01:36:00Z"
+      "updatedAt": "2026-09-16T01:02:34Z",
+      "lastObservedAt": "2026-09-16T01:02:34Z"
     },
     {
       "id": "results_vs_consensus:AVGO:Q3_2026_(fiscal_2026):2026-09-02:results_above",
@@ -295,7 +249,7 @@
       "sourceTier": 4,
       "actualsSourceUrl": "https://investors.broadcom.com/news-releases/news-release-details/broadcom-inc-announces-third-quarter-fiscal-year-2026-financial",
       "actualsSourceTier": 1,
-      "ageDays": 13
+      "ageDays": 14
     },
     {
       "id": "driver_status_change:AVGO:na:2026-09-02:AI_ASIC",
@@ -318,7 +272,7 @@
       "previousStatus": "unchanged",
       "currentStatus": "improving",
       "sourceUrl": "https://investors.broadcom.com/news-releases/news-release-details/broadcom-inc-announces-third-quarter-fiscal-year-2026-financial",
-      "ageDays": 13
+      "ageDays": 14
     },
     {
       "id": "driver_status_change:AVGO:na:2026-09-02:hyperscaler_customers",
@@ -341,7 +295,7 @@
       "previousStatus": "unchanged",
       "currentStatus": "improving",
       "sourceUrl": "https://investors.broadcom.com/news-releases/news-release-details/broadcom-inc-announces-third-quarter-fiscal-year-2026-financial",
-      "ageDays": 13
+      "ageDays": 14
     },
     {
       "id": "driver_status_change:AVGO:na:2026-09-02:AI_networking",
@@ -364,7 +318,7 @@
       "previousStatus": "unchanged",
       "currentStatus": "improving",
       "sourceUrl": "https://seekingalpha.com/article/4942557-broadcom-inc-avgo-q3-2026-earnings-call-transcript",
-      "ageDays": 13
+      "ageDays": 14
     },
     {
       "id": "driver_status_change:AVGO:na:2026-09-02:Tomahawk",
@@ -387,7 +341,7 @@
       "previousStatus": "unchanged",
       "currentStatus": "improving",
       "sourceUrl": "https://seekingalpha.com/article/4942557-broadcom-inc-avgo-q3-2026-earnings-call-transcript",
-      "ageDays": 13
+      "ageDays": 14
     },
     {
       "id": "driver_status_change:AVGO:na:2026-09-02:FCF",
@@ -410,123 +364,7 @@
       "previousStatus": "unchanged",
       "currentStatus": "improving",
       "sourceUrl": "https://investors.broadcom.com/news-releases/news-release-details/broadcom-inc-announces-third-quarter-fiscal-year-2026-financial",
-      "ageDays": 13
-    },
-    {
-      "id": "results_vs_consensus:NVDA:Q2_2027_(fiscal_2027):2026-08-26:results_above",
-      "rule": "results_vs_consensus",
-      "severity": "medium",
-      "ticker": "NVDA",
-      "message": "NVDA: results vs consensus marked Above",
-      "title": "NVDA: results vs consensus marked Above",
-      "fiscalPeriod": "Q2 2027 (fiscal 2027)",
-      "eventPeriod": "Q2 2027 (fiscal 2027)",
-      "eventDate": "2026-08-26",
-      "eventKey": "results_above",
-      "eventAt": "2026-08-26T00:00:00Z",
-      "createdAt": "2026-09-15T06:21:06Z",
-      "expiresAt": "2026-09-16T00:00:00Z",
-      "activeUntil": "2026-09-16T00:00:00Z",
-      "oneshot": true,
-      "comparison": "Above",
-      "resultsVsConsensus": "Above",
-      "sourceUrl": "https://seekingalpha.com/article/4940563-nvidia-corporation-nvda-q2-2027-earnings-call-transcript",
-      "sourceTier": 4,
-      "actualsSourceUrl": "https://investor.nvidia.com/news/press-release-details/2026/NVIDIA-Announces-Financial-Results-for-Second-Quarter-Fiscal-2027/default.aspx",
-      "actualsSourceTier": 1,
-      "ageDays": 20
-    },
-    {
-      "id": "driver_status_change:NVDA:na:2026-08-26:GPU_shipment",
-      "rule": "driver_status_change",
-      "severity": "medium",
-      "ticker": "NVDA",
-      "message": "NVDA driver 'GPU shipment': unchanged → improving — Record Q2 revenue $96.22B (+106% Y/Y); data-center revenue $89B (+18% QoQ) per IR release.",
-      "title": "NVDA driver 'GPU shipment': unchanged → improving — Record Q2 revenue $96.22B (+106% Y/Y); data-center revenue $89B (+18% QoQ) per IR release.",
-      "fiscalPeriod": "na",
-      "eventPeriod": "na",
-      "eventDate": "2026-08-26",
-      "eventKey": "GPU shipment",
-      "eventAt": "2026-08-26T00:00:00Z",
-      "createdAt": "2026-09-15T06:45:02Z",
-      "expiresAt": "2026-09-16T00:00:00Z",
-      "activeUntil": "2026-09-16T00:00:00Z",
-      "oneshot": true,
-      "driver": "GPU shipment",
-      "driverName": "GPU shipment",
-      "previousStatus": "unchanged",
-      "currentStatus": "improving",
-      "sourceUrl": "https://investor.nvidia.com/news/press-release-details/2026/NVIDIA-Announces-Financial-Results-for-Second-Quarter-Fiscal-2027/default.aspx",
-      "ageDays": 20
-    },
-    {
-      "id": "driver_status_change:NVDA:na:2026-08-26:Rubin_-_Rubin_Ultra",
-      "rule": "driver_status_change",
-      "severity": "medium",
-      "ticker": "NVDA",
-      "message": "NVDA driver 'Rubin / Rubin Ultra': unchanged → improving — Vera Rubin production shipments commenced; expected ~20% of Q3 data-center revenue (digest commentary).",
-      "title": "NVDA driver 'Rubin / Rubin Ultra': unchanged → improving — Vera Rubin production shipments commenced; expected ~20% of Q3 data-center revenue (digest commentary).",
-      "fiscalPeriod": "na",
-      "eventPeriod": "na",
-      "eventDate": "2026-08-26",
-      "eventKey": "Rubin / Rubin Ultra",
-      "eventAt": "2026-08-26T00:00:00Z",
-      "createdAt": "2026-09-15T06:45:02Z",
-      "expiresAt": "2026-09-16T00:00:00Z",
-      "activeUntil": "2026-09-16T00:00:00Z",
-      "oneshot": true,
-      "driver": "Rubin / Rubin Ultra",
-      "driverName": "Rubin / Rubin Ultra",
-      "previousStatus": "unchanged",
-      "currentStatus": "improving",
-      "sourceUrl": "https://seekingalpha.com/article/4940563-nvidia-corporation-nvda-q2-2027-earnings-call-transcript",
-      "ageDays": 20
-    },
-    {
-      "id": "driver_status_change:NVDA:na:2026-08-26:inference_demand",
-      "rule": "driver_status_change",
-      "severity": "medium",
-      "ticker": "NVDA",
-      "message": "NVDA driver 'inference demand': unchanged → improving — AI demand broadening; management cites ~70% FY28 revenue growth outlook with demand above supply (IR/digest).",
-      "title": "NVDA driver 'inference demand': unchanged → improving — AI demand broadening; management cites ~70% FY28 revenue growth outlook with demand above supply (IR/digest).",
-      "fiscalPeriod": "na",
-      "eventPeriod": "na",
-      "eventDate": "2026-08-26",
-      "eventKey": "inference demand",
-      "eventAt": "2026-08-26T00:00:00Z",
-      "createdAt": "2026-09-15T06:45:02Z",
-      "expiresAt": "2026-09-16T00:00:00Z",
-      "activeUntil": "2026-09-16T00:00:00Z",
-      "oneshot": true,
-      "driver": "inference demand",
-      "driverName": "inference demand",
-      "previousStatus": "unchanged",
-      "currentStatus": "improving",
-      "sourceUrl": "https://investor.nvidia.com/news/press-release-details/2026/NVIDIA-Announces-Financial-Results-for-Second-Quarter-Fiscal-2027/default.aspx",
-      "ageDays": 20
-    },
-    {
-      "id": "driver_status_change:NVDA:na:2026-08-26:networking",
-      "rule": "driver_status_change",
-      "severity": "medium",
-      "ticker": "NVDA",
-      "message": "NVDA driver 'networking': unchanged → improving — Networking revenue grew 18% sequentially in Q2 (digest Q&A / commentary).",
-      "title": "NVDA driver 'networking': unchanged → improving — Networking revenue grew 18% sequentially in Q2 (digest Q&A / commentary).",
-      "fiscalPeriod": "na",
-      "eventPeriod": "na",
-      "eventDate": "2026-08-26",
-      "eventKey": "networking",
-      "eventAt": "2026-08-26T00:00:00Z",
-      "createdAt": "2026-09-15T06:45:02Z",
-      "expiresAt": "2026-09-16T00:00:00Z",
-      "activeUntil": "2026-09-16T00:00:00Z",
-      "oneshot": true,
-      "driver": "networking",
-      "driverName": "networking",
-      "previousStatus": "unchanged",
-      "currentStatus": "improving",
-      "sourceUrl": "https://seekingalpha.com/article/4940563-nvidia-corporation-nvda-q2-2027-earnings-call-transcript",
-      "ageDays": 20
+      "ageDays": 14
     }
   ],
   "alertHistory": [
@@ -584,7 +422,7 @@
       "sourceTier": 4,
       "actualsSourceUrl": "https://investor.nvidia.com/news/press-release-details/2026/NVIDIA-Announces-Financial-Results-for-Second-Quarter-Fiscal-2027/default.aspx",
       "actualsSourceTier": 1,
-      "ageDays": 20
+      "ageDays": 21
     },
     {
       "id": "results_vs_consensus:AVGO:Q3_2026_(fiscal_2026):2026-09-02:results_above",
@@ -608,7 +446,7 @@
       "sourceTier": 4,
       "actualsSourceUrl": "https://investors.broadcom.com/news-releases/news-release-details/broadcom-inc-announces-third-quarter-fiscal-year-2026-financial",
       "actualsSourceTier": 1,
-      "ageDays": 13
+      "ageDays": 14
     },
     {
       "id": "gross_margin_pressure:AVGO:Q3_2026_(fiscal_2026):2026-09-02:gm_pressure_-210",
@@ -627,7 +465,7 @@
       "activeUntil": "2026-09-23T00:00:00Z",
       "oneshot": true,
       "bpsChange": -210.0,
-      "ageDays": 13
+      "ageDays": 14
     },
     {
       "id": "driver_status_change:NVDA:na:2026-08-26:GPU_shipment",
@@ -650,7 +488,7 @@
       "previousStatus": "unchanged",
       "currentStatus": "improving",
       "sourceUrl": "https://investor.nvidia.com/news/press-release-details/2026/NVIDIA-Announces-Financial-Results-for-Second-Quarter-Fiscal-2027/default.aspx",
-      "ageDays": 20
+      "ageDays": 21
     },
     {
       "id": "driver_status_change:NVDA:na:2026-08-26:Rubin_-_Rubin_Ultra",
@@ -673,7 +511,7 @@
       "previousStatus": "unchanged",
       "currentStatus": "improving",
       "sourceUrl": "https://seekingalpha.com/article/4940563-nvidia-corporation-nvda-q2-2027-earnings-call-transcript",
-      "ageDays": 20
+      "ageDays": 21
     },
     {
       "id": "driver_status_change:NVDA:na:2026-08-26:inference_demand",
@@ -696,7 +534,7 @@
       "previousStatus": "unchanged",
       "currentStatus": "improving",
       "sourceUrl": "https://investor.nvidia.com/news/press-release-details/2026/NVIDIA-Announces-Financial-Results-for-Second-Quarter-Fiscal-2027/default.aspx",
-      "ageDays": 20
+      "ageDays": 21
     },
     {
       "id": "driver_status_change:NVDA:na:2026-08-26:HBM_supply",
@@ -719,7 +557,7 @@
       "previousStatus": "unchanged",
       "currentStatus": "deteriorating",
       "sourceUrl": "https://investor.nvidia.com/news/press-release-details/2026/NVIDIA-Announces-Financial-Results-for-Second-Quarter-Fiscal-2027/default.aspx",
-      "ageDays": 20
+      "ageDays": 21
     },
     {
       "id": "driver_status_change:NVDA:na:2026-08-26:networking",
@@ -742,7 +580,7 @@
       "previousStatus": "unchanged",
       "currentStatus": "improving",
       "sourceUrl": "https://seekingalpha.com/article/4940563-nvidia-corporation-nvda-q2-2027-earnings-call-transcript",
-      "ageDays": 20
+      "ageDays": 21
     },
     {
       "id": "driver_status_change:NVDA:na:2026-08-26:gross_margin",
@@ -765,7 +603,7 @@
       "previousStatus": "unchanged",
       "currentStatus": "deteriorating",
       "sourceUrl": "https://investor.nvidia.com/news/press-release-details/2026/NVIDIA-Announces-Financial-Results-for-Second-Quarter-Fiscal-2027/default.aspx",
-      "ageDays": 20
+      "ageDays": 21
     },
     {
       "id": "driver_status_change:AVGO:na:2026-09-02:AI_ASIC",
@@ -788,7 +626,7 @@
       "previousStatus": "unchanged",
       "currentStatus": "improving",
       "sourceUrl": "https://investors.broadcom.com/news-releases/news-release-details/broadcom-inc-announces-third-quarter-fiscal-year-2026-financial",
-      "ageDays": 13
+      "ageDays": 14
     },
     {
       "id": "driver_status_change:AVGO:na:2026-09-02:hyperscaler_customers",
@@ -811,7 +649,7 @@
       "previousStatus": "unchanged",
       "currentStatus": "improving",
       "sourceUrl": "https://investors.broadcom.com/news-releases/news-release-details/broadcom-inc-announces-third-quarter-fiscal-year-2026-financial",
-      "ageDays": 13
+      "ageDays": 14
     },
     {
       "id": "driver_status_change:AVGO:na:2026-09-02:AI_networking",
@@ -834,7 +672,7 @@
       "previousStatus": "unchanged",
       "currentStatus": "improving",
       "sourceUrl": "https://seekingalpha.com/article/4942557-broadcom-inc-avgo-q3-2026-earnings-call-transcript",
-      "ageDays": 13
+      "ageDays": 14
     },
     {
       "id": "driver_status_change:AVGO:na:2026-09-02:Tomahawk",
@@ -857,7 +695,7 @@
       "previousStatus": "unchanged",
       "currentStatus": "improving",
       "sourceUrl": "https://seekingalpha.com/article/4942557-broadcom-inc-avgo-q3-2026-earnings-call-transcript",
-      "ageDays": 13
+      "ageDays": 14
     },
     {
       "id": "driver_status_change:AVGO:na:2026-09-02:gross_margin",
@@ -880,7 +718,7 @@
       "previousStatus": "unchanged",
       "currentStatus": "deteriorating",
       "sourceUrl": "https://investors.broadcom.com/news-releases/news-release-details/broadcom-inc-announces-third-quarter-fiscal-year-2026-financial",
-      "ageDays": 13
+      "ageDays": 14
     },
     {
       "id": "driver_status_change:AVGO:na:2026-09-02:FCF",
@@ -903,7 +741,7 @@
       "previousStatus": "unchanged",
       "currentStatus": "improving",
       "sourceUrl": "https://investors.broadcom.com/news-releases/news-release-details/broadcom-inc-announces-third-quarter-fiscal-year-2026-financial",
-      "ageDays": 13
+      "ageDays": 14
     },
     {
       "id": "source_reported_1m_revision:NVDA:Jan_2030:2026-09-15:sa1m_2029E",
@@ -928,7 +766,7 @@
       "sourceWindow": "Seeking Alpha 1M",
       "windowLabel": "Source window: Seeking Alpha 1M",
       "neverInternal30D": true,
-      "ageDays": 0,
+      "ageDays": 1,
       "analystCount": 4,
       "consensusLow": 17.9,
       "consensusHigh": 30.37,
@@ -939,8 +777,8 @@
       "status": "Open",
       "lifecycleStatus": "Open",
       "lifecycleEvent": "Hold",
-      "updatedAt": "2026-09-15T01:36:00Z",
-      "lastObservedAt": "2026-09-15T01:36:00Z"
+      "updatedAt": "2026-09-16T01:02:34Z",
+      "lastObservedAt": "2026-09-16T01:02:34Z"
     },
     {
       "id": "source_reported_1m_revision:AVGO:Oct_2028:2026-09-15:sa1m_2028E",
@@ -965,7 +803,7 @@
       "sourceWindow": "Seeking Alpha 1M",
       "windowLabel": "Source window: Seeking Alpha 1M",
       "neverInternal30D": true,
-      "ageDays": 0,
+      "ageDays": 1,
       "analystCount": 33,
       "consensusLow": 25.22,
       "consensusHigh": 34.25,
@@ -976,8 +814,8 @@
       "status": "Open",
       "lifecycleStatus": "Open",
       "lifecycleEvent": "Hold",
-      "updatedAt": "2026-09-15T01:36:00Z",
-      "lastObservedAt": "2026-09-15T01:36:00Z"
+      "updatedAt": "2026-09-16T01:02:34Z",
+      "lastObservedAt": "2026-09-16T01:02:34Z"
     },
     {
       "id": "source_reported_1m_revision:AVGO:Oct_2029:2026-09-15:sa1m_2029E",
@@ -1002,7 +840,7 @@
       "sourceWindow": "Seeking Alpha 1M",
       "windowLabel": "Source window: Seeking Alpha 1M",
       "neverInternal30D": true,
-      "ageDays": 0,
+      "ageDays": 1,
       "analystCount": 4,
       "consensusLow": 30.54,
       "consensusHigh": 50.5,
@@ -1013,8 +851,8 @@
       "status": "Open",
       "lifecycleStatus": "Open",
       "lifecycleEvent": "Hold",
-      "updatedAt": "2026-09-15T01:36:00Z",
-      "lastObservedAt": "2026-09-15T01:36:00Z"
+      "updatedAt": "2026-09-16T01:02:34Z",
+      "lastObservedAt": "2026-09-16T01:02:34Z"
     },
     {
       "id": "source_reported_1m_revision:KEYS:Oct_2028:2026-09-15:sa1m_2028E",
@@ -1039,7 +877,7 @@
       "sourceWindow": "Seeking Alpha 1M",
       "windowLabel": "Source window: Seeking Alpha 1M",
       "neverInternal30D": true,
-      "ageDays": 0,
+      "ageDays": 1,
       "analystCount": 10,
       "consensusLow": 14.04,
       "consensusHigh": 19.51,
@@ -1050,8 +888,8 @@
       "status": "Open",
       "lifecycleStatus": "Open",
       "lifecycleEvent": "Hold",
-      "updatedAt": "2026-09-15T01:36:00Z",
-      "lastObservedAt": "2026-09-15T01:36:00Z"
+      "updatedAt": "2026-09-16T01:02:34Z",
+      "lastObservedAt": "2026-09-16T01:02:34Z"
     },
     {
       "id": "source_reported_1m_revision:KEYS:Oct_2029:2026-09-15:sa1m_2029E",
@@ -1076,7 +914,7 @@
       "sourceWindow": "Seeking Alpha 1M",
       "windowLabel": "Source window: Seeking Alpha 1M",
       "neverInternal30D": true,
-      "ageDays": 0,
+      "ageDays": 1,
       "analystCount": 1,
       "consensusLow": 21.99,
       "consensusHigh": 21.99,
@@ -1087,8 +925,8 @@
       "status": "Open",
       "lifecycleStatus": "Open",
       "lifecycleEvent": "Hold",
-      "updatedAt": "2026-09-15T01:36:00Z",
-      "lastObservedAt": "2026-09-15T01:36:00Z"
+      "updatedAt": "2026-09-16T01:02:34Z",
+      "lastObservedAt": "2026-09-16T01:02:34Z"
     }
   ],
   "alertDiagnostics": [
@@ -1101,7 +939,7 @@
       "lookbackDays": 30,
       "windowPointCount": 1,
       "status": "insufficient history",
-      "eventAt": "2026-09-15T14:24:35Z",
+      "eventAt": "2026-09-16T01:02:34Z",
       "diagnostic": true
     },
     {
@@ -1113,7 +951,7 @@
       "lookbackDays": 30,
       "windowPointCount": 1,
       "status": "insufficient history",
-      "eventAt": "2026-09-15T14:24:35Z",
+      "eventAt": "2026-09-16T01:02:34Z",
       "diagnostic": true
     },
     {
@@ -1125,7 +963,7 @@
       "lookbackDays": 30,
       "windowPointCount": 1,
       "status": "insufficient history",
-      "eventAt": "2026-09-15T14:24:35Z",
+      "eventAt": "2026-09-16T01:02:34Z",
       "diagnostic": true
     },
     {
@@ -1137,7 +975,7 @@
       "lookbackDays": 30,
       "windowPointCount": 1,
       "status": "insufficient history",
-      "eventAt": "2026-09-15T14:24:35Z",
+      "eventAt": "2026-09-16T01:02:34Z",
       "diagnostic": true
     },
     {
@@ -1149,7 +987,7 @@
       "lookbackDays": 30,
       "windowPointCount": 1,
       "status": "insufficient history",
-      "eventAt": "2026-09-15T14:24:35Z",
+      "eventAt": "2026-09-16T01:02:34Z",
       "diagnostic": true
     },
     {
@@ -1161,7 +999,7 @@
       "lookbackDays": 30,
       "windowPointCount": 1,
       "status": "insufficient history",
-      "eventAt": "2026-09-15T14:24:35Z",
+      "eventAt": "2026-09-16T01:02:34Z",
       "diagnostic": true
     },
     {
@@ -1173,7 +1011,7 @@
       "lookbackDays": 30,
       "windowPointCount": 1,
       "status": "insufficient history",
-      "eventAt": "2026-09-15T14:24:35Z",
+      "eventAt": "2026-09-16T01:02:34Z",
       "diagnostic": true
     },
     {
@@ -1185,7 +1023,7 @@
       "lookbackDays": 30,
       "windowPointCount": 1,
       "status": "insufficient history",
-      "eventAt": "2026-09-15T14:24:35Z",
+      "eventAt": "2026-09-16T01:02:34Z",
       "diagnostic": true
     },
     {
@@ -1197,7 +1035,7 @@
       "lookbackDays": 30,
       "windowPointCount": 1,
       "status": "insufficient history",
-      "eventAt": "2026-09-15T14:24:35Z",
+      "eventAt": "2026-09-16T01:02:34Z",
       "diagnostic": true
     },
     {
@@ -1209,7 +1047,7 @@
       "lookbackDays": 30,
       "windowPointCount": 1,
       "status": "insufficient history",
-      "eventAt": "2026-09-15T14:24:35Z",
+      "eventAt": "2026-09-16T01:02:34Z",
       "diagnostic": true
     },
     {
@@ -1221,7 +1059,7 @@
       "lookbackDays": 30,
       "windowPointCount": 1,
       "status": "insufficient history",
-      "eventAt": "2026-09-15T14:24:35Z",
+      "eventAt": "2026-09-16T01:02:34Z",
       "diagnostic": true
     },
     {
@@ -1233,7 +1071,7 @@
       "lookbackDays": 30,
       "windowPointCount": 1,
       "status": "insufficient history",
-      "eventAt": "2026-09-15T14:24:35Z",
+      "eventAt": "2026-09-16T01:02:34Z",
       "diagnostic": true
     },
     {
@@ -1245,7 +1083,7 @@
       "lookbackDays": 30,
       "windowPointCount": 1,
       "status": "insufficient history",
-      "eventAt": "2026-09-15T14:24:35Z",
+      "eventAt": "2026-09-16T01:02:34Z",
       "diagnostic": true
     },
     {
@@ -1257,7 +1095,7 @@
       "lookbackDays": 30,
       "windowPointCount": 1,
       "status": "insufficient history",
-      "eventAt": "2026-09-15T14:24:35Z",
+      "eventAt": "2026-09-16T01:02:34Z",
       "diagnostic": true
     },
     {
@@ -1269,7 +1107,7 @@
       "lookbackDays": 30,
       "windowPointCount": 1,
       "status": "insufficient history",
-      "eventAt": "2026-09-15T14:24:35Z",
+      "eventAt": "2026-09-16T01:02:34Z",
       "diagnostic": true
     },
     {
@@ -1281,7 +1119,7 @@
       "lookbackDays": 30,
       "windowPointCount": 1,
       "status": "insufficient history",
-      "eventAt": "2026-09-15T14:24:35Z",
+      "eventAt": "2026-09-16T01:02:34Z",
       "diagnostic": true
     },
     {
@@ -1293,7 +1131,7 @@
       "lookbackDays": 30,
       "windowPointCount": 1,
       "status": "insufficient history",
-      "eventAt": "2026-09-15T14:24:35Z",
+      "eventAt": "2026-09-16T01:02:34Z",
       "diagnostic": true
     },
     {
@@ -1305,7 +1143,7 @@
       "lookbackDays": 30,
       "windowPointCount": 1,
       "status": "insufficient history",
-      "eventAt": "2026-09-15T14:24:35Z",
+      "eventAt": "2026-09-16T01:02:34Z",
       "diagnostic": true
     },
     {
@@ -1317,7 +1155,7 @@
       "lookbackDays": 30,
       "windowPointCount": 1,
       "status": "insufficient history",
-      "eventAt": "2026-09-15T14:24:35Z",
+      "eventAt": "2026-09-16T01:02:34Z",
       "diagnostic": true
     },
     {
@@ -1329,7 +1167,7 @@
       "lookbackDays": 30,
       "windowPointCount": 1,
       "status": "insufficient history",
-      "eventAt": "2026-09-15T14:24:35Z",
+      "eventAt": "2026-09-16T01:02:34Z",
       "diagnostic": true
     },
     {
@@ -1341,7 +1179,7 @@
       "lookbackDays": 30,
       "windowPointCount": 1,
       "status": "insufficient history",
-      "eventAt": "2026-09-15T14:24:35Z",
+      "eventAt": "2026-09-16T01:02:34Z",
       "diagnostic": true
     },
     {
@@ -1353,7 +1191,7 @@
       "lookbackDays": 30,
       "windowPointCount": 1,
       "status": "insufficient history",
-      "eventAt": "2026-09-15T14:24:35Z",
+      "eventAt": "2026-09-16T01:02:34Z",
       "diagnostic": true
     }
   ],
@@ -1379,53 +1217,7 @@
       "previousStatus": "unchanged",
       "currentStatus": "deteriorating",
       "sourceUrl": "https://investors.broadcom.com/news-releases/news-release-details/broadcom-inc-announces-third-quarter-fiscal-year-2026-financial",
-      "ageDays": 13
-    },
-    {
-      "id": "driver_status_change:NVDA:na:2026-08-26:HBM_supply",
-      "rule": "driver_status_change",
-      "severity": "high",
-      "ticker": "NVDA",
-      "message": "NVDA driver 'HBM supply': unchanged → deteriorating — Memory pricing rising sharply; GM guide reset with Q4 trough 71%-72% tied to memory scarcity (digest negatives).",
-      "title": "NVDA driver 'HBM supply': unchanged → deteriorating — Memory pricing rising sharply; GM guide reset with Q4 trough 71%-72% tied to memory scarcity (digest negatives).",
-      "fiscalPeriod": "na",
-      "eventPeriod": "na",
-      "eventDate": "2026-08-26",
-      "eventKey": "HBM supply",
-      "eventAt": "2026-08-26T00:00:00Z",
-      "createdAt": "2026-09-15T06:45:02Z",
-      "expiresAt": "2026-09-16T00:00:00Z",
-      "activeUntil": "2026-09-16T00:00:00Z",
-      "oneshot": true,
-      "driver": "HBM supply",
-      "driverName": "HBM supply",
-      "previousStatus": "unchanged",
-      "currentStatus": "deteriorating",
-      "sourceUrl": "https://investor.nvidia.com/news/press-release-details/2026/NVIDIA-Announces-Financial-Results-for-Second-Quarter-Fiscal-2027/default.aspx",
-      "ageDays": 20
-    },
-    {
-      "id": "driver_status_change:NVDA:na:2026-08-26:gross_margin",
-      "rule": "driver_status_change",
-      "severity": "high",
-      "ticker": "NVDA",
-      "message": "NVDA driver 'gross margin': unchanged → deteriorating — Q3 GM guided 74% ±50 bps; Q4 trough expected 71%-72% vs Q2 reported 75% — memory-driven reset (IR guidance).",
-      "title": "NVDA driver 'gross margin': unchanged → deteriorating — Q3 GM guided 74% ±50 bps; Q4 trough expected 71%-72% vs Q2 reported 75% — memory-driven reset (IR guidance).",
-      "fiscalPeriod": "na",
-      "eventPeriod": "na",
-      "eventDate": "2026-08-26",
-      "eventKey": "gross margin",
-      "eventAt": "2026-08-26T00:00:00Z",
-      "createdAt": "2026-09-15T06:45:02Z",
-      "expiresAt": "2026-09-16T00:00:00Z",
-      "activeUntil": "2026-09-16T00:00:00Z",
-      "oneshot": true,
-      "driver": "gross margin",
-      "driverName": "gross margin",
-      "previousStatus": "unchanged",
-      "currentStatus": "deteriorating",
-      "sourceUrl": "https://investor.nvidia.com/news/press-release-details/2026/NVIDIA-Announces-Financial-Results-for-Second-Quarter-Fiscal-2027/default.aspx",
-      "ageDays": 20
+      "ageDays": 14
     },
     {
       "id": "gross_margin_pressure:AVGO:Q3_2026_(fiscal_2026):2026-09-02:gm_pressure_-210",
@@ -1444,7 +1236,7 @@
       "activeUntil": "2026-09-23T00:00:00Z",
       "oneshot": true,
       "bpsChange": -210.0,
-      "ageDays": 13
+      "ageDays": 14
     },
     {
       "id": "source_reported_1m_revision:KEYS:Oct_2028:2026-09-15:sa1m_2028E",
@@ -1469,7 +1261,7 @@
       "sourceWindow": "Seeking Alpha 1M",
       "windowLabel": "Source window: Seeking Alpha 1M",
       "neverInternal30D": true,
-      "ageDays": 0,
+      "ageDays": 1,
       "analystCount": 10,
       "consensusLow": 14.04,
       "consensusHigh": 19.51,
@@ -1480,8 +1272,82 @@
       "status": "Open",
       "lifecycleStatus": "Open",
       "lifecycleEvent": "Hold",
-      "updatedAt": "2026-09-15T01:36:00Z",
-      "lastObservedAt": "2026-09-15T01:36:00Z"
+      "updatedAt": "2026-09-16T01:02:34Z",
+      "lastObservedAt": "2026-09-16T01:02:34Z"
+    },
+    {
+      "id": "source_reported_1m_revision:NVDA:Jan_2030:2026-09-15:sa1m_2029E",
+      "rule": "source_reported_1m_revision",
+      "severity": "medium",
+      "ticker": "NVDA",
+      "message": "NVDA Jan 2030: Seeking Alpha 1M revision upgrade +11.02% (≥5%) [Hold] — Source window: Seeking Alpha 1M · Coverage: Low",
+      "title": "NVDA Jan 2030: Seeking Alpha 1M revision upgrade +11.02% (≥5%) [Hold] — Source window: Seeking Alpha 1M · Coverage: Low",
+      "fiscalPeriod": "Jan 2030",
+      "eventPeriod": "Jan 2030",
+      "eventDate": "2026-09-15",
+      "eventKey": "sa1m_2029E",
+      "eventAt": "2026-09-15T01:36:00Z",
+      "createdAt": "2026-09-15T07:08:44Z",
+      "expiresAt": "2026-10-06T00:00:00Z",
+      "activeUntil": "2026-10-06T00:00:00Z",
+      "oneshot": false,
+      "revisionPct": 11.02,
+      "rev1M": 11.02,
+      "slot": "2029E",
+      "fiscal": "Jan 2030",
+      "sourceWindow": "Seeking Alpha 1M",
+      "windowLabel": "Source window: Seeking Alpha 1M",
+      "neverInternal30D": true,
+      "ageDays": 1,
+      "analystCount": 4,
+      "consensusLow": 17.9,
+      "consensusHigh": 30.37,
+      "consensus": 23.4,
+      "dispersion": 0.532905982905983,
+      "confidence": "Low",
+      "farForward": true,
+      "status": "Open",
+      "lifecycleStatus": "Open",
+      "lifecycleEvent": "Hold",
+      "updatedAt": "2026-09-16T01:02:34Z",
+      "lastObservedAt": "2026-09-16T01:02:34Z"
+    },
+    {
+      "id": "source_reported_1m_revision:KEYS:Oct_2029:2026-09-15:sa1m_2029E",
+      "rule": "source_reported_1m_revision",
+      "severity": "medium",
+      "ticker": "KEYS",
+      "message": "KEYS Oct 2029: Seeking Alpha 1M revision upgrade +35.49% (≥5%) [Hold] — Source window: Seeking Alpha 1M · Coverage: Single estimate",
+      "title": "KEYS Oct 2029: Seeking Alpha 1M revision upgrade +35.49% (≥5%) [Hold] — Source window: Seeking Alpha 1M · Coverage: Single estimate",
+      "fiscalPeriod": "Oct 2029",
+      "eventPeriod": "Oct 2029",
+      "eventDate": "2026-09-15",
+      "eventKey": "sa1m_2029E",
+      "eventAt": "2026-09-15T01:36:00Z",
+      "createdAt": "2026-09-15T07:08:44Z",
+      "expiresAt": "2026-10-06T00:00:00Z",
+      "activeUntil": "2026-10-06T00:00:00Z",
+      "oneshot": false,
+      "revisionPct": 35.49,
+      "rev1M": 35.49,
+      "slot": "2029E",
+      "fiscal": "Oct 2029",
+      "sourceWindow": "Seeking Alpha 1M",
+      "windowLabel": "Source window: Seeking Alpha 1M",
+      "neverInternal30D": true,
+      "ageDays": 1,
+      "analystCount": 1,
+      "consensusLow": 21.99,
+      "consensusHigh": 21.99,
+      "consensus": 21.99,
+      "dispersion": 0.0,
+      "confidence": "Single estimate",
+      "farForward": true,
+      "status": "Open",
+      "lifecycleStatus": "Open",
+      "lifecycleEvent": "Hold",
+      "updatedAt": "2026-09-16T01:02:34Z",
+      "lastObservedAt": "2026-09-16T01:02:34Z"
     }
   ],
   "changedSinceLastCollection": [],
@@ -1509,7 +1375,7 @@
       "sourceWindow": "Seeking Alpha 1M",
       "windowLabel": "Source window: Seeking Alpha 1M",
       "neverInternal30D": true,
-      "ageDays": 0,
+      "ageDays": 1,
       "analystCount": 33,
       "consensusLow": 25.22,
       "consensusHigh": 34.25,
@@ -1520,8 +1386,8 @@
       "status": "Open",
       "lifecycleStatus": "Open",
       "lifecycleEvent": "Hold",
-      "updatedAt": "2026-09-15T01:36:00Z",
-      "lastObservedAt": "2026-09-15T01:36:00Z"
+      "updatedAt": "2026-09-16T01:02:34Z",
+      "lastObservedAt": "2026-09-16T01:02:34Z"
     },
     {
       "id": "source_reported_1m_revision:KEYS:Oct_2028:2026-09-15:sa1m_2028E",
@@ -1546,7 +1412,7 @@
       "sourceWindow": "Seeking Alpha 1M",
       "windowLabel": "Source window: Seeking Alpha 1M",
       "neverInternal30D": true,
-      "ageDays": 0,
+      "ageDays": 1,
       "analystCount": 10,
       "consensusLow": 14.04,
       "consensusHigh": 19.51,
@@ -1557,8 +1423,8 @@
       "status": "Open",
       "lifecycleStatus": "Open",
       "lifecycleEvent": "Hold",
-      "updatedAt": "2026-09-15T01:36:00Z",
-      "lastObservedAt": "2026-09-15T01:36:00Z"
+      "updatedAt": "2026-09-16T01:02:34Z",
+      "lastObservedAt": "2026-09-16T01:02:34Z"
     },
     {
       "id": "gross_margin_pressure:AVGO:Q3_2026_(fiscal_2026):2026-09-02:gm_pressure_-210",
@@ -1577,7 +1443,7 @@
       "activeUntil": "2026-09-23T00:00:00Z",
       "oneshot": true,
       "bpsChange": -210.0,
-      "ageDays": 13
+      "ageDays": 14
     },
     {
       "id": "driver_status_change:AVGO:na:2026-09-02:gross_margin",
@@ -1600,53 +1466,7 @@
       "previousStatus": "unchanged",
       "currentStatus": "deteriorating",
       "sourceUrl": "https://investors.broadcom.com/news-releases/news-release-details/broadcom-inc-announces-third-quarter-fiscal-year-2026-financial",
-      "ageDays": 13
-    },
-    {
-      "id": "driver_status_change:NVDA:na:2026-08-26:HBM_supply",
-      "rule": "driver_status_change",
-      "severity": "high",
-      "ticker": "NVDA",
-      "message": "NVDA driver 'HBM supply': unchanged → deteriorating — Memory pricing rising sharply; GM guide reset with Q4 trough 71%-72% tied to memory scarcity (digest negatives).",
-      "title": "NVDA driver 'HBM supply': unchanged → deteriorating — Memory pricing rising sharply; GM guide reset with Q4 trough 71%-72% tied to memory scarcity (digest negatives).",
-      "fiscalPeriod": "na",
-      "eventPeriod": "na",
-      "eventDate": "2026-08-26",
-      "eventKey": "HBM supply",
-      "eventAt": "2026-08-26T00:00:00Z",
-      "createdAt": "2026-09-15T06:45:02Z",
-      "expiresAt": "2026-09-16T00:00:00Z",
-      "activeUntil": "2026-09-16T00:00:00Z",
-      "oneshot": true,
-      "driver": "HBM supply",
-      "driverName": "HBM supply",
-      "previousStatus": "unchanged",
-      "currentStatus": "deteriorating",
-      "sourceUrl": "https://investor.nvidia.com/news/press-release-details/2026/NVIDIA-Announces-Financial-Results-for-Second-Quarter-Fiscal-2027/default.aspx",
-      "ageDays": 20
-    },
-    {
-      "id": "driver_status_change:NVDA:na:2026-08-26:gross_margin",
-      "rule": "driver_status_change",
-      "severity": "high",
-      "ticker": "NVDA",
-      "message": "NVDA driver 'gross margin': unchanged → deteriorating — Q3 GM guided 74% ±50 bps; Q4 trough expected 71%-72% vs Q2 reported 75% — memory-driven reset (IR guidance).",
-      "title": "NVDA driver 'gross margin': unchanged → deteriorating — Q3 GM guided 74% ±50 bps; Q4 trough expected 71%-72% vs Q2 reported 75% — memory-driven reset (IR guidance).",
-      "fiscalPeriod": "na",
-      "eventPeriod": "na",
-      "eventDate": "2026-08-26",
-      "eventKey": "gross margin",
-      "eventAt": "2026-08-26T00:00:00Z",
-      "createdAt": "2026-09-15T06:45:02Z",
-      "expiresAt": "2026-09-16T00:00:00Z",
-      "activeUntil": "2026-09-16T00:00:00Z",
-      "oneshot": true,
-      "driver": "gross margin",
-      "driverName": "gross margin",
-      "previousStatus": "unchanged",
-      "currentStatus": "deteriorating",
-      "sourceUrl": "https://investor.nvidia.com/news/press-release-details/2026/NVIDIA-Announces-Financial-Results-for-Second-Quarter-Fiscal-2027/default.aspx",
-      "ageDays": 20
+      "ageDays": 14
     },
     {
       "id": "source_reported_1m_revision:NVDA:Jan_2030:2026-09-15:sa1m_2029E",
@@ -1671,7 +1491,7 @@
       "sourceWindow": "Seeking Alpha 1M",
       "windowLabel": "Source window: Seeking Alpha 1M",
       "neverInternal30D": true,
-      "ageDays": 0,
+      "ageDays": 1,
       "analystCount": 4,
       "consensusLow": 17.9,
       "consensusHigh": 30.37,
@@ -1682,8 +1502,8 @@
       "status": "Open",
       "lifecycleStatus": "Open",
       "lifecycleEvent": "Hold",
-      "updatedAt": "2026-09-15T01:36:00Z",
-      "lastObservedAt": "2026-09-15T01:36:00Z"
+      "updatedAt": "2026-09-16T01:02:34Z",
+      "lastObservedAt": "2026-09-16T01:02:34Z"
     },
     {
       "id": "source_reported_1m_revision:AVGO:Oct_2029:2026-09-15:sa1m_2029E",
@@ -1708,7 +1528,7 @@
       "sourceWindow": "Seeking Alpha 1M",
       "windowLabel": "Source window: Seeking Alpha 1M",
       "neverInternal30D": true,
-      "ageDays": 0,
+      "ageDays": 1,
       "analystCount": 4,
       "consensusLow": 30.54,
       "consensusHigh": 50.5,
@@ -1719,8 +1539,8 @@
       "status": "Open",
       "lifecycleStatus": "Open",
       "lifecycleEvent": "Hold",
-      "updatedAt": "2026-09-15T01:36:00Z",
-      "lastObservedAt": "2026-09-15T01:36:00Z"
+      "updatedAt": "2026-09-16T01:02:34Z",
+      "lastObservedAt": "2026-09-16T01:02:34Z"
     },
     {
       "id": "source_reported_1m_revision:KEYS:Oct_2029:2026-09-15:sa1m_2029E",
@@ -1745,7 +1565,7 @@
       "sourceWindow": "Seeking Alpha 1M",
       "windowLabel": "Source window: Seeking Alpha 1M",
       "neverInternal30D": true,
-      "ageDays": 0,
+      "ageDays": 1,
       "analystCount": 1,
       "consensusLow": 21.99,
       "consensusHigh": 21.99,
@@ -1756,8 +1576,8 @@
       "status": "Open",
       "lifecycleStatus": "Open",
       "lifecycleEvent": "Hold",
-      "updatedAt": "2026-09-15T01:36:00Z",
-      "lastObservedAt": "2026-09-15T01:36:00Z"
+      "updatedAt": "2026-09-16T01:02:34Z",
+      "lastObservedAt": "2026-09-16T01:02:34Z"
     },
     {
       "id": "results_vs_consensus:AVGO:Q3_2026_(fiscal_2026):2026-09-02:results_above",
@@ -1781,7 +1601,7 @@
       "sourceTier": 4,
       "actualsSourceUrl": "https://investors.broadcom.com/news-releases/news-release-details/broadcom-inc-announces-third-quarter-fiscal-year-2026-financial",
       "actualsSourceTier": 1,
-      "ageDays": 13
+      "ageDays": 14
     },
     {
       "id": "driver_status_change:AVGO:na:2026-09-02:AI_ASIC",
@@ -1804,7 +1624,7 @@
       "previousStatus": "unchanged",
       "currentStatus": "improving",
       "sourceUrl": "https://investors.broadcom.com/news-releases/news-release-details/broadcom-inc-announces-third-quarter-fiscal-year-2026-financial",
-      "ageDays": 13
+      "ageDays": 14
     },
     {
       "id": "driver_status_change:AVGO:na:2026-09-02:hyperscaler_customers",
@@ -1827,7 +1647,7 @@
       "previousStatus": "unchanged",
       "currentStatus": "improving",
       "sourceUrl": "https://investors.broadcom.com/news-releases/news-release-details/broadcom-inc-announces-third-quarter-fiscal-year-2026-financial",
-      "ageDays": 13
+      "ageDays": 14
     },
     {
       "id": "driver_status_change:AVGO:na:2026-09-02:AI_networking",
@@ -1850,7 +1670,7 @@
       "previousStatus": "unchanged",
       "currentStatus": "improving",
       "sourceUrl": "https://seekingalpha.com/article/4942557-broadcom-inc-avgo-q3-2026-earnings-call-transcript",
-      "ageDays": 13
+      "ageDays": 14
     },
     {
       "id": "driver_status_change:AVGO:na:2026-09-02:Tomahawk",
@@ -1873,7 +1693,7 @@
       "previousStatus": "unchanged",
       "currentStatus": "improving",
       "sourceUrl": "https://seekingalpha.com/article/4942557-broadcom-inc-avgo-q3-2026-earnings-call-transcript",
-      "ageDays": 13
+      "ageDays": 14
     },
     {
       "id": "driver_status_change:AVGO:na:2026-09-02:FCF",
@@ -1896,130 +1716,14 @@
       "previousStatus": "unchanged",
       "currentStatus": "improving",
       "sourceUrl": "https://investors.broadcom.com/news-releases/news-release-details/broadcom-inc-announces-third-quarter-fiscal-year-2026-financial",
-      "ageDays": 13
-    },
-    {
-      "id": "results_vs_consensus:NVDA:Q2_2027_(fiscal_2027):2026-08-26:results_above",
-      "rule": "results_vs_consensus",
-      "severity": "medium",
-      "ticker": "NVDA",
-      "message": "NVDA: results vs consensus marked Above",
-      "title": "NVDA: results vs consensus marked Above",
-      "fiscalPeriod": "Q2 2027 (fiscal 2027)",
-      "eventPeriod": "Q2 2027 (fiscal 2027)",
-      "eventDate": "2026-08-26",
-      "eventKey": "results_above",
-      "eventAt": "2026-08-26T00:00:00Z",
-      "createdAt": "2026-09-15T06:21:06Z",
-      "expiresAt": "2026-09-16T00:00:00Z",
-      "activeUntil": "2026-09-16T00:00:00Z",
-      "oneshot": true,
-      "comparison": "Above",
-      "resultsVsConsensus": "Above",
-      "sourceUrl": "https://seekingalpha.com/article/4940563-nvidia-corporation-nvda-q2-2027-earnings-call-transcript",
-      "sourceTier": 4,
-      "actualsSourceUrl": "https://investor.nvidia.com/news/press-release-details/2026/NVIDIA-Announces-Financial-Results-for-Second-Quarter-Fiscal-2027/default.aspx",
-      "actualsSourceTier": 1,
-      "ageDays": 20
-    },
-    {
-      "id": "driver_status_change:NVDA:na:2026-08-26:GPU_shipment",
-      "rule": "driver_status_change",
-      "severity": "medium",
-      "ticker": "NVDA",
-      "message": "NVDA driver 'GPU shipment': unchanged → improving — Record Q2 revenue $96.22B (+106% Y/Y); data-center revenue $89B (+18% QoQ) per IR release.",
-      "title": "NVDA driver 'GPU shipment': unchanged → improving — Record Q2 revenue $96.22B (+106% Y/Y); data-center revenue $89B (+18% QoQ) per IR release.",
-      "fiscalPeriod": "na",
-      "eventPeriod": "na",
-      "eventDate": "2026-08-26",
-      "eventKey": "GPU shipment",
-      "eventAt": "2026-08-26T00:00:00Z",
-      "createdAt": "2026-09-15T06:45:02Z",
-      "expiresAt": "2026-09-16T00:00:00Z",
-      "activeUntil": "2026-09-16T00:00:00Z",
-      "oneshot": true,
-      "driver": "GPU shipment",
-      "driverName": "GPU shipment",
-      "previousStatus": "unchanged",
-      "currentStatus": "improving",
-      "sourceUrl": "https://investor.nvidia.com/news/press-release-details/2026/NVIDIA-Announces-Financial-Results-for-Second-Quarter-Fiscal-2027/default.aspx",
-      "ageDays": 20
-    },
-    {
-      "id": "driver_status_change:NVDA:na:2026-08-26:Rubin_-_Rubin_Ultra",
-      "rule": "driver_status_change",
-      "severity": "medium",
-      "ticker": "NVDA",
-      "message": "NVDA driver 'Rubin / Rubin Ultra': unchanged → improving — Vera Rubin production shipments commenced; expected ~20% of Q3 data-center revenue (digest commentary).",
-      "title": "NVDA driver 'Rubin / Rubin Ultra': unchanged → improving — Vera Rubin production shipments commenced; expected ~20% of Q3 data-center revenue (digest commentary).",
-      "fiscalPeriod": "na",
-      "eventPeriod": "na",
-      "eventDate": "2026-08-26",
-      "eventKey": "Rubin / Rubin Ultra",
-      "eventAt": "2026-08-26T00:00:00Z",
-      "createdAt": "2026-09-15T06:45:02Z",
-      "expiresAt": "2026-09-16T00:00:00Z",
-      "activeUntil": "2026-09-16T00:00:00Z",
-      "oneshot": true,
-      "driver": "Rubin / Rubin Ultra",
-      "driverName": "Rubin / Rubin Ultra",
-      "previousStatus": "unchanged",
-      "currentStatus": "improving",
-      "sourceUrl": "https://seekingalpha.com/article/4940563-nvidia-corporation-nvda-q2-2027-earnings-call-transcript",
-      "ageDays": 20
-    },
-    {
-      "id": "driver_status_change:NVDA:na:2026-08-26:inference_demand",
-      "rule": "driver_status_change",
-      "severity": "medium",
-      "ticker": "NVDA",
-      "message": "NVDA driver 'inference demand': unchanged → improving — AI demand broadening; management cites ~70% FY28 revenue growth outlook with demand above supply (IR/digest).",
-      "title": "NVDA driver 'inference demand': unchanged → improving — AI demand broadening; management cites ~70% FY28 revenue growth outlook with demand above supply (IR/digest).",
-      "fiscalPeriod": "na",
-      "eventPeriod": "na",
-      "eventDate": "2026-08-26",
-      "eventKey": "inference demand",
-      "eventAt": "2026-08-26T00:00:00Z",
-      "createdAt": "2026-09-15T06:45:02Z",
-      "expiresAt": "2026-09-16T00:00:00Z",
-      "activeUntil": "2026-09-16T00:00:00Z",
-      "oneshot": true,
-      "driver": "inference demand",
-      "driverName": "inference demand",
-      "previousStatus": "unchanged",
-      "currentStatus": "improving",
-      "sourceUrl": "https://investor.nvidia.com/news/press-release-details/2026/NVIDIA-Announces-Financial-Results-for-Second-Quarter-Fiscal-2027/default.aspx",
-      "ageDays": 20
-    },
-    {
-      "id": "driver_status_change:NVDA:na:2026-08-26:networking",
-      "rule": "driver_status_change",
-      "severity": "medium",
-      "ticker": "NVDA",
-      "message": "NVDA driver 'networking': unchanged → improving — Networking revenue grew 18% sequentially in Q2 (digest Q&A / commentary).",
-      "title": "NVDA driver 'networking': unchanged → improving — Networking revenue grew 18% sequentially in Q2 (digest Q&A / commentary).",
-      "fiscalPeriod": "na",
-      "eventPeriod": "na",
-      "eventDate": "2026-08-26",
-      "eventKey": "networking",
-      "eventAt": "2026-08-26T00:00:00Z",
-      "createdAt": "2026-09-15T06:45:02Z",
-      "expiresAt": "2026-09-16T00:00:00Z",
-      "activeUntil": "2026-09-16T00:00:00Z",
-      "oneshot": true,
-      "driver": "networking",
-      "driverName": "networking",
-      "previousStatus": "unchanged",
-      "currentStatus": "improving",
-      "sourceUrl": "https://seekingalpha.com/article/4940563-nvidia-corporation-nvda-q2-2027-earnings-call-transcript",
-      "ageDays": 20
+      "ageDays": 14
     }
   ],
-  "alertEngineLastEvaluated": "2026-09-15T14:24:35Z",
-  "alertEngineLastAttempt": "2026-09-15T14:24:35Z",
-  "alertEngineLastSuccessfulEvaluation": "2026-09-15T14:24:35Z",
+  "alertEngineLastEvaluated": "2026-09-16T01:02:34Z",
+  "alertEngineLastAttempt": "2026-09-16T01:02:34Z",
+  "alertEngineLastSuccessfulEvaluation": "2026-09-16T01:02:34Z",
   "alertEngineStatus": "ok",
   "alertEngineError": null,
   "oneShotActiveDays": 21,
-  "buildId": "7f93184951a93aef15985e40abd73ff0ac5e796069798909ac17b85730a8ba8b"
+  "buildId": "081b02a0f84869e8f425bb5eb11508ca5a807e6269f3d221f2a289fa1cb87227"
 }

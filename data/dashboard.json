@@ -1,25 +1,25 @@
 {
-  "buildId": "7f93184951a93aef15985e40abd73ff0ac5e796069798909ac17b85730a8ba8b",
+  "buildId": "081b02a0f84869e8f425bb5eb11508ca5a807e6269f3d221f2a289fa1cb87227",
   "meta": {
-    "lastUpdated": "2026-09-15T01:36:00Z",
-    "lastUpdatedDisplay": "Sep 15, 2026 09:36 Taipei Time",
+    "lastUpdated": "2026-09-16T01:02:34Z",
+    "lastUpdatedDisplay": "Sep 16, 2026 09:02 Taipei Time",
     "primarySource": "Seeking Alpha",
-    "snapshotFile": "2026-09-15.json",
+    "snapshotFile": "snapshot.json",
     "revisionWindowNote": "Seeking Alpha displayed 1M/3M/6M revision % only; 7D/30D/90D fields = Data unavailable. Dashboard uses 1M as the primary short-window revision proxy (not identical to 30D).",
     "calendarAlignmentRule": "Fiscal period ending Jan-Mar → calendar year = ending year - 1; otherwise calendar year = ending year. Reported labels never overwritten.",
     "mappingRule": "Slot mapping only (not true calendar-year EPS): Fiscal Period Ending Jan–Mar → prior calendar year slot; otherwise ending year slot. Reported Fiscal Period Ending labels are always preserved. True calendar-year EPS requires summing Q1+Q2+Q3+Q4 consensus with all four present (never interpolated).",
     "trueCyStatus": "unavailable — need quarterly consensus",
     "momentumFormula": "Deterministic EPS momentum from mapped Y+1 and Y+2 SA 1M revision % only (no management guidance / drivers): both >= +3 → Strong Positive; both >= +1 → Positive; both <= -3 → Strong Negative; both <= -1 → Negative; else Neutral. Missing either leg → Neutral.",
     "revisionRegimeDoc": "Revision regime from mapped Y+1 (nearTerm) and Y+2 (longTerm) SA 1M %: Y+1<0 and Y+2>=+5 → Back-end Loaded / Divergent; Y+1>=+5 and Y+2<0 → Front-loaded / Divergent; both >= +3 → Broad Upward Revision; both <= -3 → Broad Downward Revision; both near 0 (|x|<1) → Stable; else Mixed / Neutral-adjacent. Complements Momentum (which can be Neutral when legs diverge).",
-    "consensusDataAsOf": "2026-09-15T01:36:00Z",
-    "consensusDataAsOfDisplay": "Sep 15, 2026 09:36 Taipei Time",
-    "lastSuccessfulCollection": "2026-09-15T01:36:00Z",
-    "lastSuccessfulCollectionDisplay": "Sep 15, 2026 09:36 Taipei Time",
-    "sitePublished": "2026-09-15T14:24:56Z",
-    "sitePublishedDisplay": "Sep 15, 2026 22:24 Taipei Time",
+    "consensusDataAsOf": "2026-09-16T01:02:34Z",
+    "consensusDataAsOfDisplay": "Sep 16, 2026 09:02 Taipei Time",
+    "lastSuccessfulCollection": "2026-09-16T01:02:34Z",
+    "lastSuccessfulCollectionDisplay": "Sep 16, 2026 09:02 Taipei Time",
+    "sitePublished": "2026-09-16T01:02:48Z",
+    "sitePublishedDisplay": "Sep 16, 2026 09:02 Taipei Time",
     "dataStale": false,
-    "nextExpected": "2026-09-16T00:00:00Z",
-    "staleAfter": "2026-09-16T06:00:00Z",
+    "nextExpected": "2026-09-17T00:00:00Z",
+    "staleAfter": "2026-09-17T06:00:00Z",
     "lastDueGraceDeadline": "2026-09-15T06:00:00Z",
     "freshnessRule": "weekday_0800_taipei_plus_grace",
     "graceHours": 6,
@@ -34,12 +34,12 @@
       "2027E",
       "2028E"
     ],
-    "dataVersion": "7f93184951a93aef15985e40abd73ff0ac5e796069798909ac17b85730a8ba8b",
-    "refreshVersion": "13b6e576e814b2f5cdbbfd778ce61edb4e1f7a7df9dd9a13a3922bab864f9bb0",
-    "buildId": "7f93184951a93aef15985e40abd73ff0ac5e796069798909ac17b85730a8ba8b",
-    "alertEngineLastEvaluated": "2026-09-15T14:24:35Z",
-    "alertEngineLastAttempt": "2026-09-15T14:24:35Z",
-    "alertEngineLastSuccessfulEvaluation": "2026-09-15T14:24:35Z",
+    "dataVersion": "081b02a0f84869e8f425bb5eb11508ca5a807e6269f3d221f2a289fa1cb87227",
+    "refreshVersion": "7eca2c97467958a71d59d7c7f47f631607fcb8f12652af0e35067ffd8e489ebe",
+    "buildId": "081b02a0f84869e8f425bb5eb11508ca5a807e6269f3d221f2a289fa1cb87227",
+    "alertEngineLastEvaluated": "2026-09-16T01:02:34Z",
+    "alertEngineLastAttempt": "2026-09-16T01:02:34Z",
+    "alertEngineLastSuccessfulEvaluation": "2026-09-16T01:02:34Z",
     "alertEngineStatus": "ok",
     "alertEngineError": null,
     "oneShotActiveDays": 21,
@@ -86,16 +86,16 @@
       "message": "ok"
     },
     "schemaVersion": "1",
-    "appVersion": "06ada85caaab7b9904f5c4b6ed7d8f1cc48584f757ca521a910a011dffeacc10",
-    "releaseVersion": "b06f92d24cf088e9ebd559414378342a89fca61133c0e54d89725c0fa2783470"
+    "appVersion": "824c9c361deeef2378513f18fc9eb9db7ec8fb4c4fcf179e52778164461f6d23",
+    "releaseVersion": "4d9c96e9a779b8a2d7ad1099224f09542e5b70e2e69f7366ef7f4b451486fbbe"
   },
   "companies": {
     "NVDA": {
       "ticker": "NVDA",
-      "price": 210.96,
-      "lastClose": 210.96,
-      "afterHours": 212.04,
-      "priceAsOf": "4:00 PM 09/14/26; post-market $212.04 at 7:59 PM",
+      "price": 212.17,
+      "lastClose": 212.17,
+      "afterHours": 212.37,
+      "priceAsOf": "4:00 PM 09/15/26; post-market $212.37 at 7:59 PM",
       "lastEarnings": "8/26/2026",
       "nextEarnings": "Nov 25, 2026 · Post-Market · Estimated",
       "nextEarningsRaw": "11/25/2026 (Post-Market)",
@@ -235,15 +235,15 @@
         }
       },
       "sourceUrl": "https://seekingalpha.com/symbol/NVDA/earnings/estimates",
-      "updateTime": "2026-09-15T01:36:00Z",
+      "updateTime": "2026-09-16T01:01:32Z",
       "source": "Seeking Alpha",
       "dataGaps": [
         "7-day, 30-day and 90-day revision fields and absolute changes were not visible; only 1M/3M/6M percentage trends were shown.",
         "Fiscal/calendar distinction beyond the 'Fiscal Period Ending' header was not stated."
       ],
-      "collectionAsOf": "2026-09-15T01:36:00Z",
-      "dataAsOf": "2026-09-15T01:36:00Z",
-      "lastSuccessfulCollection": "2026-09-15T01:36:00Z",
+      "collectionAsOf": "2026-09-16T01:02:34Z",
+      "dataAsOf": "2026-09-16T01:02:34Z",
+      "lastSuccessfulCollection": "2026-09-16T01:02:34Z",
       "collectionFailed": false,
       "drivers": {
         "ticker": "NVDA",
@@ -346,10 +346,10 @@
     },
     "AVGO": {
       "ticker": "AVGO",
-      "price": 344.72,
-      "lastClose": 344.72,
-      "afterHours": 346.22,
-      "priceAsOf": "4:00 PM 09/14/26; post-market $346.22 at 7:59 PM",
+      "price": 339.27,
+      "lastClose": 339.27,
+      "afterHours": 339.55,
+      "priceAsOf": "4:00 PM 09/15/26; post-market $339.55 at 7:59 PM",
       "lastEarnings": "9/2/2026",
       "nextEarnings": "Dec 10, 2026 · Post-Market · Estimated",
       "nextEarningsRaw": "12/10/2026 (Post-Market)",
@@ -489,15 +489,15 @@
         }
       },
       "sourceUrl": "https://seekingalpha.com/symbol/AVGO/earnings/estimates",
-      "updateTime": "2026-09-15T01:36:00Z",
+      "updateTime": "2026-09-16T01:01:32Z",
       "source": "Seeking Alpha",
       "dataGaps": [
         "7-day, 30-day and 90-day revision fields and absolute changes were not visible; only 1M/3M/6M percentage trends were shown.",
         "Fiscal/calendar distinction beyond the 'Fiscal Period Ending' header was not stated."
       ],
-      "collectionAsOf": "2026-09-15T01:36:00Z",
-      "dataAsOf": "2026-09-15T01:36:00Z",
-      "lastSuccessfulCollection": "2026-09-15T01:36:00Z",
+      "collectionAsOf": "2026-09-16T01:02:34Z",
+      "dataAsOf": "2026-09-16T01:02:34Z",
+      "lastSuccessfulCollection": "2026-09-16T01:02:34Z",
       "collectionFailed": false,
       "drivers": {
         "ticker": "AVGO",
@@ -590,10 +590,10 @@
     },
     "TSM": {
       "ticker": "TSM",
-      "price": 418.01,
-      "lastClose": 418.01,
-      "afterHours": 419.63,
-      "priceAsOf": "4:00 PM 09/14/26; post-market $419.63 at 7:59 PM",
+      "price": 413.75,
+      "lastClose": 413.75,
+      "afterHours": 414.14,
+      "priceAsOf": "4:00 PM 09/15/26; post-market $414.14 at 7:59 PM",
       "lastEarnings": "7/16/2026",
       "nextEarnings": "Oct 16, 2026 · Estimated",
       "nextEarningsRaw": "10/16/2026 (Estimated)",
@@ -724,16 +724,16 @@
         }
       },
       "sourceUrl": "https://seekingalpha.com/symbol/TSM/earnings/estimates",
-      "updateTime": "2026-09-15T01:36:00Z",
+      "updateTime": "2026-09-16T01:01:32Z",
       "source": "Seeking Alpha",
       "dataGaps": [
         "7-day, 30-day and 90-day revision fields and absolute changes were not visible; only 1M/3M/6M percentage trends were shown.",
         "EPS table did not show an EPS estimate for Dec 2029; no 2029 EPS value was inferred from the revenue table.",
         "Fiscal/calendar distinction beyond the 'Fiscal Period Ending' header was not stated."
       ],
-      "collectionAsOf": "2026-09-15T01:36:00Z",
-      "dataAsOf": "2026-09-15T01:36:00Z",
-      "lastSuccessfulCollection": "2026-09-15T01:36:00Z",
+      "collectionAsOf": "2026-09-16T01:02:34Z",
+      "dataAsOf": "2026-09-16T01:02:34Z",
+      "lastSuccessfulCollection": "2026-09-16T01:02:34Z",
       "collectionFailed": false,
       "drivers": {
         "ticker": "TSM",
@@ -791,10 +791,10 @@
     },
     "MSFT": {
       "ticker": "MSFT",
-      "price": 505.41,
-      "lastClose": 505.41,
-      "afterHours": 504.23,
-      "priceAsOf": "4:00 PM 09/14/26; post-market $504.23 at 7:59 PM",
+      "price": 497.12,
+      "lastClose": 497.12,
+      "afterHours": 498.8,
+      "priceAsOf": "4:00 PM 09/15/26; post-market $498.80 at 7:59 PM",
       "lastEarnings": "7/29/2026",
       "nextEarnings": "Oct 29, 2026 · Post-Market · Estimated",
       "nextEarningsRaw": "10/29/2026 (Post-Market)",
@@ -805,8 +805,8 @@
       "fyNote": "Annual view; table column shown as 'Fiscal Period Ending'.",
       "momentum": "Neutral",
       "momentumFormula": "Deterministic EPS momentum from mapped Y+1 and Y+2 SA 1M revision % only (no management guidance / drivers): both >= +3 → Strong Positive; both >= +1 → Positive; both <= -3 → Strong Negative; both <= -1 → Negative; else Neutral. Missing either leg → Neutral.",
-      "nearTermRevision": 0.0,
-      "longTermRevision": -0.0,
+      "nearTermRevision": 0.03,
+      "longTermRevision": 0.08,
       "revisionRegime": "Stable",
       "revisionRegimeDoc": "Revision regime from mapped Y+1 (nearTerm) and Y+2 (longTerm) SA 1M %: Y+1<0 and Y+2>=+5 → Back-end Loaded / Divergent; Y+1>=+5 and Y+2<0 → Front-loaded / Divergent; both >= +3 → Broad Upward Revision; both <= -3 → Broad Downward Revision; both near 0 (|x|<1) → Stable; else Mixed / Neutral-adjacent. Complements Momentum (which can be Neutral when legs diverge).",
       "eps": {
@@ -826,14 +826,14 @@
           "slotMappingOnly": true
         },
         "2027E": {
-          "consensus": 19.75,
+          "consensus": 19.76,
           "high": 20.7,
           "low": 19.21,
           "analysts": 33.0,
-          "dispersion": 0.07544303797468346,
-          "rev1M": 0.0,
-          "rev3M": 1.83,
-          "rev6M": 4.9,
+          "dispersion": 0.07540485829959506,
+          "rev1M": 0.03,
+          "rev3M": 1.87,
+          "rev6M": 4.94,
           "reportedFiscalLabel": "Jun 2027",
           "calendarAlignment": "CY2027",
           "mappedYear": "2027E",
@@ -841,14 +841,14 @@
           "slotMappingOnly": true
         },
         "2028E": {
-          "consensus": 23.57,
+          "consensus": 23.59,
           "high": 26.0,
           "low": 20.93,
           "analysts": 33.0,
-          "dispersion": 0.2151039456936784,
-          "rev1M": -0.0,
-          "rev3M": 4.18,
-          "rev6M": 5.87,
+          "dispersion": 0.2149215769393811,
+          "rev1M": 0.08,
+          "rev3M": 4.26,
+          "rev6M": 5.96,
           "reportedFiscalLabel": "Jun 2028",
           "calendarAlignment": "CY2028",
           "mappedYear": "2028E",
@@ -856,14 +856,14 @@
           "slotMappingOnly": true
         },
         "2029E": {
-          "consensus": 28.73,
+          "consensus": 28.85,
           "high": 32.47,
-          "low": 26.7,
+          "low": 26.9,
           "analysts": 15.0,
-          "dispersion": 0.20083536373129132,
-          "rev1M": 0.0,
-          "rev3M": 5.02,
-          "rev6M": 5.16,
+          "dispersion": 0.1930675909878683,
+          "rev1M": 0.45,
+          "rev3M": 5.49,
+          "rev6M": 5.63,
           "reportedFiscalLabel": "Jun 2029",
           "calendarAlignment": "CY2029",
           "mappedYear": "2029E",
@@ -873,14 +873,14 @@
       },
       "epsByFiscal": {
         "Jun 2027": {
-          "consensus": 19.75,
+          "consensus": 19.76,
           "high": 20.7,
           "low": 19.21,
           "analysts": 33.0,
-          "dispersion": 0.07544303797468346,
-          "rev1M": 0.0,
-          "rev3M": 1.83,
-          "rev6M": 4.9,
+          "dispersion": 0.07540485829959506,
+          "rev1M": 0.03,
+          "rev3M": 1.87,
+          "rev6M": 4.94,
           "reportedFiscalLabel": "Jun 2027",
           "calendarAlignment": "CY2027",
           "mappedYear": "2027E",
@@ -888,14 +888,14 @@
           "slotMappingOnly": true
         },
         "Jun 2028": {
-          "consensus": 23.57,
+          "consensus": 23.59,
           "high": 26.0,
           "low": 20.93,
           "analysts": 33.0,
-          "dispersion": 0.2151039456936784,
-          "rev1M": -0.0,
-          "rev3M": 4.18,
-          "rev6M": 5.87,
+          "dispersion": 0.2149215769393811,
+          "rev1M": 0.08,
+          "rev3M": 4.26,
+          "rev6M": 5.96,
           "reportedFiscalLabel": "Jun 2028",
           "calendarAlignment": "CY2028",
           "mappedYear": "2028E",
@@ -903,14 +903,14 @@
           "slotMappingOnly": true
         },
         "Jun 2029": {
-          "consensus": 28.73,
+          "consensus": 28.85,
           "high": 32.47,
-          "low": 26.7,
+          "low": 26.9,
           "analysts": 15.0,
-          "dispersion": 0.20083536373129132,
-          "rev1M": 0.0,
-          "rev3M": 5.02,
-          "rev6M": 5.16,
+          "dispersion": 0.1930675909878683,
+          "rev1M": 0.45,
+          "rev3M": 5.49,
+          "rev6M": 5.63,
           "reportedFiscalLabel": "Jun 2029",
           "calendarAlignment": "CY2029",
           "mappedYear": "2029E",
@@ -919,15 +919,16 @@
         }
       },
       "sourceUrl": "https://seekingalpha.com/symbol/MSFT/earnings/estimates",
-      "updateTime": "2026-09-15T01:36:00Z",
+      "updateTime": "2026-09-16T01:01:32Z",
       "source": "Seeking Alpha",
       "dataGaps": [
         "7-day, 30-day and 90-day revision fields and absolute changes were not visible; only 1M/3M/6M percentage trends were shown.",
+        "Annual estimates table began at Jun 2027; no EPS estimate was shown for a Jun 2026 slot.",
         "Fiscal/calendar distinction beyond the 'Fiscal Period Ending' header was not stated."
       ],
-      "collectionAsOf": "2026-09-15T01:36:00Z",
-      "dataAsOf": "2026-09-15T01:36:00Z",
-      "lastSuccessfulCollection": "2026-09-15T01:36:00Z",
+      "collectionAsOf": "2026-09-16T01:02:34Z",
+      "dataAsOf": "2026-09-16T01:02:34Z",
+      "lastSuccessfulCollection": "2026-09-16T01:02:34Z",
       "collectionFailed": false,
       "drivers": {
         "ticker": "MSFT",
@@ -990,10 +991,10 @@
     },
     "BE": {
       "ticker": "BE",
-      "price": 257.05,
-      "lastClose": 257.05,
-      "afterHours": 258.15,
-      "priceAsOf": "4:00 PM 09/14/26; post-market $258.15 at 7:59 PM",
+      "price": 259.35,
+      "lastClose": 259.35,
+      "afterHours": 258.85,
+      "priceAsOf": "4:00 PM 09/15/26; post-market $258.85 at 7:59 PM",
       "lastEarnings": "7/28/2026",
       "nextEarnings": "Oct 29, 2026 · Post-Market · Estimated",
       "nextEarningsRaw": "10/29/2026 (Post-Market)",
@@ -1141,15 +1142,15 @@
         }
       },
       "sourceUrl": "https://seekingalpha.com/symbol/BE/earnings/estimates",
-      "updateTime": "2026-09-15T01:36:00Z",
+      "updateTime": "2026-09-16T01:01:32Z",
       "source": "Seeking Alpha",
       "dataGaps": [
         "7-day, 30-day and 90-day revision fields and absolute changes were not visible; only 1M/3M/6M percentage trends were shown.",
         "Fiscal/calendar distinction beyond the 'Fiscal Period Ending' header was not stated."
       ],
-      "collectionAsOf": "2026-09-15T01:36:00Z",
-      "dataAsOf": "2026-09-15T01:36:00Z",
-      "lastSuccessfulCollection": "2026-09-15T01:36:00Z",
+      "collectionAsOf": "2026-09-16T01:02:34Z",
+      "dataAsOf": "2026-09-16T01:02:34Z",
+      "lastSuccessfulCollection": "2026-09-16T01:02:34Z",
       "collectionFailed": false,
       "drivers": {
         "ticker": "BE",
@@ -1202,10 +1203,10 @@
     },
     "KEYS": {
       "ticker": "KEYS",
-      "price": 314.96,
-      "lastClose": 314.96,
-      "afterHours": 320.56,
-      "priceAsOf": "4:00 PM 09/14/26; post-market $320.56 at 7:58 PM",
+      "price": 313.36,
+      "lastClose": 313.36,
+      "afterHours": 313.36,
+      "priceAsOf": "4:00 PM 09/15/26; post-market $313.36 at 7:30 PM",
       "lastEarnings": "8/18/2026",
       "nextEarnings": null,
       "nextEarningsRaw": null,
@@ -1345,16 +1346,16 @@
         }
       },
       "sourceUrl": "https://seekingalpha.com/symbol/KEYS/earnings/estimates",
-      "updateTime": "2026-09-15T01:36:00Z",
+      "updateTime": "2026-09-16T01:01:32Z",
       "source": "Seeking Alpha",
       "dataGaps": [
         "Next earnings announce date was '-' on the earnings page, so it is Data unavailable.",
         "7-day, 30-day and 90-day revision fields and absolute changes were not visible; only 1M/3M/6M percentage trends were shown.",
         "Fiscal/calendar distinction beyond the 'Fiscal Period Ending' header was not stated."
       ],
-      "collectionAsOf": "2026-09-15T01:36:00Z",
-      "dataAsOf": "2026-09-15T01:36:00Z",
-      "lastSuccessfulCollection": "2026-09-15T01:36:00Z",
+      "collectionAsOf": "2026-09-16T01:02:34Z",
+      "dataAsOf": "2026-09-16T01:02:34Z",
+      "lastSuccessfulCollection": "2026-09-16T01:02:34Z",
       "collectionFailed": false,
       "drivers": {
         "ticker": "KEYS",
@@ -1405,13 +1406,13 @@
     "rows": [
       {
         "ticker": "NVDA",
-        "price": 210.96,
-        "lastClose": 210.96,
-        "afterHours": 212.04,
+        "price": 212.17,
+        "lastClose": 212.17,
+        "afterHours": 212.37,
         "periods": {
           "2026E": {
             "eps": 9.31,
-            "pe": 22.659505907626208,
+            "pe": 22.789473684210524,
             "rev1M": 0.13,
             "reportedFiscalLabel": "Jan 2027",
             "trueCalendarYearEps": null,
@@ -1419,7 +1420,7 @@
           },
           "2027E": {
             "eps": 15.61,
-            "pe": 13.514413837283794,
+            "pe": 13.591928251121075,
             "rev1M": 1.37,
             "reportedFiscalLabel": "Jan 2028",
             "trueCalendarYearEps": null,
@@ -1427,7 +1428,7 @@
           },
           "2028E": {
             "eps": 21.06,
-            "pe": 10.017094017094019,
+            "pe": 10.07454890788224,
             "rev1M": 2.98,
             "reportedFiscalLabel": "Jan 2029",
             "trueCalendarYearEps": null,
@@ -1444,17 +1445,17 @@
         "nearTermRevision": 1.37,
         "longTermRevision": 2.98,
         "revisionRegime": "Mild Upward",
-        "lastUpdated": "2026-09-15T01:36:00Z",
+        "lastUpdated": "2026-09-16T01:02:34Z",
         "eps26": 9.31,
-        "pe26": 22.659505907626208,
+        "pe26": 22.789473684210524,
         "reportedFy26": "Jan 2027",
         "trueCalendarYearEps26": null,
         "eps27": 15.61,
-        "pe27": 13.514413837283794,
+        "pe27": 13.591928251121075,
         "reportedFy27": "Jan 2028",
         "trueCalendarYearEps27": null,
         "eps28": 21.06,
-        "pe28": 10.017094017094019,
+        "pe28": 10.07454890788224,
         "reportedFy28": "Jan 2029",
         "trueCalendarYearEps28": null,
         "rev1M": 1.37,
@@ -1466,13 +1467,13 @@
       },
       {
         "ticker": "AVGO",
-        "price": 344.72,
-        "lastClose": 344.72,
-        "afterHours": 346.22,
+        "price": 339.27,
+        "lastClose": 339.27,
+        "afterHours": 339.55,
         "periods": {
           "2026E": {
             "eps": 11.66,
-            "pe": 29.564322469982848,
+            "pe": 29.09691252144082,
             "rev1M": 0.23,
             "reportedFiscalLabel": "Oct 2026",
             "trueCalendarYearEps": null,
@@ -1480,7 +1481,7 @@
           },
           "2027E": {
             "eps": 19.38,
-            "pe": 17.787409700722396,
+            "pe": 17.506191950464395,
             "rev1M": -0.97,
             "reportedFiscalLabel": "Oct 2027",
             "trueCalendarYearEps": null,
@@ -1488,7 +1489,7 @@
           },
           "2028E": {
             "eps": 30.56,
-            "pe": 11.280104712041886,
+            "pe": 11.101767015706805,
             "rev1M": 15.7,
             "reportedFiscalLabel": "Oct 2028",
             "trueCalendarYearEps": null,
@@ -1505,17 +1506,17 @@
         "nearTermRevision": -0.97,
         "longTermRevision": 15.7,
         "revisionRegime": "Back-end Loaded / Divergent",
-        "lastUpdated": "2026-09-15T01:36:00Z",
+        "lastUpdated": "2026-09-16T01:02:34Z",
         "eps26": 11.66,
-        "pe26": 29.564322469982848,
+        "pe26": 29.09691252144082,
         "reportedFy26": "Oct 2026",
         "trueCalendarYearEps26": null,
         "eps27": 19.38,
-        "pe27": 17.787409700722396,
+        "pe27": 17.506191950464395,
         "reportedFy27": "Oct 2027",
         "trueCalendarYearEps27": null,
         "eps28": 30.56,
-        "pe28": 11.280104712041886,
+        "pe28": 11.101767015706805,
         "reportedFy28": "Oct 2028",
         "trueCalendarYearEps28": null,
         "rev1M": -0.97,
@@ -1527,13 +1528,13 @@
       },
       {
         "ticker": "TSM",
-        "price": 418.01,
-        "lastClose": 418.01,
-        "afterHours": 419.63,
+        "price": 413.75,
+        "lastClose": 413.75,
+        "afterHours": 414.14,
         "periods": {
           "2026E": {
             "eps": 16.93,
-            "pe": 24.690490253987004,
+            "pe": 24.438865918487892,
             "rev1M": 0.21,
             "reportedFiscalLabel": "Dec 2026",
             "trueCalendarYearEps": null,
@@ -1541,7 +1542,7 @@
           },
           "2027E": {
             "eps": 21.93,
-            "pe": 19.06110351117191,
+            "pe": 18.86684906520748,
             "rev1M": 0.66,
             "reportedFiscalLabel": "Dec 2027",
             "trueCalendarYearEps": null,
@@ -1549,7 +1550,7 @@
           },
           "2028E": {
             "eps": 28.33,
-            "pe": 14.755030003529827,
+            "pe": 14.604659371690788,
             "rev1M": 0.25,
             "reportedFiscalLabel": "Dec 2028",
             "trueCalendarYearEps": null,
@@ -1566,17 +1567,17 @@
         "nearTermRevision": 0.66,
         "longTermRevision": 0.25,
         "revisionRegime": "Stable",
-        "lastUpdated": "2026-09-15T01:36:00Z",
+        "lastUpdated": "2026-09-16T01:02:34Z",
         "eps26": 16.93,
-        "pe26": 24.690490253987004,
+        "pe26": 24.438865918487892,
         "reportedFy26": "Dec 2026",
         "trueCalendarYearEps26": null,
         "eps27": 21.93,
-        "pe27": 19.06110351117191,
+        "pe27": 18.86684906520748,
         "reportedFy27": "Dec 2027",
         "trueCalendarYearEps27": null,
         "eps28": 28.33,
-        "pe28": 14.755030003529827,
+        "pe28": 14.604659371690788,
         "reportedFy28": "Dec 2028",
         "trueCalendarYearEps28": null,
         "rev1M": 0.66,
@@ -1588,9 +1589,9 @@
       },
       {
         "ticker": "MSFT",
-        "price": 505.41,
-        "lastClose": 505.41,
-        "afterHours": 504.23,
+        "price": 497.12,
+        "lastClose": 497.12,
+        "afterHours": 498.8,
         "periods": {
           "2026E": {
             "eps": null,
@@ -1601,20 +1602,20 @@
             "growthFromPrior": null
           },
           "2027E": {
-            "eps": 19.75,
-            "pe": 25.590379746835445,
-            "rev1M": 0.0,
+            "eps": 19.76,
+            "pe": 25.157894736842103,
+            "rev1M": 0.03,
             "reportedFiscalLabel": "Jun 2027",
             "trueCalendarYearEps": null,
             "growthFromPrior": null
           },
           "2028E": {
-            "eps": 23.57,
-            "pe": 21.442935935511244,
-            "rev1M": -0.0,
+            "eps": 23.59,
+            "pe": 21.073336159389573,
+            "rev1M": 0.08,
             "reportedFiscalLabel": "Jun 2028",
             "trueCalendarYearEps": null,
-            "growthFromPrior": 0.19341772151898737
+            "growthFromPrior": 0.193825910931174
           }
         },
         "displayYears": [
@@ -1624,38 +1625,38 @@
         ],
         "cagrY0Y2": null,
         "momentum": "Neutral",
-        "nearTermRevision": 0.0,
-        "longTermRevision": -0.0,
+        "nearTermRevision": 0.03,
+        "longTermRevision": 0.08,
         "revisionRegime": "Stable",
-        "lastUpdated": "2026-09-15T01:36:00Z",
+        "lastUpdated": "2026-09-16T01:02:34Z",
         "eps26": null,
         "pe26": null,
         "reportedFy26": null,
         "trueCalendarYearEps26": null,
-        "eps27": 19.75,
-        "pe27": 25.590379746835445,
+        "eps27": 19.76,
+        "pe27": 25.157894736842103,
         "reportedFy27": "Jun 2027",
         "trueCalendarYearEps27": null,
-        "eps28": 23.57,
-        "pe28": 21.442935935511244,
+        "eps28": 23.59,
+        "pe28": 21.073336159389573,
         "reportedFy28": "Jun 2028",
         "trueCalendarYearEps28": null,
-        "rev1M": 0.0,
-        "rev1M28": -0.0,
-        "rev1M2028": -0.0,
+        "rev1M": 0.03,
+        "rev1M28": 0.08,
+        "rev1M2028": 0.08,
         "growth27": null,
-        "growth28": 0.19341772151898737,
+        "growth28": 0.193825910931174,
         "cagr2628": null
       },
       {
         "ticker": "BE",
-        "price": 257.05,
-        "lastClose": 257.05,
-        "afterHours": 258.15,
+        "price": 259.35,
+        "lastClose": 259.35,
+        "afterHours": 258.85,
         "periods": {
           "2026E": {
             "eps": 2.71,
-            "pe": 94.85239852398524,
+            "pe": 95.70110701107012,
             "rev1M": -0.01,
             "reportedFiscalLabel": "Dec 2026",
             "trueCalendarYearEps": null,
@@ -1663,7 +1664,7 @@
           },
           "2027E": {
             "eps": 4.93,
-            "pe": 52.139959432048684,
+            "pe": 52.60649087221096,
             "rev1M": 0.17,
             "reportedFiscalLabel": "Dec 2027",
             "trueCalendarYearEps": null,
@@ -1671,7 +1672,7 @@
           },
           "2028E": {
             "eps": 7.79,
-            "pe": 32.997432605905004,
+            "pe": 33.29268292682927,
             "rev1M": 0.65,
             "reportedFiscalLabel": "Dec 2028",
             "trueCalendarYearEps": null,
@@ -1688,17 +1689,17 @@
         "nearTermRevision": 0.17,
         "longTermRevision": 0.65,
         "revisionRegime": "Stable",
-        "lastUpdated": "2026-09-15T01:36:00Z",
+        "lastUpdated": "2026-09-16T01:02:34Z",
         "eps26": 2.71,
-        "pe26": 94.85239852398524,
+        "pe26": 95.70110701107012,
         "reportedFy26": "Dec 2026",
         "trueCalendarYearEps26": null,
         "eps27": 4.93,
-        "pe27": 52.139959432048684,
+        "pe27": 52.60649087221096,
         "reportedFy27": "Dec 2027",
         "trueCalendarYearEps27": null,
         "eps28": 7.79,
-        "pe28": 32.997432605905004,
+        "pe28": 33.29268292682927,
         "reportedFy28": "Dec 2028",
         "trueCalendarYearEps28": null,
         "rev1M": 0.17,
@@ -1710,13 +1711,13 @@
       },
       {
         "ticker": "KEYS",
-        "price": 314.96,
-        "lastClose": 314.96,
-        "afterHours": 320.56,
+        "price": 313.36,
+        "lastClose": 313.36,
+        "afterHours": 313.36,
         "periods": {
           "2026E": {
             "eps": 11.47,
-            "pe": 27.459459459459456,
+            "pe": 27.31996512641674,
             "rev1M": -0.22,
             "reportedFiscalLabel": "Oct 2026",
             "trueCalendarYearEps": null,
@@ -1724,7 +1725,7 @@
           },
           "2027E": {
             "eps": 13.87,
-            "pe": 22.708002883922134,
+            "pe": 22.59264599855804,
             "rev1M": 1.62,
             "reportedFiscalLabel": "Oct 2027",
             "trueCalendarYearEps": null,
@@ -1732,7 +1733,7 @@
           },
           "2028E": {
             "eps": 15.69,
-            "pe": 20.07393244104525,
+            "pe": 19.97195666029318,
             "rev1M": 16.31,
             "reportedFiscalLabel": "Oct 2028",
             "trueCalendarYearEps": null,
@@ -1749,17 +1750,17 @@
         "nearTermRevision": 1.62,
         "longTermRevision": 16.31,
         "revisionRegime": "Mild Upward",
-        "lastUpdated": "2026-09-15T01:36:00Z",
+        "lastUpdated": "2026-09-16T01:02:34Z",
         "eps26": 11.47,
-        "pe26": 27.459459459459456,
+        "pe26": 27.31996512641674,
         "reportedFy26": "Oct 2026",
         "trueCalendarYearEps26": null,
         "eps27": 13.87,
-        "pe27": 22.708002883922134,
+        "pe27": 22.59264599855804,
         "reportedFy27": "Oct 2027",
         "trueCalendarYearEps27": null,
         "eps28": 15.69,
-        "pe28": 20.07393244104525,
+        "pe28": 19.97195666029318,
         "reportedFy28": "Oct 2028",
         "trueCalendarYearEps28": null,
         "rev1M": 1.62,
@@ -2134,11 +2135,21 @@
           "date": "2026-09-15",
           "eps": 11.66,
           "reportedFiscalLabel": "Oct 2026"
+        },
+        {
+          "date": "2026-09-16",
+          "eps": 11.66,
+          "reportedFiscalLabel": "Oct 2026"
         }
       ],
       "2027E": [
         {
           "date": "2026-09-15",
+          "eps": 19.38,
+          "reportedFiscalLabel": "Oct 2027"
+        },
+        {
+          "date": "2026-09-16",
           "eps": 19.38,
           "reportedFiscalLabel": "Oct 2027"
         }
@@ -2148,11 +2159,21 @@
           "date": "2026-09-15",
           "eps": 30.56,
           "reportedFiscalLabel": "Oct 2028"
+        },
+        {
+          "date": "2026-09-16",
+          "eps": 30.56,
+          "reportedFiscalLabel": "Oct 2028"
         }
       ],
       "2029E": [
         {
           "date": "2026-09-15",
+          "eps": 40.66,
+          "reportedFiscalLabel": "Oct 2029"
+        },
+        {
+          "date": "2026-09-16",
           "eps": 40.66,
           "reportedFiscalLabel": "Oct 2029"
         }
@@ -2164,11 +2185,21 @@
           "date": "2026-09-15",
           "eps": 2.71,
           "reportedFiscalLabel": "Dec 2026"
+        },
+        {
+          "date": "2026-09-16",
+          "eps": 2.71,
+          "reportedFiscalLabel": "Dec 2026"
         }
       ],
       "2027E": [
         {
           "date": "2026-09-15",
+          "eps": 4.93,
+          "reportedFiscalLabel": "Dec 2027"
+        },
+        {
+          "date": "2026-09-16",
           "eps": 4.93,
           "reportedFiscalLabel": "Dec 2027"
         }
@@ -2178,11 +2209,21 @@
           "date": "2026-09-15",
           "eps": 7.79,
           "reportedFiscalLabel": "Dec 2028"
+        },
+        {
+          "date": "2026-09-16",
+          "eps": 7.79,
+          "reportedFiscalLabel": "Dec 2028"
         }
       ],
       "2029E": [
         {
           "date": "2026-09-15",
+          "eps": 10.36,
+          "reportedFiscalLabel": "Dec 2029"
+        },
+        {
+          "date": "2026-09-16",
           "eps": 10.36,
           "reportedFiscalLabel": "Dec 2029"
         }
@@ -2194,11 +2235,21 @@
           "date": "2026-09-15",
           "eps": 11.47,
           "reportedFiscalLabel": "Oct 2026"
+        },
+        {
+          "date": "2026-09-16",
+          "eps": 11.47,
+          "reportedFiscalLabel": "Oct 2026"
         }
       ],
       "2027E": [
         {
           "date": "2026-09-15",
+          "eps": 13.87,
+          "reportedFiscalLabel": "Oct 2027"
+        },
+        {
+          "date": "2026-09-16",
           "eps": 13.87,
           "reportedFiscalLabel": "Oct 2027"
         }
@@ -2208,11 +2259,21 @@
           "date": "2026-09-15",
           "eps": 15.69,
           "reportedFiscalLabel": "Oct 2028"
+        },
+        {
+          "date": "2026-09-16",
+          "eps": 15.69,
+          "reportedFiscalLabel": "Oct 2028"
         }
       ],
       "2029E": [
         {
           "date": "2026-09-15",
+          "eps": 21.99,
+          "reportedFiscalLabel": "Oct 2029"
+        },
+        {
+          "date": "2026-09-16",
           "eps": 21.99,
           "reportedFiscalLabel": "Oct 2029"
         }
@@ -2231,6 +2292,11 @@
           "date": "2026-09-15",
           "eps": 19.75,
           "reportedFiscalLabel": "Jun 2027"
+        },
+        {
+          "date": "2026-09-16",
+          "eps": 19.76,
+          "reportedFiscalLabel": "Jun 2027"
         }
       ],
       "2028E": [
@@ -2238,12 +2304,22 @@
           "date": "2026-09-15",
           "eps": 23.57,
           "reportedFiscalLabel": "Jun 2028"
+        },
+        {
+          "date": "2026-09-16",
+          "eps": 23.59,
+          "reportedFiscalLabel": "Jun 2028"
         }
       ],
       "2029E": [
         {
           "date": "2026-09-15",
           "eps": 28.73,
+          "reportedFiscalLabel": "Jun 2029"
+        },
+        {
+          "date": "2026-09-16",
+          "eps": 28.85,
           "reportedFiscalLabel": "Jun 2029"
         }
       ]
@@ -2254,11 +2330,21 @@
           "date": "2026-09-15",
           "eps": 9.31,
           "reportedFiscalLabel": "Jan 2027"
+        },
+        {
+          "date": "2026-09-16",
+          "eps": 9.31,
+          "reportedFiscalLabel": "Jan 2027"
         }
       ],
       "2027E": [
         {
           "date": "2026-09-15",
+          "eps": 15.61,
+          "reportedFiscalLabel": "Jan 2028"
+        },
+        {
+          "date": "2026-09-16",
           "eps": 15.61,
           "reportedFiscalLabel": "Jan 2028"
         }
@@ -2268,11 +2354,21 @@
           "date": "2026-09-15",
           "eps": 21.06,
           "reportedFiscalLabel": "Jan 2029"
+        },
+        {
+          "date": "2026-09-16",
+          "eps": 21.06,
+          "reportedFiscalLabel": "Jan 2029"
         }
       ],
       "2029E": [
         {
           "date": "2026-09-15",
+          "eps": 23.4,
+          "reportedFiscalLabel": "Jan 2030"
+        },
+        {
+          "date": "2026-09-16",
           "eps": 23.4,
           "reportedFiscalLabel": "Jan 2030"
         }
@@ -2284,6 +2380,11 @@
           "date": "2026-09-15",
           "eps": 16.93,
           "reportedFiscalLabel": "Dec 2026"
+        },
+        {
+          "date": "2026-09-16",
+          "eps": 16.93,
+          "reportedFiscalLabel": "Dec 2026"
         }
       ],
       "2027E": [
@@ -2291,11 +2392,21 @@
           "date": "2026-09-15",
           "eps": 21.93,
           "reportedFiscalLabel": "Dec 2027"
+        },
+        {
+          "date": "2026-09-16",
+          "eps": 21.93,
+          "reportedFiscalLabel": "Dec 2027"
         }
       ],
       "2028E": [
         {
           "date": "2026-09-15",
+          "eps": 28.33,
+          "reportedFiscalLabel": "Dec 2028"
+        },
+        {
+          "date": "2026-09-16",
           "eps": 28.33,
           "reportedFiscalLabel": "Dec 2028"
         }
@@ -3095,7 +3206,7 @@
         "sourceWindow": "Seeking Alpha 1M",
         "windowLabel": "Source window: Seeking Alpha 1M",
         "neverInternal30D": true,
-        "ageDays": 0,
+        "ageDays": 1,
         "analystCount": 33,
         "consensusLow": 25.22,
         "consensusHigh": 34.25,
@@ -3106,8 +3217,8 @@
         "status": "Open",
         "lifecycleStatus": "Open",
         "lifecycleEvent": "Hold",
-        "updatedAt": "2026-09-15T01:36:00Z",
-        "lastObservedAt": "2026-09-15T01:36:00Z"
+        "updatedAt": "2026-09-16T01:02:34Z",
+        "lastObservedAt": "2026-09-16T01:02:34Z"
       },
       {
         "id": "source_reported_1m_revision:KEYS:Oct_2028:2026-09-15:sa1m_2028E",
@@ -3132,7 +3243,7 @@
         "sourceWindow": "Seeking Alpha 1M",
         "windowLabel": "Source window: Seeking Alpha 1M",
         "neverInternal30D": true,
-        "ageDays": 0,
+        "ageDays": 1,
         "analystCount": 10,
         "consensusLow": 14.04,
         "consensusHigh": 19.51,
@@ -3143,8 +3254,8 @@
         "status": "Open",
         "lifecycleStatus": "Open",
         "lifecycleEvent": "Hold",
-        "updatedAt": "2026-09-15T01:36:00Z",
-        "lastObservedAt": "2026-09-15T01:36:00Z"
+        "updatedAt": "2026-09-16T01:02:34Z",
+        "lastObservedAt": "2026-09-16T01:02:34Z"
       },
       {
         "id": "gross_margin_pressure:AVGO:Q3_2026_(fiscal_2026):2026-09-02:gm_pressure_-210",
@@ -3163,7 +3274,7 @@
         "activeUntil": "2026-09-23T00:00:00Z",
         "oneshot": true,
         "bpsChange": -210.0,
-        "ageDays": 13
+        "ageDays": 14
       },
       {
         "id": "driver_status_change:AVGO:na:2026-09-02:gross_margin",
@@ -3186,53 +3297,7 @@
         "previousStatus": "unchanged",
         "currentStatus": "deteriorating",
         "sourceUrl": "https://investors.broadcom.com/news-releases/news-release-details/broadcom-inc-announces-third-quarter-fiscal-year-2026-financial",
-        "ageDays": 13
-      },
-      {
-        "id": "driver_status_change:NVDA:na:2026-08-26:HBM_supply",
-        "rule": "driver_status_change",
-        "severity": "high",
-        "ticker": "NVDA",
-        "message": "NVDA driver 'HBM supply': unchanged → deteriorating — Memory pricing rising sharply; GM guide reset with Q4 trough 71%-72% tied to memory scarcity (digest negatives).",
-        "title": "NVDA driver 'HBM supply': unchanged → deteriorating — Memory pricing rising sharply; GM guide reset with Q4 trough 71%-72% tied to memory scarcity (digest negatives).",
-        "fiscalPeriod": "na",
-        "eventPeriod": "na",
-        "eventDate": "2026-08-26",
-        "eventKey": "HBM supply",
-        "eventAt": "2026-08-26T00:00:00Z",
-        "createdAt": "2026-09-15T06:45:02Z",
-        "expiresAt": "2026-09-16T00:00:00Z",
-        "activeUntil": "2026-09-16T00:00:00Z",
-        "oneshot": true,
-        "driver": "HBM supply",
-        "driverName": "HBM supply",
-        "previousStatus": "unchanged",
-        "currentStatus": "deteriorating",
-        "sourceUrl": "https://investor.nvidia.com/news/press-release-details/2026/NVIDIA-Announces-Financial-Results-for-Second-Quarter-Fiscal-2027/default.aspx",
-        "ageDays": 20
-      },
-      {
-        "id": "driver_status_change:NVDA:na:2026-08-26:gross_margin",
-        "rule": "driver_status_change",
-        "severity": "high",
-        "ticker": "NVDA",
-        "message": "NVDA driver 'gross margin': unchanged → deteriorating — Q3 GM guided 74% ±50 bps; Q4 trough expected 71%-72% vs Q2 reported 75% — memory-driven reset (IR guidance).",
-        "title": "NVDA driver 'gross margin': unchanged → deteriorating — Q3 GM guided 74% ±50 bps; Q4 trough expected 71%-72% vs Q2 reported 75% — memory-driven reset (IR guidance).",
-        "fiscalPeriod": "na",
-        "eventPeriod": "na",
-        "eventDate": "2026-08-26",
-        "eventKey": "gross margin",
-        "eventAt": "2026-08-26T00:00:00Z",
-        "createdAt": "2026-09-15T06:45:02Z",
-        "expiresAt": "2026-09-16T00:00:00Z",
-        "activeUntil": "2026-09-16T00:00:00Z",
-        "oneshot": true,
-        "driver": "gross margin",
-        "driverName": "gross margin",
-        "previousStatus": "unchanged",
-        "currentStatus": "deteriorating",
-        "sourceUrl": "https://investor.nvidia.com/news/press-release-details/2026/NVIDIA-Announces-Financial-Results-for-Second-Quarter-Fiscal-2027/default.aspx",
-        "ageDays": 20
+        "ageDays": 14
       },
       {
         "id": "source_reported_1m_revision:NVDA:Jan_2030:2026-09-15:sa1m_2029E",
@@ -3257,7 +3322,7 @@
         "sourceWindow": "Seeking Alpha 1M",
         "windowLabel": "Source window: Seeking Alpha 1M",
         "neverInternal30D": true,
-        "ageDays": 0,
+        "ageDays": 1,
         "analystCount": 4,
         "consensusLow": 17.9,
         "consensusHigh": 30.37,
@@ -3268,8 +3333,8 @@
         "status": "Open",
         "lifecycleStatus": "Open",
         "lifecycleEvent": "Hold",
-        "updatedAt": "2026-09-15T01:36:00Z",
-        "lastObservedAt": "2026-09-15T01:36:00Z"
+        "updatedAt": "2026-09-16T01:02:34Z",
+        "lastObservedAt": "2026-09-16T01:02:34Z"
       },
       {
         "id": "source_reported_1m_revision:AVGO:Oct_2029:2026-09-15:sa1m_2029E",
@@ -3294,7 +3359,7 @@
         "sourceWindow": "Seeking Alpha 1M",
         "windowLabel": "Source window: Seeking Alpha 1M",
         "neverInternal30D": true,
-        "ageDays": 0,
+        "ageDays": 1,
         "analystCount": 4,
         "consensusLow": 30.54,
         "consensusHigh": 50.5,
@@ -3305,8 +3370,8 @@
         "status": "Open",
         "lifecycleStatus": "Open",
         "lifecycleEvent": "Hold",
-        "updatedAt": "2026-09-15T01:36:00Z",
-        "lastObservedAt": "2026-09-15T01:36:00Z"
+        "updatedAt": "2026-09-16T01:02:34Z",
+        "lastObservedAt": "2026-09-16T01:02:34Z"
       },
       {
         "id": "source_reported_1m_revision:KEYS:Oct_2029:2026-09-15:sa1m_2029E",
@@ -3331,7 +3396,7 @@
         "sourceWindow": "Seeking Alpha 1M",
         "windowLabel": "Source window: Seeking Alpha 1M",
         "neverInternal30D": true,
-        "ageDays": 0,
+        "ageDays": 1,
         "analystCount": 1,
         "consensusLow": 21.99,
         "consensusHigh": 21.99,
@@ -3342,8 +3407,8 @@
         "status": "Open",
         "lifecycleStatus": "Open",
         "lifecycleEvent": "Hold",
-        "updatedAt": "2026-09-15T01:36:00Z",
-        "lastObservedAt": "2026-09-15T01:36:00Z"
+        "updatedAt": "2026-09-16T01:02:34Z",
+        "lastObservedAt": "2026-09-16T01:02:34Z"
       },
       {
         "id": "results_vs_consensus:AVGO:Q3_2026_(fiscal_2026):2026-09-02:results_above",
@@ -3367,7 +3432,7 @@
         "sourceTier": 4,
         "actualsSourceUrl": "https://investors.broadcom.com/news-releases/news-release-details/broadcom-inc-announces-third-quarter-fiscal-year-2026-financial",
         "actualsSourceTier": 1,
-        "ageDays": 13
+        "ageDays": 14
       },
       {
         "id": "driver_status_change:AVGO:na:2026-09-02:AI_ASIC",
@@ -3390,7 +3455,7 @@
         "previousStatus": "unchanged",
         "currentStatus": "improving",
         "sourceUrl": "https://investors.broadcom.com/news-releases/news-release-details/broadcom-inc-announces-third-quarter-fiscal-year-2026-financial",
-        "ageDays": 13
+        "ageDays": 14
       },
       {
         "id": "driver_status_change:AVGO:na:2026-09-02:hyperscaler_customers",
@@ -3413,7 +3478,7 @@
         "previousStatus": "unchanged",
         "currentStatus": "improving",
         "sourceUrl": "https://investors.broadcom.com/news-releases/news-release-details/broadcom-inc-announces-third-quarter-fiscal-year-2026-financial",
-        "ageDays": 13
+        "ageDays": 14
       },
       {
         "id": "driver_status_change:AVGO:na:2026-09-02:AI_networking",
@@ -3436,7 +3501,7 @@
         "previousStatus": "unchanged",
         "currentStatus": "improving",
         "sourceUrl": "https://seekingalpha.com/article/4942557-broadcom-inc-avgo-q3-2026-earnings-call-transcript",
-        "ageDays": 13
+        "ageDays": 14
       },
       {
         "id": "driver_status_change:AVGO:na:2026-09-02:Tomahawk",
@@ -3459,7 +3524,7 @@
         "previousStatus": "unchanged",
         "currentStatus": "improving",
         "sourceUrl": "https://seekingalpha.com/article/4942557-broadcom-inc-avgo-q3-2026-earnings-call-transcript",
-        "ageDays": 13
+        "ageDays": 14
       },
       {
         "id": "driver_status_change:AVGO:na:2026-09-02:FCF",
@@ -3482,123 +3547,7 @@
         "previousStatus": "unchanged",
         "currentStatus": "improving",
         "sourceUrl": "https://investors.broadcom.com/news-releases/news-release-details/broadcom-inc-announces-third-quarter-fiscal-year-2026-financial",
-        "ageDays": 13
-      },
-      {
-        "id": "results_vs_consensus:NVDA:Q2_2027_(fiscal_2027):2026-08-26:results_above",
-        "rule": "results_vs_consensus",
-        "severity": "medium",
-        "ticker": "NVDA",
-        "message": "NVDA: results vs consensus marked Above",
-        "title": "NVDA: results vs consensus marked Above",
-        "fiscalPeriod": "Q2 2027 (fiscal 2027)",
-        "eventPeriod": "Q2 2027 (fiscal 2027)",
-        "eventDate": "2026-08-26",
-        "eventKey": "results_above",
-        "eventAt": "2026-08-26T00:00:00Z",
-        "createdAt": "2026-09-15T06:21:06Z",
-        "expiresAt": "2026-09-16T00:00:00Z",
-        "activeUntil": "2026-09-16T00:00:00Z",
-        "oneshot": true,
-        "comparison": "Above",
-        "resultsVsConsensus": "Above",
-        "sourceUrl": "https://seekingalpha.com/article/4940563-nvidia-corporation-nvda-q2-2027-earnings-call-transcript",
-        "sourceTier": 4,
-        "actualsSourceUrl": "https://investor.nvidia.com/news/press-release-details/2026/NVIDIA-Announces-Financial-Results-for-Second-Quarter-Fiscal-2027/default.aspx",
-        "actualsSourceTier": 1,
-        "ageDays": 20
-      },
-      {
-        "id": "driver_status_change:NVDA:na:2026-08-26:GPU_shipment",
-        "rule": "driver_status_change",
-        "severity": "medium",
-        "ticker": "NVDA",
-        "message": "NVDA driver 'GPU shipment': unchanged → improving — Record Q2 revenue $96.22B (+106% Y/Y); data-center revenue $89B (+18% QoQ) per IR release.",
-        "title": "NVDA driver 'GPU shipment': unchanged → improving — Record Q2 revenue $96.22B (+106% Y/Y); data-center revenue $89B (+18% QoQ) per IR release.",
-        "fiscalPeriod": "na",
-        "eventPeriod": "na",
-        "eventDate": "2026-08-26",
-        "eventKey": "GPU shipment",
-        "eventAt": "2026-08-26T00:00:00Z",
-        "createdAt": "2026-09-15T06:45:02Z",
-        "expiresAt": "2026-09-16T00:00:00Z",
-        "activeUntil": "2026-09-16T00:00:00Z",
-        "oneshot": true,
-        "driver": "GPU shipment",
-        "driverName": "GPU shipment",
-        "previousStatus": "unchanged",
-        "currentStatus": "improving",
-        "sourceUrl": "https://investor.nvidia.com/news/press-release-details/2026/NVIDIA-Announces-Financial-Results-for-Second-Quarter-Fiscal-2027/default.aspx",
-        "ageDays": 20
-      },
-      {
-        "id": "driver_status_change:NVDA:na:2026-08-26:Rubin_-_Rubin_Ultra",
-        "rule": "driver_status_change",
-        "severity": "medium",
-        "ticker": "NVDA",
-        "message": "NVDA driver 'Rubin / Rubin Ultra': unchanged → improving — Vera Rubin production shipments commenced; expected ~20% of Q3 data-center revenue (digest commentary).",
-        "title": "NVDA driver 'Rubin / Rubin Ultra': unchanged → improving — Vera Rubin production shipments commenced; expected ~20% of Q3 data-center revenue (digest commentary).",
-        "fiscalPeriod": "na",
-        "eventPeriod": "na",
-        "eventDate": "2026-08-26",
-        "eventKey": "Rubin / Rubin Ultra",
-        "eventAt": "2026-08-26T00:00:00Z",
-        "createdAt": "2026-09-15T06:45:02Z",
-        "expiresAt": "2026-09-16T00:00:00Z",
-        "activeUntil": "2026-09-16T00:00:00Z",
-        "oneshot": true,
-        "driver": "Rubin / Rubin Ultra",
-        "driverName": "Rubin / Rubin Ultra",
-        "previousStatus": "unchanged",
-        "currentStatus": "improving",
-        "sourceUrl": "https://seekingalpha.com/article/4940563-nvidia-corporation-nvda-q2-2027-earnings-call-transcript",
-        "ageDays": 20
-      },
-      {
-        "id": "driver_status_change:NVDA:na:2026-08-26:inference_demand",
-        "rule": "driver_status_change",
-        "severity": "medium",
-        "ticker": "NVDA",
-        "message": "NVDA driver 'inference demand': unchanged → improving — AI demand broadening; management cites ~70% FY28 revenue growth outlook with demand above supply (IR/digest).",
-        "title": "NVDA driver 'inference demand': unchanged → improving — AI demand broadening; management cites ~70% FY28 revenue growth outlook with demand above supply (IR/digest).",
-        "fiscalPeriod": "na",
-        "eventPeriod": "na",
-        "eventDate": "2026-08-26",
-        "eventKey": "inference demand",
-        "eventAt": "2026-08-26T00:00:00Z",
-        "createdAt": "2026-09-15T06:45:02Z",
-        "expiresAt": "2026-09-16T00:00:00Z",
-        "activeUntil": "2026-09-16T00:00:00Z",
-        "oneshot": true,
-        "driver": "inference demand",
-        "driverName": "inference demand",
-        "previousStatus": "unchanged",
-        "currentStatus": "improving",
-        "sourceUrl": "https://investor.nvidia.com/news/press-release-details/2026/NVIDIA-Announces-Financial-Results-for-Second-Quarter-Fiscal-2027/default.aspx",
-        "ageDays": 20
-      },
-      {
-        "id": "driver_status_change:NVDA:na:2026-08-26:networking",
-        "rule": "driver_status_change",
-        "severity": "medium",
-        "ticker": "NVDA",
-        "message": "NVDA driver 'networking': unchanged → improving — Networking revenue grew 18% sequentially in Q2 (digest Q&A / commentary).",
-        "title": "NVDA driver 'networking': unchanged → improving — Networking revenue grew 18% sequentially in Q2 (digest Q&A / commentary).",
-        "fiscalPeriod": "na",
-        "eventPeriod": "na",
-        "eventDate": "2026-08-26",
-        "eventKey": "networking",
-        "eventAt": "2026-08-26T00:00:00Z",
-        "createdAt": "2026-09-15T06:45:02Z",
-        "expiresAt": "2026-09-16T00:00:00Z",
-        "activeUntil": "2026-09-16T00:00:00Z",
-        "oneshot": true,
-        "driver": "networking",
-        "driverName": "networking",
-        "previousStatus": "unchanged",
-        "currentStatus": "improving",
-        "sourceUrl": "https://seekingalpha.com/article/4940563-nvidia-corporation-nvda-q2-2027-earnings-call-transcript",
-        "ageDays": 20
+        "ageDays": 14
       }
     ],
     "alertHistory": [
@@ -3656,7 +3605,7 @@
         "sourceTier": 4,
         "actualsSourceUrl": "https://investor.nvidia.com/news/press-release-details/2026/NVIDIA-Announces-Financial-Results-for-Second-Quarter-Fiscal-2027/default.aspx",
         "actualsSourceTier": 1,
-        "ageDays": 20
+        "ageDays": 21
       },
       {
         "id": "results_vs_consensus:AVGO:Q3_2026_(fiscal_2026):2026-09-02:results_above",
@@ -3680,7 +3629,7 @@
         "sourceTier": 4,
         "actualsSourceUrl": "https://investors.broadcom.com/news-releases/news-release-details/broadcom-inc-announces-third-quarter-fiscal-year-2026-financial",
         "actualsSourceTier": 1,
-        "ageDays": 13
+        "ageDays": 14
       },
       {
         "id": "gross_margin_pressure:AVGO:Q3_2026_(fiscal_2026):2026-09-02:gm_pressure_-210",
@@ -3699,7 +3648,7 @@
         "activeUntil": "2026-09-23T00:00:00Z",
         "oneshot": true,
         "bpsChange": -210.0,
-        "ageDays": 13
+        "ageDays": 14
       },
       {
         "id": "driver_status_change:NVDA:na:2026-08-26:GPU_shipment",
@@ -3722,7 +3671,7 @@
         "previousStatus": "unchanged",
         "currentStatus": "improving",
         "sourceUrl": "https://investor.nvidia.com/news/press-release-details/2026/NVIDIA-Announces-Financial-Results-for-Second-Quarter-Fiscal-2027/default.aspx",
-        "ageDays": 20
+        "ageDays": 21
       },
       {
         "id": "driver_status_change:NVDA:na:2026-08-26:Rubin_-_Rubin_Ultra",
@@ -3745,7 +3694,7 @@
         "previousStatus": "unchanged",
         "currentStatus": "improving",
         "sourceUrl": "https://seekingalpha.com/article/4940563-nvidia-corporation-nvda-q2-2027-earnings-call-transcript",
-        "ageDays": 20
+        "ageDays": 21
       },
       {
         "id": "driver_status_change:NVDA:na:2026-08-26:inference_demand",
@@ -3768,7 +3717,7 @@
         "previousStatus": "unchanged",
         "currentStatus": "improving",
         "sourceUrl": "https://investor.nvidia.com/news/press-release-details/2026/NVIDIA-Announces-Financial-Results-for-Second-Quarter-Fiscal-2027/default.aspx",
-        "ageDays": 20
+        "ageDays": 21
       },
       {
         "id": "driver_status_change:NVDA:na:2026-08-26:HBM_supply",
@@ -3791,7 +3740,7 @@
         "previousStatus": "unchanged",
         "currentStatus": "deteriorating",
         "sourceUrl": "https://investor.nvidia.com/news/press-release-details/2026/NVIDIA-Announces-Financial-Results-for-Second-Quarter-Fiscal-2027/default.aspx",
-        "ageDays": 20
+        "ageDays": 21
       },
       {
         "id": "driver_status_change:NVDA:na:2026-08-26:networking",
@@ -3814,7 +3763,7 @@
         "previousStatus": "unchanged",
         "currentStatus": "improving",
         "sourceUrl": "https://seekingalpha.com/article/4940563-nvidia-corporation-nvda-q2-2027-earnings-call-transcript",
-        "ageDays": 20
+        "ageDays": 21
       },
       {
         "id": "driver_status_change:NVDA:na:2026-08-26:gross_margin",
@@ -3837,7 +3786,7 @@
         "previousStatus": "unchanged",
         "currentStatus": "deteriorating",
         "sourceUrl": "https://investor.nvidia.com/news/press-release-details/2026/NVIDIA-Announces-Financial-Results-for-Second-Quarter-Fiscal-2027/default.aspx",
-        "ageDays": 20
+        "ageDays": 21
       },
       {
         "id": "driver_status_change:AVGO:na:2026-09-02:AI_ASIC",
@@ -3860,7 +3809,7 @@
         "previousStatus": "unchanged",
         "currentStatus": "improving",
         "sourceUrl": "https://investors.broadcom.com/news-releases/news-release-details/broadcom-inc-announces-third-quarter-fiscal-year-2026-financial",
-        "ageDays": 13
+        "ageDays": 14
       },
       {
         "id": "driver_status_change:AVGO:na:2026-09-02:hyperscaler_customers",
@@ -3883,7 +3832,7 @@
         "previousStatus": "unchanged",
         "currentStatus": "improving",
         "sourceUrl": "https://investors.broadcom.com/news-releases/news-release-details/broadcom-inc-announces-third-quarter-fiscal-year-2026-financial",
-        "ageDays": 13
+        "ageDays": 14
       },
       {
         "id": "driver_status_change:AVGO:na:2026-09-02:AI_networking",
@@ -3906,7 +3855,7 @@
         "previousStatus": "unchanged",
         "currentStatus": "improving",
         "sourceUrl": "https://seekingalpha.com/article/4942557-broadcom-inc-avgo-q3-2026-earnings-call-transcript",
-        "ageDays": 13
+        "ageDays": 14
       },
       {
         "id": "driver_status_change:AVGO:na:2026-09-02:Tomahawk",
@@ -3929,7 +3878,7 @@
         "previousStatus": "unchanged",
         "currentStatus": "improving",
         "sourceUrl": "https://seekingalpha.com/article/4942557-broadcom-inc-avgo-q3-2026-earnings-call-transcript",
-        "ageDays": 13
+        "ageDays": 14
       },
       {
         "id": "driver_status_change:AVGO:na:2026-09-02:gross_margin",
@@ -3952,7 +3901,7 @@
         "previousStatus": "unchanged",
         "currentStatus": "deteriorating",
         "sourceUrl": "https://investors.broadcom.com/news-releases/news-release-details/broadcom-inc-announces-third-quarter-fiscal-year-2026-financial",
-        "ageDays": 13
+        "ageDays": 14
       },
       {
         "id": "driver_status_change:AVGO:na:2026-09-02:FCF",
@@ -3975,7 +3924,7 @@
         "previousStatus": "unchanged",
         "currentStatus": "improving",
         "sourceUrl": "https://investors.broadcom.com/news-releases/news-release-details/broadcom-inc-announces-third-quarter-fiscal-year-2026-financial",
-        "ageDays": 13
+        "ageDays": 14
       },
       {
         "id": "source_reported_1m_revision:NVDA:Jan_2030:2026-09-15:sa1m_2029E",
@@ -4000,7 +3949,7 @@
         "sourceWindow": "Seeking Alpha 1M",
         "windowLabel": "Source window: Seeking Alpha 1M",
         "neverInternal30D": true,
-        "ageDays": 0,
+        "ageDays": 1,
         "analystCount": 4,
         "consensusLow": 17.9,
         "consensusHigh": 30.37,
@@ -4011,8 +3960,8 @@
         "status": "Open",
         "lifecycleStatus": "Open",
         "lifecycleEvent": "Hold",
-        "updatedAt": "2026-09-15T01:36:00Z",
-        "lastObservedAt": "2026-09-15T01:36:00Z"
+        "updatedAt": "2026-09-16T01:02:34Z",
+        "lastObservedAt": "2026-09-16T01:02:34Z"
       },
       {
         "id": "source_reported_1m_revision:AVGO:Oct_2028:2026-09-15:sa1m_2028E",
@@ -4037,7 +3986,7 @@
         "sourceWindow": "Seeking Alpha 1M",
         "windowLabel": "Source window: Seeking Alpha 1M",
         "neverInternal30D": true,
-        "ageDays": 0,
+        "ageDays": 1,
         "analystCount": 33,
         "consensusLow": 25.22,
         "consensusHigh": 34.25,
@@ -4048,8 +3997,8 @@
         "status": "Open",
         "lifecycleStatus": "Open",
         "lifecycleEvent": "Hold",
-        "updatedAt": "2026-09-15T01:36:00Z",
-        "lastObservedAt": "2026-09-15T01:36:00Z"
+        "updatedAt": "2026-09-16T01:02:34Z",
+        "lastObservedAt": "2026-09-16T01:02:34Z"
       },
       {
         "id": "source_reported_1m_revision:AVGO:Oct_2029:2026-09-15:sa1m_2029E",
@@ -4074,7 +4023,7 @@
         "sourceWindow": "Seeking Alpha 1M",
         "windowLabel": "Source window: Seeking Alpha 1M",
         "neverInternal30D": true,
-        "ageDays": 0,
+        "ageDays": 1,
         "analystCount": 4,
         "consensusLow": 30.54,
         "consensusHigh": 50.5,
@@ -4085,8 +4034,8 @@
         "status": "Open",
         "lifecycleStatus": "Open",
         "lifecycleEvent": "Hold",
-        "updatedAt": "2026-09-15T01:36:00Z",
-        "lastObservedAt": "2026-09-15T01:36:00Z"
+        "updatedAt": "2026-09-16T01:02:34Z",
+        "lastObservedAt": "2026-09-16T01:02:34Z"
       },
       {
         "id": "source_reported_1m_revision:KEYS:Oct_2028:2026-09-15:sa1m_2028E",
@@ -4111,7 +4060,7 @@
         "sourceWindow": "Seeking Alpha 1M",
         "windowLabel": "Source window: Seeking Alpha 1M",
         "neverInternal30D": true,
-        "ageDays": 0,
+        "ageDays": 1,
         "analystCount": 10,
         "consensusLow": 14.04,
         "consensusHigh": 19.51,
@@ -4122,8 +4071,8 @@
         "status": "Open",
         "lifecycleStatus": "Open",
         "lifecycleEvent": "Hold",
-        "updatedAt": "2026-09-15T01:36:00Z",
-        "lastObservedAt": "2026-09-15T01:36:00Z"
+        "updatedAt": "2026-09-16T01:02:34Z",
+        "lastObservedAt": "2026-09-16T01:02:34Z"
       },
       {
         "id": "source_reported_1m_revision:KEYS:Oct_2029:2026-09-15:sa1m_2029E",
@@ -4148,7 +4097,7 @@
         "sourceWindow": "Seeking Alpha 1M",
         "windowLabel": "Source window: Seeking Alpha 1M",
         "neverInternal30D": true,
-        "ageDays": 0,
+        "ageDays": 1,
         "analystCount": 1,
         "consensusLow": 21.99,
         "consensusHigh": 21.99,
@@ -4159,8 +4108,8 @@
         "status": "Open",
         "lifecycleStatus": "Open",
         "lifecycleEvent": "Hold",
-        "updatedAt": "2026-09-15T01:36:00Z",
-        "lastObservedAt": "2026-09-15T01:36:00Z"
+        "updatedAt": "2026-09-16T01:02:34Z",
+        "lastObservedAt": "2026-09-16T01:02:34Z"
       }
     ],
     "alertDiagnostics": [
@@ -4173,7 +4122,7 @@
         "lookbackDays": 30,
         "windowPointCount": 1,
         "status": "insufficient history",
-        "eventAt": "2026-09-15T14:24:35Z",
+        "eventAt": "2026-09-16T01:02:34Z",
         "diagnostic": true
       },
       {
@@ -4185,7 +4134,7 @@
         "lookbackDays": 30,
         "windowPointCount": 1,
         "status": "insufficient history",
-        "eventAt": "2026-09-15T14:24:35Z",
+        "eventAt": "2026-09-16T01:02:34Z",
         "diagnostic": true
       },
       {
@@ -4197,7 +4146,7 @@
         "lookbackDays": 30,
         "windowPointCount": 1,
         "status": "insufficient history",
-        "eventAt": "2026-09-15T14:24:35Z",
+        "eventAt": "2026-09-16T01:02:34Z",
         "diagnostic": true
       },
       {
@@ -4209,7 +4158,7 @@
         "lookbackDays": 30,
         "windowPointCount": 1,
         "status": "insufficient history",
-        "eventAt": "2026-09-15T14:24:35Z",
+        "eventAt": "2026-09-16T01:02:34Z",
         "diagnostic": true
       },
       {
@@ -4221,7 +4170,7 @@
         "lookbackDays": 30,
         "windowPointCount": 1,
         "status": "insufficient history",
-        "eventAt": "2026-09-15T14:24:35Z",
+        "eventAt": "2026-09-16T01:02:34Z",
         "diagnostic": true
       },
       {
@@ -4233,7 +4182,7 @@
         "lookbackDays": 30,
         "windowPointCount": 1,
         "status": "insufficient history",
-        "eventAt": "2026-09-15T14:24:35Z",
+        "eventAt": "2026-09-16T01:02:34Z",
         "diagnostic": true
       },
       {
@@ -4245,7 +4194,7 @@
         "lookbackDays": 30,
         "windowPointCount": 1,
         "status": "insufficient history",
-        "eventAt": "2026-09-15T14:24:35Z",
+        "eventAt": "2026-09-16T01:02:34Z",
         "diagnostic": true
       },
       {
@@ -4257,7 +4206,7 @@
         "lookbackDays": 30,
         "windowPointCount": 1,
         "status": "insufficient history",
-        "eventAt": "2026-09-15T14:24:35Z",
+        "eventAt": "2026-09-16T01:02:34Z",
         "diagnostic": true
       },
       {
@@ -4269,7 +4218,7 @@
         "lookbackDays": 30,
         "windowPointCount": 1,
         "status": "insufficient history",
-        "eventAt": "2026-09-15T14:24:35Z",
+        "eventAt": "2026-09-16T01:02:34Z",
         "diagnostic": true
       },
       {
@@ -4281,7 +4230,7 @@
         "lookbackDays": 30,
         "windowPointCount": 1,
         "status": "insufficient history",
-        "eventAt": "2026-09-15T14:24:35Z",
+        "eventAt": "2026-09-16T01:02:34Z",
         "diagnostic": true
       },
       {
@@ -4293,7 +4242,7 @@
         "lookbackDays": 30,
         "windowPointCount": 1,
         "status": "insufficient history",
-        "eventAt": "2026-09-15T14:24:35Z",
+        "eventAt": "2026-09-16T01:02:34Z",
         "diagnostic": true
       },
       {
@@ -4305,7 +4254,7 @@
         "lookbackDays": 30,
         "windowPointCount": 1,
         "status": "insufficient history",
-        "eventAt": "2026-09-15T14:24:35Z",
+        "eventAt": "2026-09-16T01:02:34Z",
         "diagnostic": true
       },
       {
@@ -4317,7 +4266,7 @@
         "lookbackDays": 30,
         "windowPointCount": 1,
         "status": "insufficient history",
-        "eventAt": "2026-09-15T14:24:35Z",
+        "eventAt": "2026-09-16T01:02:34Z",
         "diagnostic": true
       },
       {
@@ -4329,7 +4278,7 @@
         "lookbackDays": 30,
         "windowPointCount": 1,
         "status": "insufficient history",
-        "eventAt": "2026-09-15T14:24:35Z",
+        "eventAt": "2026-09-16T01:02:34Z",
         "diagnostic": true
       },
       {
@@ -4341,7 +4290,7 @@
         "lookbackDays": 30,
         "windowPointCount": 1,
         "status": "insufficient history",
-        "eventAt": "2026-09-15T14:24:35Z",
+        "eventAt": "2026-09-16T01:02:34Z",
         "diagnostic": true
       },
       {
@@ -4353,7 +4302,7 @@
         "lookbackDays": 30,
         "windowPointCount": 1,
         "status": "insufficient history",
-        "eventAt": "2026-09-15T14:24:35Z",
+        "eventAt": "2026-09-16T01:02:34Z",
         "diagnostic": true
       },
       {
@@ -4365,7 +4314,7 @@
         "lookbackDays": 30,
         "windowPointCount": 1,
         "status": "insufficient history",
-        "eventAt": "2026-09-15T14:24:35Z",
+        "eventAt": "2026-09-16T01:02:34Z",
         "diagnostic": true
       },
       {
@@ -4377,7 +4326,7 @@
         "lookbackDays": 30,
         "windowPointCount": 1,
         "status": "insufficient history",
-        "eventAt": "2026-09-15T14:24:35Z",
+        "eventAt": "2026-09-16T01:02:34Z",
         "diagnostic": true
       },
       {
@@ -4389,7 +4338,7 @@
         "lookbackDays": 30,
         "windowPointCount": 1,
         "status": "insufficient history",
-        "eventAt": "2026-09-15T14:24:35Z",
+        "eventAt": "2026-09-16T01:02:34Z",
         "diagnostic": true
       },
       {
@@ -4401,7 +4350,7 @@
         "lookbackDays": 30,
         "windowPointCount": 1,
         "status": "insufficient history",
-        "eventAt": "2026-09-15T14:24:35Z",
+        "eventAt": "2026-09-16T01:02:34Z",
         "diagnostic": true
       },
       {
@@ -4413,7 +4362,7 @@
         "lookbackDays": 30,
         "windowPointCount": 1,
         "status": "insufficient history",
-        "eventAt": "2026-09-15T14:24:35Z",
+        "eventAt": "2026-09-16T01:02:34Z",
         "diagnostic": true
       },
       {
@@ -4425,7 +4374,7 @@
         "lookbackDays": 30,
         "windowPointCount": 1,
         "status": "insufficient history",
-        "eventAt": "2026-09-15T14:24:35Z",
+        "eventAt": "2026-09-16T01:02:34Z",
         "diagnostic": true
       }
     ],
@@ -4451,53 +4400,7 @@
         "previousStatus": "unchanged",
         "currentStatus": "deteriorating",
         "sourceUrl": "https://investors.broadcom.com/news-releases/news-release-details/broadcom-inc-announces-third-quarter-fiscal-year-2026-financial",
-        "ageDays": 13
-      },
-      {
-        "id": "driver_status_change:NVDA:na:2026-08-26:HBM_supply",
-        "rule": "driver_status_change",
-        "severity": "high",
-        "ticker": "NVDA",
-        "message": "NVDA driver 'HBM supply': unchanged → deteriorating — Memory pricing rising sharply; GM guide reset with Q4 trough 71%-72% tied to memory scarcity (digest negatives).",
-        "title": "NVDA driver 'HBM supply': unchanged → deteriorating — Memory pricing rising sharply; GM guide reset with Q4 trough 71%-72% tied to memory scarcity (digest negatives).",
-        "fiscalPeriod": "na",
-        "eventPeriod": "na",
-        "eventDate": "2026-08-26",
-        "eventKey": "HBM supply",
-        "eventAt": "2026-08-26T00:00:00Z",
-        "createdAt": "2026-09-15T06:45:02Z",
-        "expiresAt": "2026-09-16T00:00:00Z",
-        "activeUntil": "2026-09-16T00:00:00Z",
-        "oneshot": true,
-        "driver": "HBM supply",
-        "driverName": "HBM supply",
-        "previousStatus": "unchanged",
-        "currentStatus": "deteriorating",
-        "sourceUrl": "https://investor.nvidia.com/news/press-release-details/2026/NVIDIA-Announces-Financial-Results-for-Second-Quarter-Fiscal-2027/default.aspx",
-        "ageDays": 20
-      },
-      {
-        "id": "driver_status_change:NVDA:na:2026-08-26:gross_margin",
-        "rule": "driver_status_change",
-        "severity": "high",
-        "ticker": "NVDA",
-        "message": "NVDA driver 'gross margin': unchanged → deteriorating — Q3 GM guided 74% ±50 bps; Q4 trough expected 71%-72% vs Q2 reported 75% — memory-driven reset (IR guidance).",
-        "title": "NVDA driver 'gross margin': unchanged → deteriorating — Q3 GM guided 74% ±50 bps; Q4 trough expected 71%-72% vs Q2 reported 75% — memory-driven reset (IR guidance).",
-        "fiscalPeriod": "na",
-        "eventPeriod": "na",
-        "eventDate": "2026-08-26",
-        "eventKey": "gross margin",
-        "eventAt": "2026-08-26T00:00:00Z",
-        "createdAt": "2026-09-15T06:45:02Z",
-        "expiresAt": "2026-09-16T00:00:00Z",
-        "activeUntil": "2026-09-16T00:00:00Z",
-        "oneshot": true,
-        "driver": "gross margin",
-        "driverName": "gross margin",
-        "previousStatus": "unchanged",
-        "currentStatus": "deteriorating",
-        "sourceUrl": "https://investor.nvidia.com/news/press-release-details/2026/NVIDIA-Announces-Financial-Results-for-Second-Quarter-Fiscal-2027/default.aspx",
-        "ageDays": 20
+        "ageDays": 14
       },
       {
         "id": "gross_margin_pressure:AVGO:Q3_2026_(fiscal_2026):2026-09-02:gm_pressure_-210",
@@ -4516,7 +4419,7 @@
         "activeUntil": "2026-09-23T00:00:00Z",
         "oneshot": true,
         "bpsChange": -210.0,
-        "ageDays": 13
+        "ageDays": 14
       },
       {
         "id": "source_reported_1m_revision:KEYS:Oct_2028:2026-09-15:sa1m_2028E",
@@ -4541,7 +4444,7 @@
         "sourceWindow": "Seeking Alpha 1M",
         "windowLabel": "Source window: Seeking Alpha 1M",
         "neverInternal30D": true,
-        "ageDays": 0,
+        "ageDays": 1,
         "analystCount": 10,
         "consensusLow": 14.04,
         "consensusHigh": 19.51,
@@ -4552,8 +4455,82 @@
         "status": "Open",
         "lifecycleStatus": "Open",
         "lifecycleEvent": "Hold",
-        "updatedAt": "2026-09-15T01:36:00Z",
-        "lastObservedAt": "2026-09-15T01:36:00Z"
+        "updatedAt": "2026-09-16T01:02:34Z",
+        "lastObservedAt": "2026-09-16T01:02:34Z"
+      },
+      {
+        "id": "source_reported_1m_revision:NVDA:Jan_2030:2026-09-15:sa1m_2029E",
+        "rule": "source_reported_1m_revision",
+        "severity": "medium",
+        "ticker": "NVDA",
+        "message": "NVDA Jan 2030: Seeking Alpha 1M revision upgrade +11.02% (≥5%) [Hold] — Source window: Seeking Alpha 1M · Coverage: Low",
+        "title": "NVDA Jan 2030: Seeking Alpha 1M revision upgrade +11.02% (≥5%) [Hold] — Source window: Seeking Alpha 1M · Coverage: Low",
+        "fiscalPeriod": "Jan 2030",
+        "eventPeriod": "Jan 2030",
+        "eventDate": "2026-09-15",
+        "eventKey": "sa1m_2029E",
+        "eventAt": "2026-09-15T01:36:00Z",
+        "createdAt": "2026-09-15T07:08:44Z",
+        "expiresAt": "2026-10-06T00:00:00Z",
+        "activeUntil": "2026-10-06T00:00:00Z",
+        "oneshot": false,
+        "revisionPct": 11.02,
+        "rev1M": 11.02,
+        "slot": "2029E",
+        "fiscal": "Jan 2030",
+        "sourceWindow": "Seeking Alpha 1M",
+        "windowLabel": "Source window: Seeking Alpha 1M",
+        "neverInternal30D": true,
+        "ageDays": 1,
+        "analystCount": 4,
+        "consensusLow": 17.9,
+        "consensusHigh": 30.37,
+        "consensus": 23.4,
+        "dispersion": 0.532905982905983,
+        "confidence": "Low",
+        "farForward": true,
+        "status": "Open",
+        "lifecycleStatus": "Open",
+        "lifecycleEvent": "Hold",
+        "updatedAt": "2026-09-16T01:02:34Z",
+        "lastObservedAt": "2026-09-16T01:02:34Z"
+      },
+      {
+        "id": "source_reported_1m_revision:KEYS:Oct_2029:2026-09-15:sa1m_2029E",
+        "rule": "source_reported_1m_revision",
+        "severity": "medium",
+        "ticker": "KEYS",
+        "message": "KEYS Oct 2029: Seeking Alpha 1M revision upgrade +35.49% (≥5%) [Hold] — Source window: Seeking Alpha 1M · Coverage: Single estimate",
+        "title": "KEYS Oct 2029: Seeking Alpha 1M revision upgrade +35.49% (≥5%) [Hold] — Source window: Seeking Alpha 1M · Coverage: Single estimate",
+        "fiscalPeriod": "Oct 2029",
+        "eventPeriod": "Oct 2029",
+        "eventDate": "2026-09-15",
+        "eventKey": "sa1m_2029E",
+        "eventAt": "2026-09-15T01:36:00Z",
+        "createdAt": "2026-09-15T07:08:44Z",
+        "expiresAt": "2026-10-06T00:00:00Z",
+        "activeUntil": "2026-10-06T00:00:00Z",
+        "oneshot": false,
+        "revisionPct": 35.49,
+        "rev1M": 35.49,
+        "slot": "2029E",
+        "fiscal": "Oct 2029",
+        "sourceWindow": "Seeking Alpha 1M",
+        "windowLabel": "Source window: Seeking Alpha 1M",
+        "neverInternal30D": true,
+        "ageDays": 1,
+        "analystCount": 1,
+        "consensusLow": 21.99,
+        "consensusHigh": 21.99,
+        "consensus": 21.99,
+        "dispersion": 0.0,
+        "confidence": "Single estimate",
+        "farForward": true,
+        "status": "Open",
+        "lifecycleStatus": "Open",
+        "lifecycleEvent": "Hold",
+        "updatedAt": "2026-09-16T01:02:34Z",
+        "lastObservedAt": "2026-09-16T01:02:34Z"
       }
     ],
     "changedSinceLastCollection": [],
@@ -4581,7 +4558,7 @@
         "sourceWindow": "Seeking Alpha 1M",
         "windowLabel": "Source window: Seeking Alpha 1M",
         "neverInternal30D": true,
-        "ageDays": 0,
+        "ageDays": 1,
         "analystCount": 33,
         "consensusLow": 25.22,
         "consensusHigh": 34.25,
@@ -4592,8 +4569,8 @@
         "status": "Open",
         "lifecycleStatus": "Open",
         "lifecycleEvent": "Hold",
-        "updatedAt": "2026-09-15T01:36:00Z",
-        "lastObservedAt": "2026-09-15T01:36:00Z"
+        "updatedAt": "2026-09-16T01:02:34Z",
+        "lastObservedAt": "2026-09-16T01:02:34Z"
       },
       {
         "id": "source_reported_1m_revision:KEYS:Oct_2028:2026-09-15:sa1m_2028E",
@@ -4618,7 +4595,7 @@
         "sourceWindow": "Seeking Alpha 1M",
         "windowLabel": "Source window: Seeking Alpha 1M",
         "neverInternal30D": true,
-        "ageDays": 0,
+        "ageDays": 1,
         "analystCount": 10,
         "consensusLow": 14.04,
         "consensusHigh": 19.51,
@@ -4629,8 +4606,8 @@
         "status": "Open",
         "lifecycleStatus": "Open",
         "lifecycleEvent": "Hold",
-        "updatedAt": "2026-09-15T01:36:00Z",
-        "lastObservedAt": "2026-09-15T01:36:00Z"
+        "updatedAt": "2026-09-16T01:02:34Z",
+        "lastObservedAt": "2026-09-16T01:02:34Z"
       },
       {
         "id": "gross_margin_pressure:AVGO:Q3_2026_(fiscal_2026):2026-09-02:gm_pressure_-210",
@@ -4649,7 +4626,7 @@
         "activeUntil": "2026-09-23T00:00:00Z",
         "oneshot": true,
         "bpsChange": -210.0,
-        "ageDays": 13
+        "ageDays": 14
       },
       {
         "id": "driver_status_change:AVGO:na:2026-09-02:gross_margin",
@@ -4672,53 +4649,7 @@
         "previousStatus": "unchanged",
         "currentStatus": "deteriorating",
         "sourceUrl": "https://investors.broadcom.com/news-releases/news-release-details/broadcom-inc-announces-third-quarter-fiscal-year-2026-financial",
-        "ageDays": 13
-      },
-      {
-        "id": "driver_status_change:NVDA:na:2026-08-26:HBM_supply",
-        "rule": "driver_status_change",
-        "severity": "high",
-        "ticker": "NVDA",
-        "message": "NVDA driver 'HBM supply': unchanged → deteriorating — Memory pricing rising sharply; GM guide reset with Q4 trough 71%-72% tied to memory scarcity (digest negatives).",
-        "title": "NVDA driver 'HBM supply': unchanged → deteriorating — Memory pricing rising sharply; GM guide reset with Q4 trough 71%-72% tied to memory scarcity (digest negatives).",
-        "fiscalPeriod": "na",
-        "eventPeriod": "na",
-        "eventDate": "2026-08-26",
-        "eventKey": "HBM supply",
-        "eventAt": "2026-08-26T00:00:00Z",
-        "createdAt": "2026-09-15T06:45:02Z",
-        "expiresAt": "2026-09-16T00:00:00Z",
-        "activeUntil": "2026-09-16T00:00:00Z",
-        "oneshot": true,
-        "driver": "HBM supply",
-        "driverName": "HBM supply",
-        "previousStatus": "unchanged",
-        "currentStatus": "deteriorating",
-        "sourceUrl": "https://investor.nvidia.com/news/press-release-details/2026/NVIDIA-Announces-Financial-Results-for-Second-Quarter-Fiscal-2027/default.aspx",
-        "ageDays": 20
-      },
-      {
-        "id": "driver_status_change:NVDA:na:2026-08-26:gross_margin",
-        "rule": "driver_status_change",
-        "severity": "high",
-        "ticker": "NVDA",
-        "message": "NVDA driver 'gross margin': unchanged → deteriorating — Q3 GM guided 74% ±50 bps; Q4 trough expected 71%-72% vs Q2 reported 75% — memory-driven reset (IR guidance).",
-        "title": "NVDA driver 'gross margin': unchanged → deteriorating — Q3 GM guided 74% ±50 bps; Q4 trough expected 71%-72% vs Q2 reported 75% — memory-driven reset (IR guidance).",
-        "fiscalPeriod": "na",
-        "eventPeriod": "na",
-        "eventDate": "2026-08-26",
-        "eventKey": "gross margin",
-        "eventAt": "2026-08-26T00:00:00Z",
-        "createdAt": "2026-09-15T06:45:02Z",
-        "expiresAt": "2026-09-16T00:00:00Z",
-        "activeUntil": "2026-09-16T00:00:00Z",
-        "oneshot": true,
-        "driver": "gross margin",
-        "driverName": "gross margin",
-        "previousStatus": "unchanged",
-        "currentStatus": "deteriorating",
-        "sourceUrl": "https://investor.nvidia.com/news/press-release-details/2026/NVIDIA-Announces-Financial-Results-for-Second-Quarter-Fiscal-2027/default.aspx",
-        "ageDays": 20
+        "ageDays": 14
       },
       {
         "id": "source_reported_1m_revision:NVDA:Jan_2030:2026-09-15:sa1m_2029E",
@@ -4743,7 +4674,7 @@
         "sourceWindow": "Seeking Alpha 1M",
         "windowLabel": "Source window: Seeking Alpha 1M",
         "neverInternal30D": true,
-        "ageDays": 0,
+        "ageDays": 1,
         "analystCount": 4,
         "consensusLow": 17.9,
         "consensusHigh": 30.37,
@@ -4754,8 +4685,8 @@
         "status": "Open",
         "lifecycleStatus": "Open",
         "lifecycleEvent": "Hold",
-        "updatedAt": "2026-09-15T01:36:00Z",
-        "lastObservedAt": "2026-09-15T01:36:00Z"
+        "updatedAt": "2026-09-16T01:02:34Z",
+        "lastObservedAt": "2026-09-16T01:02:34Z"
       },
       {
         "id": "source_reported_1m_revision:AVGO:Oct_2029:2026-09-15:sa1m_2029E",
@@ -4780,7 +4711,7 @@
         "sourceWindow": "Seeking Alpha 1M",
         "windowLabel": "Source window: Seeking Alpha 1M",
         "neverInternal30D": true,
-        "ageDays": 0,
+        "ageDays": 1,
         "analystCount": 4,
         "consensusLow": 30.54,
         "consensusHigh": 50.5,
@@ -4791,8 +4722,8 @@
         "status": "Open",
         "lifecycleStatus": "Open",
         "lifecycleEvent": "Hold",
-        "updatedAt": "2026-09-15T01:36:00Z",
-        "lastObservedAt": "2026-09-15T01:36:00Z"
+        "updatedAt": "2026-09-16T01:02:34Z",
+        "lastObservedAt": "2026-09-16T01:02:34Z"
       },
       {
         "id": "source_reported_1m_revision:KEYS:Oct_2029:2026-09-15:sa1m_2029E",
@@ -4817,7 +4748,7 @@
         "sourceWindow": "Seeking Alpha 1M",
         "windowLabel": "Source window: Seeking Alpha 1M",
         "neverInternal30D": true,
-        "ageDays": 0,
+        "ageDays": 1,
         "analystCount": 1,
         "consensusLow": 21.99,
         "consensusHigh": 21.99,
@@ -4828,8 +4759,8 @@
         "status": "Open",
         "lifecycleStatus": "Open",
         "lifecycleEvent": "Hold",
-        "updatedAt": "2026-09-15T01:36:00Z",
-        "lastObservedAt": "2026-09-15T01:36:00Z"
+        "updatedAt": "2026-09-16T01:02:34Z",
+        "lastObservedAt": "2026-09-16T01:02:34Z"
       },
       {
         "id": "results_vs_consensus:AVGO:Q3_2026_(fiscal_2026):2026-09-02:results_above",
@@ -4853,7 +4784,7 @@
         "sourceTier": 4,
         "actualsSourceUrl": "https://investors.broadcom.com/news-releases/news-release-details/broadcom-inc-announces-third-quarter-fiscal-year-2026-financial",
         "actualsSourceTier": 1,
-        "ageDays": 13
+        "ageDays": 14
       },
       {
         "id": "driver_status_change:AVGO:na:2026-09-02:AI_ASIC",
@@ -4876,7 +4807,7 @@
         "previousStatus": "unchanged",
         "currentStatus": "improving",
         "sourceUrl": "https://investors.broadcom.com/news-releases/news-release-details/broadcom-inc-announces-third-quarter-fiscal-year-2026-financial",
-        "ageDays": 13
+        "ageDays": 14
       },
       {
         "id": "driver_status_change:AVGO:na:2026-09-02:hyperscaler_customers",
@@ -4899,7 +4830,7 @@
         "previousStatus": "unchanged",
         "currentStatus": "improving",
         "sourceUrl": "https://investors.broadcom.com/news-releases/news-release-details/broadcom-inc-announces-third-quarter-fiscal-year-2026-financial",
-        "ageDays": 13
+        "ageDays": 14
       },
       {
         "id": "driver_status_change:AVGO:na:2026-09-02:AI_networking",
@@ -4922,7 +4853,7 @@
         "previousStatus": "unchanged",
         "currentStatus": "improving",
         "sourceUrl": "https://seekingalpha.com/article/4942557-broadcom-inc-avgo-q3-2026-earnings-call-transcript",
-        "ageDays": 13
+        "ageDays": 14
       },
       {
         "id": "driver_status_change:AVGO:na:2026-09-02:Tomahawk",
@@ -4945,7 +4876,7 @@
         "previousStatus": "unchanged",
         "currentStatus": "improving",
         "sourceUrl": "https://seekingalpha.com/article/4942557-broadcom-inc-avgo-q3-2026-earnings-call-transcript",
-        "ageDays": 13
+        "ageDays": 14
       },
       {
         "id": "driver_status_change:AVGO:na:2026-09-02:FCF",
@@ -4968,128 +4899,12 @@
         "previousStatus": "unchanged",
         "currentStatus": "improving",
         "sourceUrl": "https://investors.broadcom.com/news-releases/news-release-details/broadcom-inc-announces-third-quarter-fiscal-year-2026-financial",
-        "ageDays": 13
-      },
-      {
-        "id": "results_vs_consensus:NVDA:Q2_2027_(fiscal_2027):2026-08-26:results_above",
-        "rule": "results_vs_consensus",
-        "severity": "medium",
-        "ticker": "NVDA",
-        "message": "NVDA: results vs consensus marked Above",
-        "title": "NVDA: results vs consensus marked Above",
-        "fiscalPeriod": "Q2 2027 (fiscal 2027)",
-        "eventPeriod": "Q2 2027 (fiscal 2027)",
-        "eventDate": "2026-08-26",
-        "eventKey": "results_above",
-        "eventAt": "2026-08-26T00:00:00Z",
-        "createdAt": "2026-09-15T06:21:06Z",
-        "expiresAt": "2026-09-16T00:00:00Z",
-        "activeUntil": "2026-09-16T00:00:00Z",
-        "oneshot": true,
-        "comparison": "Above",
-        "resultsVsConsensus": "Above",
-        "sourceUrl": "https://seekingalpha.com/article/4940563-nvidia-corporation-nvda-q2-2027-earnings-call-transcript",
-        "sourceTier": 4,
-        "actualsSourceUrl": "https://investor.nvidia.com/news/press-release-details/2026/NVIDIA-Announces-Financial-Results-for-Second-Quarter-Fiscal-2027/default.aspx",
-        "actualsSourceTier": 1,
-        "ageDays": 20
-      },
-      {
-        "id": "driver_status_change:NVDA:na:2026-08-26:GPU_shipment",
-        "rule": "driver_status_change",
-        "severity": "medium",
-        "ticker": "NVDA",
-        "message": "NVDA driver 'GPU shipment': unchanged → improving — Record Q2 revenue $96.22B (+106% Y/Y); data-center revenue $89B (+18% QoQ) per IR release.",
-        "title": "NVDA driver 'GPU shipment': unchanged → improving — Record Q2 revenue $96.22B (+106% Y/Y); data-center revenue $89B (+18% QoQ) per IR release.",
-        "fiscalPeriod": "na",
-        "eventPeriod": "na",
-        "eventDate": "2026-08-26",
-        "eventKey": "GPU shipment",
-        "eventAt": "2026-08-26T00:00:00Z",
-        "createdAt": "2026-09-15T06:45:02Z",
-        "expiresAt": "2026-09-16T00:00:00Z",
-        "activeUntil": "2026-09-16T00:00:00Z",
-        "oneshot": true,
-        "driver": "GPU shipment",
-        "driverName": "GPU shipment",
-        "previousStatus": "unchanged",
-        "currentStatus": "improving",
-        "sourceUrl": "https://investor.nvidia.com/news/press-release-details/2026/NVIDIA-Announces-Financial-Results-for-Second-Quarter-Fiscal-2027/default.aspx",
-        "ageDays": 20
-      },
-      {
-        "id": "driver_status_change:NVDA:na:2026-08-26:Rubin_-_Rubin_Ultra",
-        "rule": "driver_status_change",
-        "severity": "medium",
-        "ticker": "NVDA",
-        "message": "NVDA driver 'Rubin / Rubin Ultra': unchanged → improving — Vera Rubin production shipments commenced; expected ~20% of Q3 data-center revenue (digest commentary).",
-        "title": "NVDA driver 'Rubin / Rubin Ultra': unchanged → improving — Vera Rubin production shipments commenced; expected ~20% of Q3 data-center revenue (digest commentary).",
-        "fiscalPeriod": "na",
-        "eventPeriod": "na",
-        "eventDate": "2026-08-26",
-        "eventKey": "Rubin / Rubin Ultra",
-        "eventAt": "2026-08-26T00:00:00Z",
-        "createdAt": "2026-09-15T06:45:02Z",
-        "expiresAt": "2026-09-16T00:00:00Z",
-        "activeUntil": "2026-09-16T00:00:00Z",
-        "oneshot": true,
-        "driver": "Rubin / Rubin Ultra",
-        "driverName": "Rubin / Rubin Ultra",
-        "previousStatus": "unchanged",
-        "currentStatus": "improving",
-        "sourceUrl": "https://seekingalpha.com/article/4940563-nvidia-corporation-nvda-q2-2027-earnings-call-transcript",
-        "ageDays": 20
-      },
-      {
-        "id": "driver_status_change:NVDA:na:2026-08-26:inference_demand",
-        "rule": "driver_status_change",
-        "severity": "medium",
-        "ticker": "NVDA",
-        "message": "NVDA driver 'inference demand': unchanged → improving — AI demand broadening; management cites ~70% FY28 revenue growth outlook with demand above supply (IR/digest).",
-        "title": "NVDA driver 'inference demand': unchanged → improving — AI demand broadening; management cites ~70% FY28 revenue growth outlook with demand above supply (IR/digest).",
-        "fiscalPeriod": "na",
-        "eventPeriod": "na",
-        "eventDate": "2026-08-26",
-        "eventKey": "inference demand",
-        "eventAt": "2026-08-26T00:00:00Z",
-        "createdAt": "2026-09-15T06:45:02Z",
-        "expiresAt": "2026-09-16T00:00:00Z",
-        "activeUntil": "2026-09-16T00:00:00Z",
-        "oneshot": true,
-        "driver": "inference demand",
-        "driverName": "inference demand",
-        "previousStatus": "unchanged",
-        "currentStatus": "improving",
-        "sourceUrl": "https://investor.nvidia.com/news/press-release-details/2026/NVIDIA-Announces-Financial-Results-for-Second-Quarter-Fiscal-2027/default.aspx",
-        "ageDays": 20
-      },
-      {
-        "id": "driver_status_change:NVDA:na:2026-08-26:networking",
-        "rule": "driver_status_change",
-        "severity": "medium",
-        "ticker": "NVDA",
-        "message": "NVDA driver 'networking': unchanged → improving — Networking revenue grew 18% sequentially in Q2 (digest Q&A / commentary).",
-        "title": "NVDA driver 'networking': unchanged → improving — Networking revenue grew 18% sequentially in Q2 (digest Q&A / commentary).",
-        "fiscalPeriod": "na",
-        "eventPeriod": "na",
-        "eventDate": "2026-08-26",
-        "eventKey": "networking",
-        "eventAt": "2026-08-26T00:00:00Z",
-        "createdAt": "2026-09-15T06:45:02Z",
-        "expiresAt": "2026-09-16T00:00:00Z",
-        "activeUntil": "2026-09-16T00:00:00Z",
-        "oneshot": true,
-        "driver": "networking",
-        "driverName": "networking",
-        "previousStatus": "unchanged",
-        "currentStatus": "improving",
-        "sourceUrl": "https://seekingalpha.com/article/4940563-nvidia-corporation-nvda-q2-2027-earnings-call-transcript",
-        "ageDays": 20
+        "ageDays": 14
       }
     ],
-    "alertEngineLastEvaluated": "2026-09-15T14:24:35Z",
-    "alertEngineLastAttempt": "2026-09-15T14:24:35Z",
-    "alertEngineLastSuccessfulEvaluation": "2026-09-15T14:24:35Z",
+    "alertEngineLastEvaluated": "2026-09-16T01:02:34Z",
+    "alertEngineLastAttempt": "2026-09-16T01:02:34Z",
+    "alertEngineLastSuccessfulEvaluation": "2026-09-16T01:02:34Z",
     "alertEngineStatus": "ok",
     "alertEngineError": null,
     "oneShotActiveDays": 21
