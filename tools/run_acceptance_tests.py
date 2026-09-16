@@ -3496,9 +3496,6 @@ def test_push_failure_retry_still_pushes(fixture: Path) -> None:
 
     tmp = Path(tempfile.mkdtemp(prefix="ai_eps_acc_pushfail_"))
     try:
-        spec = importlib.util.spec_from_file_location(
-            "publisher_fault_helpers", ROOT / "tools" / "run_publisher_fault_tests.py"
-        )
         # Keep this test self-contained: local bare remote + pre-receive reject.
         def _git(cwd: Path, args: list[str], check: bool = True) -> subprocess.CompletedProcess:
             env = os.environ.copy()
@@ -4592,7 +4589,10 @@ def test_pending_publish_retry(fixture: Path) -> None:
     os.environ["PIPELINE_LOCK_HELD"] = "1"
     os.environ["AI_EPS_ROOT"] = str(fixture)
     os.environ["PUBLISH_ALLOW_LOCAL"] = "1"
-    rc = ing.retry_pending_publish_if_needed()
+    try:
+        rc = ing.retry_pending_publish_if_needed()
+    finally:
+        os.environ.pop("PUBLISH_ALLOW_LOCAL", None)
     state = ing.read_publish_state()
     ok = rc == 0
     ok = ok and state.get("publishStatus") == "published"
@@ -4811,6 +4811,7 @@ def test_standalone_publish_cannot_mutate_persistent_state(fixture: Path) -> Non
     # Do NOT set SKIP_EXPORT — script must still not export
     env.pop("SKIP_EXPORT", None)
     env.pop("PUBLISH_PREBUILT", None)
+    env.pop("PUBLISH_ALLOW_LOCAL", None)
     proc = subprocess.run(
         ["bash", str(fixture / "tools" / "publish_github_pages.sh")],
         cwd=str(fixture),
@@ -4922,7 +4923,10 @@ def test_pending_publish_uses_current_generation(fixture: Path) -> None:
     src = (fixture / "tools" / "ingest_snapshot.py").read_text(encoding="utf-8")
     ok = ok and "ensure_live_matches_current" in src
     # retry must reconcile
-    rc = ing.retry_pending_publish_if_needed()
+    try:
+        rc = ing.retry_pending_publish_if_needed()
+    finally:
+        os.environ.pop("PUBLISH_ALLOW_LOCAL", None)
     meta2 = json.loads(meta_path.read_text(encoding="utf-8"))
     ok = ok and meta2.get("dataVersion") != stale_dv
     ok = ok and marker.exists() and marker.read_text(encoding="utf-8").strip() == r1.get("runId")
