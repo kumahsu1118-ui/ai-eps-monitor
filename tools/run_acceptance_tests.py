@@ -1387,11 +1387,12 @@ def test_cumulative_alert_no_daily_spam(fixture: Path) -> None:
     ids = {a.get("id") for a in cum_hist}
     ok = ok and aid in ids and len(ids) == 1
 
-    # Resolve when drops below 4%
+    # Resolve when a valid Internal 30D window drops below 4% (not missing history).
     now3 = now1 + timedelta(days=2)
     d2 = now3.strftime("%Y-%m-%d")
+    d30_now3 = (now3 - timedelta(days=30)).strftime("%Y-%m-%d")
     daily3 = [
-        {"date": d30, "ticker": "KEYS", "reportedFiscalLabel": "Oct 2027", "consensus": 10.0},
+        {"date": d30_now3, "ticker": "KEYS", "reportedFiscalLabel": "Oct 2027", "consensus": 10.0},
         {"date": d2, "ticker": "KEYS", "reportedFiscalLabel": "Oct 2027", "consensus": 10.3},  # +3%
     ]
     out3, _ = ba.rule2_cumulative(
