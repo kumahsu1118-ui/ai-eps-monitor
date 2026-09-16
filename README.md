@@ -49,7 +49,29 @@ python3 tools/run_unit_tests.py                    # unit (in-process)
 python3 tools/run_integration_tests.py             # integration (subprocess timeouts)
 ```
 
-Isolated tempfile suite — does not mutate production `data/` or `web/data`. Creates synthetic fixtures when needed; ships `tests/fixtures/` so universe/snapshots are not hand-added.
+Isolated tempfile suite — does not mutate production `data/` or `web/data`. Creates synthetic fixtures when needed; ships `tests/fixtures/` so universe/snapshots are not hand-added. Runners exit 0 only when every named test PASSes (do not grep logs).
+
+## CI (GitHub Actions)
+
+PRs, pushes to `main`, and `workflow_dispatch` run `.github/workflows/ci.yml` on Ubuntu / Python 3.12. Permissions are `contents: read` only. No secrets. Isolation env:
+
+```bash
+export SKIP_CANONICAL_GIT_PERSIST=1
+export SKIP_CANONICAL_GIT_PUSH=1
+```
+
+Reproduce the gate locally (same commands, real exit codes):
+
+```bash
+python3 tools/run_unit_tests.py
+python3 tools/run_integration_tests.py
+python3 tools/run_acceptance_tests.py
+python3 tools/canonical_eps_history.py --materialize   # or: python3 tools/rebuild_daily_history.py
+python3 tools/migrate_eps_history.py --audit
+git diff --exit-code
+```
+
+Materialize is fail-closed and does not require `generations/`, `daily_eps_snapshots/`, or `CURRENT.json`. It writes untracked runtime `data/daily_eps_snapshots/daily.jsonl` — do not commit it. `--audit` is read-only (takes `data/.pipeline.lock` only) and is valid on a fresh clone because Git-tracked `data/history/eps_daily/` is the canonical SoT. CI never ingests, fetches Seeking Alpha, persists canonical git history, publishes Pages, or creates commits.
 
 ## Daily update
 
