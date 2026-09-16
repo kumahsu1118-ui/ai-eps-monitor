@@ -8278,6 +8278,8 @@ def test_pr16_growth_edge_cases(fixture: Path) -> None:
     ok = ok and exp.growth_pct(2, -1) == "Turn loss"
     ok = ok and exp.growth_pct(0, 1) is None
     ok = ok and exp.growth_pct(None, 2) is None
+    ok = ok and exp.growth_pct(-1, 0) == "Break-even"
+    ok = ok and not isinstance(exp.growth_pct(-1, 0), (int, float))
     g = exp.growth_pct(10, 12)
     ok = ok and g is not None and abs(float(g) - 0.2) < 1e-9
     companies = {
@@ -8716,21 +8718,26 @@ def test_pr16_p1_comparison_year_fail_closed(fixture: Path) -> None:
 
 
 def test_pr16_p1_negative_eps_growth_semantics_and_sort(fixture: Path) -> None:
-    """P1-2: negative→negative is semantic, never ordinary %; numeric before semantic both dirs."""
+    """P1-2: loss-path growth is semantic, never ordinary %; numeric before semantic both dirs."""
     exp = import_mod(fixture, "export_web_data")
     narrow = exp.growth_pct(-2, -1)
     widen = exp.growth_pct(-1, -2)
     unchanged = exp.growth_pct(-1, -1)
+    breakeven = exp.growth_pct(-1, 0)
     ok = narrow == "Loss narrowing"
     ok = ok and widen == "Loss widening"
     ok = ok and unchanged == "Loss unchanged"
+    ok = ok and breakeven == "Break-even"
     ok = ok and not isinstance(narrow, (int, float))
     ok = ok and not isinstance(widen, (int, float))
+    ok = ok and not isinstance(unchanged, (int, float))
+    ok = ok and not isinstance(breakeven, (int, float))
+    ok = ok and breakeven != 1.0 and breakeven != 100
     ok = ok and abs(float(exp.growth_pct(10, 12)) - 0.20) < 1e-12
     ok = ok and exp.growth_pct(-1, 1) == "Turn profitable"
     ok = ok and exp.growth_pct(2, -1) == "Turn loss"
     ok = ok and exp.growth_pct(0, 1) is None
-    # Ordinary +50% / -100% style % must not appear for negative→negative
+    # Ordinary +50% / -100% / +100% style % must not appear for prior EPS <= 0
     ok = ok and narrow != 0.5 and widen != -1.0 and narrow != 50 and widen != -100
 
     companies = {
@@ -8742,18 +8749,32 @@ def test_pr16_p1_negative_eps_growth_semantics_and_sort(fixture: Path) -> None:
                 "2032E": {"consensus": -1.0, "reportedFiscalLabel": "Dec 2032"},
                 "2033E": {"consensus": -1.0, "reportedFiscalLabel": "Dec 2033"},
             },
-        }
+        },
+        "EVEN": {
+            "lastClose": 40.0,
+            "momentum": "Neutral",
+            "eps": {
+                "2031E": {"consensus": -1.0, "reportedFiscalLabel": "Dec 2031"},
+                "2032E": {"consensus": 0.0, "reportedFiscalLabel": "Dec 2032"},
+                "2033E": {"consensus": 1.0, "reportedFiscalLabel": "Dec 2033"},
+            },
+        },
     }
     rows = exp.build_valuation(
-        companies, ["LOSS"], "2026-09-15T00:00:00Z", year_keys=["2031E", "2032E", "2033E"]
+        companies, ["LOSS", "EVEN"], "2026-09-15T00:00:00Z", year_keys=["2031E", "2032E", "2033E"]
     )
-    f = exp.valuation_comparison_fields(rows[0], "2032E")
+    by_t = {r["ticker"]: r for r in rows}
+    f = exp.valuation_comparison_fields(by_t["LOSS"], "2032E")
     ok = ok and f["growthFromPrior"] == "Loss narrowing"
     ok = ok and not isinstance(f["growthFromPrior"], (int, float))
+    feven = exp.valuation_comparison_fields(by_t["EVEN"], "2032E")
+    ok = ok and feven["growthFromPrior"] == "Break-even"
+    ok = ok and not isinstance(feven["growthFromPrior"], (int, float))
 
     sort_rows = [
         {"ticker": "ZZZ", "growth": "Loss narrowing"},
         {"ticker": "AAA", "growth": "Turn profitable"},
+        {"ticker": "AVGO", "growth": "Break-even"},
         {"ticker": "MSFT", "growth": 0.10},
         {"ticker": "NVDA", "growth": 0.20},
         {"ticker": "BE", "growth": None},
@@ -8761,9 +8782,9 @@ def test_pr16_p1_negative_eps_growth_semantics_and_sort(fixture: Path) -> None:
     asc = [r["ticker"] for r in exp.comparison_sort_rows(sort_rows, key="growth", direction="asc")]
     desc = [r["ticker"] for r in exp.comparison_sort_rows(sort_rows, key="growth", direction="desc")]
     ok = ok and asc[:2] == ["MSFT", "NVDA"]
-    ok = ok and asc[2:] == ["AAA", "BE", "ZZZ"]  # semantic/unavailable A–Z after numeric
+    ok = ok and asc[2:] == ["AAA", "AVGO", "BE", "ZZZ"]  # semantic/unavailable A–Z after numeric
     ok = ok and desc[:2] == ["NVDA", "MSFT"]  # desc must NOT put semantic on top
-    ok = ok and desc[2:] == ["AAA", "BE", "ZZZ"]
+    ok = ok and desc[2:] == ["AAA", "AVGO", "BE", "ZZZ"]
 
     spa = _pr16_spa(fixture)
     cmp_fn = _pr16_js_fn(spa, "compareComparisonRows")
@@ -8773,10 +8794,11 @@ def test_pr16_p1_negative_eps_growth_semantics_and_sort(fixture: Path) -> None:
     ok = ok and "typeof v === \"string\"" in after_fn
     ok = ok and "isAfterNumericSortValue(va, key)" in cmp_fn
     ok = ok and "Loss narrowing" in spa and "Loss widening" in spa and "Loss unchanged" in spa
+    ok = ok and "Break-even" in spa
     record(
         "pr16_p1_negative_eps_growth_semantics_and_sort_test",
         ok,
-        f"narrow={narrow} widen={widen} unchanged={unchanged} asc={asc} desc={desc}",
+        f"narrow={narrow} widen={widen} unchanged={unchanged} breakeven={breakeven} asc={asc} desc={desc}",
     )
 
 

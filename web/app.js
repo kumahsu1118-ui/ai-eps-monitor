@@ -1293,7 +1293,7 @@
       { key: "price", label: "Price", title: "Last close; after-hours shown underneath when present. Same price is the P/E numerator." },
       { key: "eps", label: "EPS " + (year || "") },
       { key: "pe", label: "Forward P/E " + (year || ""), title: "Last Close / selected mapped EPS. Missing → —. EPS ≤ 0 → N/M." },
-      { key: "growth", label: "EPS Growth", title: "Vs prior mapped year (growthFromPrior). Turn profitable / Turn loss when the series crosses zero. Zero prior → N/M. Negative-to-negative is Loss narrowing / Loss widening / Loss unchanged — never an ordinary %." },
+      { key: "growth", label: "EPS Growth", title: "Vs prior mapped year (growthFromPrior). Turn profitable / Turn loss when the series crosses zero. Negative → 0 is Break-even. Zero prior → N/M. Negative-to-negative is Loss narrowing / Loss widening / Loss unchanged — never an ordinary %. Prior EPS ≤ 0 never shows an ordinary %." },
       { key: "cagr", label: cagrLabel, title: cagrTitle },
       { key: "growthAdjPe", label: "Growth-adjusted P/E", title: GROWTH_ADJ_PE_TITLE },
       { key: "internal30", label: "Internal 30D", title: "Internal 30D from daily EPS history (ticker + Reported Fiscal Period Ending). Insufficient history → —. Never aliased to Source-reported 1M." },

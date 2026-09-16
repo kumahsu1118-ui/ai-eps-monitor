@@ -540,10 +540,12 @@ def growth_pct(a, b):
 
     positive→positive: ordinary ratio (10→12 = +20%).
     negative→positive: "Turn profitable".
+    negative→zero: "Break-even".
     positive→negative: "Turn loss".
     zero prior: None (N/M).
     negative→negative: semantic labels only — never an ordinary %
       (-2→-1 Loss narrowing; -1→-2 Loss widening; -1→-1 Loss unchanged).
+    Prior EPS <= 0 never returns an ordinary numeric percentage.
     """
     a, b = to_num(a), to_num(b)
     if a is None or b is None:
@@ -554,12 +556,16 @@ def growth_pct(a, b):
         return "Turn profitable"
     if a > 0 > b:
         return "Turn loss"
+    if a < 0 and b == 0:
+        return "Break-even"
     if a < 0 and b < 0:
         if b > a:
             return "Loss narrowing"
         if b < a:
             return "Loss widening"
         return "Loss unchanged"
+    if a <= 0:
+        return None
     return (b - a) / abs(a)
 
 
