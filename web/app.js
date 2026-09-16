@@ -110,14 +110,37 @@
     return [y + "E", (y + 1) + "E", (y + 2) + "E", (y + 3) + "E"];
   }
 
+  function isMappedYearKey(value) {
+    return typeof value === "string" && /^\d{4}E$/.test(value);
+  }
+
+  function comparisonYearKeys() {
+    /* Fail-closed Comparison Year options. ONLY meta.displayMappedYears.
+       Never invents years from clock/timestamp. Invalid/empty → []. */
+    const m = state.meta || {};
+    const raw = m.displayMappedYears;
+    if (!Array.isArray(raw) || !raw.length) return [];
+    const out = [];
+    for (let i = 0; i < raw.length; i++) {
+      if (!isMappedYearKey(raw[i])) return [];
+      out.push(raw[i]);
+    }
+    return out;
+  }
+
   function defaultComparisonYear(years) {
-    const ys = Array.isArray(years) ? years.filter(function (y) { return y != null && y !== ""; }) : [];
+    const ys = [];
+    if (Array.isArray(years)) {
+      years.forEach(function (y) {
+        if (isMappedYearKey(y)) ys.push(y);
+      });
+    }
     if (ys.length > 1) return ys[1];
     return ys.length ? ys[0] : null;
   }
 
   function selectedComparisonYear() {
-    const years = displayYearKeys();
+    const years = comparisonYearKeys();
     const cur = state.comparisonYear;
     if (cur && years.indexOf(cur) >= 0) return cur;
     return defaultComparisonYear(years);
@@ -140,9 +163,40 @@
     return Number.isFinite(result) ? result : null;
   }
 
+  const FISCAL_MONTH_NUM = {
+    jan: 1, january: 1,
+    feb: 2, february: 2,
+    mar: 3, march: 3,
+    apr: 4, april: 4,
+    may: 5,
+    jun: 6, june: 6,
+    jul: 7, july: 7,
+    aug: 8, august: 8,
+    sep: 9, sept: 9, september: 9,
+    oct: 10, october: 10,
+    nov: 11, november: 11,
+    dec: 12, december: 12,
+  };
+  const FISCAL_MONTH_ABBR = [
+    "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+    "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+  ];
+
+  function normalizeFiscalPeriodLabel(label) {
+    /* Match backend sa_parser.normalize_fiscal_period_label: Jan..Dec + YYYY. */
+    if (label == null || label === "") return null;
+    const s = String(label).replace(/\s+/g, " ").trim();
+    if (!s) return null;
+    const m = s.match(/^([A-Za-z]+)\s+(\d{4})$/);
+    if (!m) return s;
+    const mon = FISCAL_MONTH_NUM[m[1].toLowerCase()];
+    if (!mon) return s;
+    return FISCAL_MONTH_ABBR[mon - 1] + " " + m[2];
+  }
+
   function fiscalIdentityKey(ticker, fiscal) {
     const t = String(ticker || "").trim().toUpperCase();
-    const lab = String(fiscal || "").replace(/\s+/g, " ").trim();
+    const lab = normalizeFiscalPeriodLabel(fiscal);
     if (!t || !lab) return null;
     return t + "\0" + lab;
   }
@@ -515,8 +569,9 @@
     if (!state.chartYear || dy.indexOf(state.chartYear) < 0) {
       state.chartYear = dy[1] || dy[0] || null;
     }
-    if (!state.comparisonYear || dy.indexOf(state.comparisonYear) < 0) {
-      state.comparisonYear = defaultComparisonYear(dy);
+    const cy = comparisonYearKeys();
+    if (!state.comparisonYear || cy.indexOf(state.comparisonYear) < 0) {
+      state.comparisonYear = defaultComparisonYear(cy);
     }
   }
 
@@ -1035,6 +1090,7 @@
 
   function comparisonMomentumRow(row, yearKey, identMap) {
     const p = comparisonPeriod(row, yearKey);
+    /* Prefer canonical reportedFiscalPeriodEnding; never the mapped year slot. */
     const key = fiscalIdentityKey(
       row && row.ticker,
       p.reportedFiscalPeriodEnding || p.reportedFiscalLabel
@@ -1108,13 +1164,20 @@
     return false;
   }
 
+  function isAfterNumericSortValue(v, key) {
+    /* Semantic growth labels / N/M / unavailable always after numeric (asc and desc). */
+    if (sortMissing(v)) return true;
+    if ((key === "growth" || key === "growthFromPrior") && typeof v === "string") return true;
+    return false;
+  }
+
   function compareComparisonRows(aFields, bFields, key, dir, aTicker, bTicker) {
-    /* null/N/M last regardless of direction; ticker A–Z tie-break. Display sort, not a ranking. */
+    /* Numeric first; semantic/N/M last regardless of direction; ticker A–Z tie-break. Display sort, not a ranking. */
     const mul = dir === "desc" ? -1 : 1;
     const va = comparisonSortValue(aFields, key);
     const vb = comparisonSortValue(bFields, key);
-    const ma = sortMissing(va);
-    const mb = sortMissing(vb);
+    const ma = isAfterNumericSortValue(va, key);
+    const mb = isAfterNumericSortValue(vb, key);
     const ta = String(aTicker || "");
     const tb = String(bTicker || "");
     if (ma && mb) return ta.localeCompare(tb);
@@ -1154,7 +1217,7 @@
   function renderValuation() {
     const root = el("div", { className: "section", id: "valuation-comparison" });
     root.appendChild(el("h2", { className: "section-title", text: "Valuation × EPS Growth" }));
-    const years = displayYearKeys();
+    const years = comparisonYearKeys();
     const y0 = years[0] || "";
     const y2 = years[2] || years[years.length - 1] || "";
     const year = selectedComparisonYear();
@@ -1181,8 +1244,8 @@
           y0 +
           ")^(1/2)−1. Growth-adjusted P/E = Forward P/E ÷ (CAGR as percent units). " +
           "Internal 30/60/90D from daily history by ticker + Reported Fiscal Period Ending; Source-reported 1M is Seeking Alpha 1M and is never treated as Internal 30D. " +
-          "Missing values stay — (never 0). Default Comparison Year is displayMappedYears[1] else [0]. " +
-          "Sort is a table convenience (default Forward P/E ascending; null/N/M last; ticker A–Z tie-break), not a ranking. " +
+          "Missing values stay — (never 0). Default Comparison Year is displayMappedYears[1] else [0]; missing or invalid displayMappedYears yields no Comparison Year (fail-closed, no clock years). " +
+          "Sort is a table convenience (default Forward P/E ascending; numeric first; null/N/M last; semantic growth labels also last in both directions; ticker A–Z tie-break), not a ranking. " +
           "Revenue growth is omitted: no forward revenue consensus is aligned to mapped fiscal periods (earnings revenue is historical transcript text; rev1M is EPS revision %, not revenue).",
       })
     );
@@ -1208,6 +1271,15 @@
     yearWrap.appendChild(btnGroup);
     controls.appendChild(yearWrap);
     root.appendChild(controls);
+    if (!years.length) {
+      root.appendChild(
+        el("p", {
+          className: "section-note",
+          id: "comparison-year-unavailable",
+          text: "Comparison Year unavailable — displayMappedYears missing or invalid. Comparison data unavailable. No years invented from the clock.",
+        })
+      );
+    }
 
     const cagrLabel = "Forward EPS CAGR";
     const cagrTitle =
@@ -1221,7 +1293,7 @@
       { key: "price", label: "Price", title: "Last close; after-hours shown underneath when present. Same price is the P/E numerator." },
       { key: "eps", label: "EPS " + (year || "") },
       { key: "pe", label: "Forward P/E " + (year || ""), title: "Last Close / selected mapped EPS. Missing → —. EPS ≤ 0 → N/M." },
-      { key: "growth", label: "EPS Growth", title: "Vs prior mapped year (growthFromPrior). Turn profitable / turn loss when the series crosses zero. No growth math on a zero prior." },
+      { key: "growth", label: "EPS Growth", title: "Vs prior mapped year (growthFromPrior). Turn profitable / Turn loss when the series crosses zero. Zero prior → N/M. Negative-to-negative is Loss narrowing / Loss widening / Loss unchanged — never an ordinary %." },
       { key: "cagr", label: cagrLabel, title: cagrTitle },
       { key: "growthAdjPe", label: "Growth-adjusted P/E", title: GROWTH_ADJ_PE_TITLE },
       { key: "internal30", label: "Internal 30D", title: "Internal 30D from daily EPS history (ticker + Reported Fiscal Period Ending). Insufficient history → —. Never aliased to Source-reported 1M." },

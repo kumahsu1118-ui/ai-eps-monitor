@@ -8111,6 +8111,27 @@ def _pr16_ok_window(pct: float) -> dict:
     }
 
 
+def _pr16_js_fn(src: str, name: str) -> str:
+    """Extract a function body from SPA source by matching braces."""
+    needle = f"function {name}"
+    i = src.find(needle)
+    if i < 0:
+        return ""
+    brace = src.find("{", i)
+    if brace < 0:
+        return src[i:]
+    depth = 0
+    for j in range(brace, len(src)):
+        ch = src[j]
+        if ch == "{":
+            depth += 1
+        elif ch == "}":
+            depth -= 1
+            if depth == 0:
+                return src[i : j + 1]
+    return src[i:]
+
+
 def _pr16_unavail_window(days: int = 30) -> dict:
     return {
         "windowDays": days,
@@ -8646,7 +8667,264 @@ def test_pr16_revenue_growth_excluded_and_no_scores(fixture: Path) -> None:
     record("pr16_revenue_growth_excluded_and_no_scores_test", ok, "excluded+no-scores")
 
 
-# Suite classification: integration = subprocess/crash/publish/heavy ingest
+def test_pr16_p1_comparison_year_fail_closed(fixture: Path) -> None:
+    """P1-1: Comparison Year reads only meta.displayMappedYears; never clock-invents years."""
+    exp = import_mod(fixture, "export_web_data")
+    ok = exp.comparison_year_keys(None) == []
+    ok = ok and exp.comparison_year_keys({}) == []
+    ok = ok and exp.comparison_year_keys({"displayMappedYears": None}) == []
+    ok = ok and exp.comparison_year_keys({"displayMappedYears": "2031E"}) == []
+    ok = ok and exp.comparison_year_keys({"displayMappedYears": []}) == []
+    ok = ok and exp.comparison_year_keys({"displayMappedYears": ["2031E", "bad"]}) == []
+    ok = ok and exp.comparison_year_keys({"displayMappedYears": [2031, 2032]}) == []
+    years = ["2031E", "2032E", "2033E", "2034E"]
+    got = exp.comparison_year_keys({"displayMappedYears": years})
+    ok = ok and got == years
+    ok = ok and exp.default_comparison_year(got) == "2032E"
+    ok = ok and exp.default_comparison_year(["2040E"]) == "2040E"
+
+    src_py = (fixture / "tools" / "export_web_data.py").read_text(encoding="utf-8")
+    fn_py = src_py[src_py.find("def comparison_year_keys") : src_py.find("def default_comparison_year")]
+    ok = ok and "now_taipei" not in fn_py
+    ok = ok and "display_mapped_years(" not in fn_py
+    ok = ok and "datetime" not in fn_py
+
+    spa = _pr16_spa(fixture)
+    cy = _pr16_js_fn(spa, "comparisonYearKeys")
+    sel = _pr16_js_fn(spa, "selectedComparisonYear")
+    rend = _pr16_js_fn(spa, "renderValuation")
+    dy = _pr16_js_fn(spa, "displayYearKeys")
+    ok = ok and "function comparisonYearKeys" in cy
+    ok = ok and "displayMappedYears" in cy
+    ok = ok and "getFullYear" not in cy
+    ok = ok and "new Date" not in cy
+    ok = ok and "consensusDataAsOf" not in cy
+    ok = ok and "displayYearKeys()" not in cy
+    ok = ok and "comparisonYearKeys()" in sel and "displayYearKeys()" not in sel
+    ok = ok and "comparisonYearKeys()" in rend and "displayYearKeys()" not in rend
+    ok = ok and "function displayYearKeys" in dy  # legacy screens keep calendar fallback
+    ok = ok and "getFullYear" in dy
+    ok = ok and "comparison-year-unavailable" in rend
+    # Comparison feature must not depend on displayYearKeys calendar fallback
+    ok = ok and "const cy = comparisonYearKeys()" in spa
+    ok = ok and "defaultComparisonYear(cy)" in spa
+    record(
+        "pr16_p1_comparison_year_fail_closed_test",
+        ok,
+        f"keys={got} default={exp.default_comparison_year(got)}",
+    )
+
+
+def test_pr16_p1_negative_eps_growth_semantics_and_sort(fixture: Path) -> None:
+    """P1-2: negative→negative is semantic, never ordinary %; numeric before semantic both dirs."""
+    exp = import_mod(fixture, "export_web_data")
+    narrow = exp.growth_pct(-2, -1)
+    widen = exp.growth_pct(-1, -2)
+    unchanged = exp.growth_pct(-1, -1)
+    ok = narrow == "Loss narrowing"
+    ok = ok and widen == "Loss widening"
+    ok = ok and unchanged == "Loss unchanged"
+    ok = ok and not isinstance(narrow, (int, float))
+    ok = ok and not isinstance(widen, (int, float))
+    ok = ok and abs(float(exp.growth_pct(10, 12)) - 0.20) < 1e-12
+    ok = ok and exp.growth_pct(-1, 1) == "Turn profitable"
+    ok = ok and exp.growth_pct(2, -1) == "Turn loss"
+    ok = ok and exp.growth_pct(0, 1) is None
+    # Ordinary +50% / -100% style % must not appear for negative→negative
+    ok = ok and narrow != 0.5 and widen != -1.0 and narrow != 50 and widen != -100
+
+    companies = {
+        "LOSS": {
+            "lastClose": 40.0,
+            "momentum": "Neutral",
+            "eps": {
+                "2031E": {"consensus": -2.0, "reportedFiscalLabel": "Dec 2031"},
+                "2032E": {"consensus": -1.0, "reportedFiscalLabel": "Dec 2032"},
+                "2033E": {"consensus": -1.0, "reportedFiscalLabel": "Dec 2033"},
+            },
+        }
+    }
+    rows = exp.build_valuation(
+        companies, ["LOSS"], "2026-09-15T00:00:00Z", year_keys=["2031E", "2032E", "2033E"]
+    )
+    f = exp.valuation_comparison_fields(rows[0], "2032E")
+    ok = ok and f["growthFromPrior"] == "Loss narrowing"
+    ok = ok and not isinstance(f["growthFromPrior"], (int, float))
+
+    sort_rows = [
+        {"ticker": "ZZZ", "growth": "Loss narrowing"},
+        {"ticker": "AAA", "growth": "Turn profitable"},
+        {"ticker": "MSFT", "growth": 0.10},
+        {"ticker": "NVDA", "growth": 0.20},
+        {"ticker": "BE", "growth": None},
+    ]
+    asc = [r["ticker"] for r in exp.comparison_sort_rows(sort_rows, key="growth", direction="asc")]
+    desc = [r["ticker"] for r in exp.comparison_sort_rows(sort_rows, key="growth", direction="desc")]
+    ok = ok and asc[:2] == ["MSFT", "NVDA"]
+    ok = ok and asc[2:] == ["AAA", "BE", "ZZZ"]  # semantic/unavailable A–Z after numeric
+    ok = ok and desc[:2] == ["NVDA", "MSFT"]  # desc must NOT put semantic on top
+    ok = ok and desc[2:] == ["AAA", "BE", "ZZZ"]
+
+    spa = _pr16_spa(fixture)
+    cmp_fn = _pr16_js_fn(spa, "compareComparisonRows")
+    after_fn = _pr16_js_fn(spa, "isAfterNumericSortValue")
+    ok = ok and "function isAfterNumericSortValue" in after_fn
+    ok = ok and "growthFromPrior" in after_fn
+    ok = ok and "typeof v === \"string\"" in after_fn
+    ok = ok and "isAfterNumericSortValue(va, key)" in cmp_fn
+    ok = ok and "Loss narrowing" in spa and "Loss widening" in spa and "Loss unchanged" in spa
+    record(
+        "pr16_p1_negative_eps_growth_semantics_and_sort_test",
+        ok,
+        f"narrow={narrow} widen={widen} unchanged={unchanged} asc={asc} desc={desc}",
+    )
+
+
+def test_pr16_p1_fiscal_identity_fe_be_match(fixture: Path) -> None:
+    """P1-3: reportedFiscalPeriodEnding is canonical; FE fallback matches sa_parser."""
+    exp = import_mod(fixture, "export_web_data")
+    sa = import_mod(fixture, "sa_parser")
+    companies = {
+        "NVDA": {
+            "lastClose": 200.0,
+            "momentum": "Neutral",
+            "eps": {
+                "2026E": {"consensus": 9.0, "reportedFiscalLabel": "January 2027"},
+                "2027E": {"consensus": 15.0, "reportedFiscalLabel": "June 2028", "analysts": 53},
+                "2028E": {"consensus": 21.0, "reportedFiscalLabel": "January 2029"},
+            },
+        }
+    }
+    val = exp.build_valuation(
+        companies, ["NVDA"], "2026-09-15T00:00:00Z", year_keys=["2026E", "2027E", "2028E"]
+    )
+    period = (val[0].get("periods") or {}).get("2027E") or {}
+    ok = period.get("reportedFiscalLabel") == "June 2028"
+    ok = ok and period.get("reportedFiscalPeriodEnding") == "Jun 2028"
+    ok = ok and period.get("reportedFiscalPeriodEnding") != period.get("reportedFiscalLabel")
+    ok = ok and sa.normalize_fiscal_period_label("June 2028") == "Jun 2028"
+    ok = ok and sa.normalize_fiscal_period_label("Sept 2026") == "Sep 2026"
+
+    mom = [
+        {
+            "ticker": "NVDA",
+            "reportedFiscalPeriodEnding": "Jun 2028",
+            "mappedYear": "2027E",
+            "identity": {"ticker": "NVDA", "reportedFiscalPeriodEnding": "Jun 2028"},
+            "internal": {
+                "30D": _pr16_ok_window(30.0),
+                "60D": _pr16_ok_window(60.0),
+                "90D": _pr16_ok_window(90.0),
+            },
+        }
+    ]
+    exp.attach_internal_windows_to_valuation(val, mom)
+    hit = exp.valuation_comparison_fields(val[0], "2027E", revision_momentum=mom)
+    ok = ok and hit["internal30"] == 30.0
+    ok = ok and hit["internal60"] == 60.0
+    ok = ok and hit["internal90"] == 90.0
+    ok = ok and hit["fiscalPeriod"] == "June 2028"  # display label preserved
+
+    val_mismatch = exp.build_valuation(
+        companies, ["NVDA"], "2026-09-15T00:00:00Z", year_keys=["2026E", "2027E", "2028E"]
+    )
+    mom_wrong = [
+        {
+            "ticker": "NVDA",
+            "reportedFiscalPeriodEnding": "Jul 2028",
+            "mappedYear": "2027E",
+            "identity": {"ticker": "NVDA", "reportedFiscalPeriodEnding": "Jul 2028"},
+            "internal": {
+                "30D": _pr16_ok_window(99.0),
+                "60D": _pr16_ok_window(99.0),
+                "90D": _pr16_ok_window(99.0),
+            },
+        }
+    ]
+    exp.attach_internal_windows_to_valuation(val_mismatch, mom_wrong)
+    miss = exp.valuation_comparison_fields(val_mismatch[0], "2027E", revision_momentum=mom_wrong)
+    ok = ok and miss["internal30"] is None
+    ok = ok and miss["internal60"] is None
+    ok = ok and miss["internal90"] is None
+
+    src_py = (fixture / "tools" / "export_web_data.py").read_text(encoding="utf-8")
+    build = src_py[src_py.find("def build_valuation") : src_py.find("def build_eps_history_from_daily")]
+    ok = ok and "normalize_fiscal_period_label" in build
+    ok = ok and "def normalize_fiscal_period" not in src_py  # do not invent a second Python normalizer
+
+    spa = _pr16_spa(fixture)
+    norm = _pr16_js_fn(spa, "normalizeFiscalPeriodLabel")
+    ident = _pr16_js_fn(spa, "fiscalIdentityKey")
+    join = _pr16_js_fn(spa, "comparisonMomentumRow")
+    month_map_start = spa.find("const FISCAL_MONTH_NUM")
+    month_map_end = spa.find("function normalizeFiscalPeriodLabel")
+    month_map = spa[month_map_start:month_map_end] if month_map_start >= 0 and month_map_end > month_map_start else ""
+    ok = ok and "function normalizeFiscalPeriodLabel" in norm
+    ok = ok and "sept" in month_map.lower() and "september" in month_map.lower()
+    ok = ok and "january" in month_map.lower() and "december" in month_map.lower()
+    ok = ok and "normalizeFiscalPeriodLabel(fiscal)" in ident
+    ok = ok and ".mappedYear" not in join
+    ok = ok and "reportedFiscalPeriodEnding" in join
+    ok = ok and "reportedFiscalLabel" in join
+
+    # Frontend month map must match backend _MONTH_NUM semantics (abbrev + full + sept).
+    be_months = {
+        "jan": 1, "january": 1,
+        "feb": 2, "february": 2,
+        "mar": 3, "march": 3,
+        "apr": 4, "april": 4,
+        "may": 5,
+        "jun": 6, "june": 6,
+        "jul": 7, "july": 7,
+        "aug": 8, "august": 8,
+        "sep": 9, "sept": 9, "september": 9,
+        "oct": 10, "october": 10,
+        "nov": 11, "november": 11,
+        "dec": 12, "december": 12,
+    }
+    for name in be_months:
+        ok = ok and name in spa.lower()
+
+    node = shutil.which("node")
+    if node:
+        js_src = (ROOT / "web" / "app.js").read_text(encoding="utf-8")
+        js_norm = _pr16_js_fn(js_src, "normalizeFiscalPeriodLabel")
+        # Hoist the month tables that the function closes over.
+        start = js_src.find("const FISCAL_MONTH_NUM")
+        end = js_src.find("function normalizeFiscalPeriodLabel")
+        prelude = js_src[start:end] if start >= 0 and end > start else ""
+        cases = [
+            "June 2028",
+            "Jun 2028",
+            "January 2027",
+            "Sept 2026",
+            "September 2026",
+            "Dec 2031",
+            "July 2028",
+        ]
+        script = (
+            prelude
+            + "\n"
+            + js_norm
+            + "\nconst cases = "
+            + json.dumps(cases)
+            + ";\nconsole.log(JSON.stringify(cases.map(normalizeFiscalPeriodLabel)));\n"
+        )
+        proc = subprocess.run(
+            [node, "-e", script],
+            capture_output=True,
+            text=True,
+            timeout=15,
+        )
+        ok = ok and proc.returncode == 0
+        fe = json.loads((proc.stdout or "").strip() or "[]")
+        be = [sa.normalize_fiscal_period_label(c) for c in cases]
+        ok = ok and fe == be
+        detail = f"join30={hit['internal30']} miss={miss['internal30']} fe={fe} be={be}"
+    else:
+        detail = f"join30={hit['internal30']} miss={miss['internal30']} node=missing"
+    record("pr16_p1_fiscal_identity_fe_be_match_test", ok, detail)
+
 INTEGRATION_TEST_NAMES = {
     "test_full_export_2027_rollover",
     "test_quality_gate_blocks_export",
@@ -8926,6 +9204,9 @@ def _all_suite_tests():
         ("test_pr16_comparison_year_updates_all_cells", test_pr16_comparison_year_updates_all_cells),
         ("test_pr16_no_hardcoded_eps26_pe26_frontend", test_pr16_no_hardcoded_eps26_pe26_frontend),
         ("test_pr16_revenue_growth_excluded_and_no_scores", test_pr16_revenue_growth_excluded_and_no_scores),
+        ("test_pr16_p1_comparison_year_fail_closed", test_pr16_p1_comparison_year_fail_closed),
+        ("test_pr16_p1_negative_eps_growth_semantics_and_sort", test_pr16_p1_negative_eps_growth_semantics_and_sort),
+        ("test_pr16_p1_fiscal_identity_fe_be_match", test_pr16_p1_fiscal_identity_fe_be_match),
     ]
 
 

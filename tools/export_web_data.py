@@ -536,10 +536,14 @@ def ensure_driver_files(tickers: list[str]) -> list[dict]:
 
 
 def growth_pct(a, b):
-    """EPS growth ratio, or sentinel strings for zero-crossing.
+    """EPS growth ratio, or sentinel strings for zero-crossing / loss path.
 
-    Crossing zero → "Turn profitable" / "Turn loss".
-    Non-computable (None / start==0) → None (UI shows N/M).
+    positive→positive: ordinary ratio (10→12 = +20%).
+    negative→positive: "Turn profitable".
+    positive→negative: "Turn loss".
+    zero prior: None (N/M).
+    negative→negative: semantic labels only — never an ordinary %
+      (-2→-1 Loss narrowing; -1→-2 Loss widening; -1→-1 Loss unchanged).
     """
     a, b = to_num(a), to_num(b)
     if a is None or b is None:
@@ -550,6 +554,12 @@ def growth_pct(a, b):
         return "Turn profitable"
     if a > 0 > b:
         return "Turn loss"
+    if a < 0 and b < 0:
+        if b > a:
+            return "Loss narrowing"
+        if b < a:
+            return "Loss widening"
+        return "Loss unchanged"
     return (b - a) / abs(a)
 
 
@@ -573,9 +583,36 @@ GROWTH_ADJUSTED_PE_DOC = (
 )
 
 
+MAPPED_YEAR_KEY_RE = re.compile(r"^\d{4}E$")
+
+
+def is_mapped_year_key(value) -> bool:
+    """Production mapped-year token: YYYY + E (e.g. 2031E). No calendar-year hardcoding."""
+    return isinstance(value, str) and bool(MAPPED_YEAR_KEY_RE.fullmatch(value))
+
+
+def comparison_year_keys(meta) -> list[str]:
+    """Fail-closed Comparison Year options.
+
+    ONLY ``meta.displayMappedYears``. Missing / not a list / empty / any invalid
+    token → []. Never invents years from clock or timestamp.
+    """
+    if not isinstance(meta, dict):
+        return []
+    raw = meta.get("displayMappedYears")
+    if not isinstance(raw, list) or not raw:
+        return []
+    out: list[str] = []
+    for y in raw:
+        if not is_mapped_year_key(y):
+            return []
+        out.append(y)
+    return out
+
+
 def default_comparison_year(years) -> str | None:
     """Selector default: displayMappedYears[1] if present, else [0]. Never a calendar-year branch."""
-    ys = [y for y in (years or []) if y]
+    ys = [y for y in (years or []) if is_mapped_year_key(y)]
     if len(ys) > 1:
         return ys[1]
     return ys[0] if ys else None
@@ -900,18 +937,22 @@ def build_valuation(
         price = c.get("lastClose") if c.get("lastClose") is not None else c.get("price")
         periods: dict = {}
         prev_cons = None
+        import sa_parser as _sa_fy
+
         for i, yk in enumerate(display):
             e = (c.get("eps") or {}).get(yk) or {}
             cons = e.get("consensus")
             analysts = e.get("analysts")
             if analysts is None:
                 analysts = e.get("analystCount")
+            raw_label = e.get("reportedFiscalLabel")
+            canon_label = _sa_fy.normalize_fiscal_period_label(raw_label) if raw_label else None
             entry = {
                 "eps": cons,
                 "pe": pe(price, cons),
                 "rev1M": e.get("rev1M"),
-                "reportedFiscalLabel": e.get("reportedFiscalLabel"),
-                "reportedFiscalPeriodEnding": e.get("reportedFiscalLabel"),
+                "reportedFiscalLabel": raw_label,
+                "reportedFiscalPeriodEnding": canon_label,
                 "trueCalendarYearEps": e.get("trueCalendarYearEps"),
                 "growthFromPrior": growth_pct(prev_cons, cons) if i > 0 else None,
                 "analysts": to_num(analysts),
@@ -1486,14 +1527,15 @@ def valuation_comparison_fields(
 
 
 def comparison_sort_rows(rows: list[dict], *, key: str, direction: str = "asc") -> list[dict]:
-    """Sort comparison rows: numeric asc/desc, null/N/M last, ticker A–Z tie-break.
+    """Sort comparison rows: numeric asc/desc; semantic/N/M/unavailable after numeric.
 
-    Display convenience only — not an investment ranking. Missing stays last in both
-    directions so empty values never masquerade as zeros at the top.
+    Display convenience only — not an investment ranking. For both asc and desc,
+    semantic growth labels and unavailable values stay AFTER numeric rows.
+    Ties (including all-semantic) are ticker A–Z.
     """
     mul = -1 if str(direction).lower() == "desc" else 1
 
-    def is_miss(v) -> bool:
+    def is_after_numeric(v) -> bool:
         if v is None or v == "":
             return True
         if isinstance(v, bool):
@@ -1502,17 +1544,19 @@ def comparison_sort_rows(rows: list[dict], *, key: str, direction: str = "asc") 
             return True
         if isinstance(v, (int, float)) and not math.isfinite(float(v)):
             return True
+        if key in {"growth", "growthFromPrior"} and isinstance(v, str):
+            return True
         return False
 
     def cmp_pair(a: dict, b: dict) -> int:
         va, vb = a.get(key), b.get(key)
-        ma, mb = is_miss(va), is_miss(vb)
         ta, tb = str(a.get("ticker") or ""), str(b.get("ticker") or "")
-        if ma and mb:
+        a_after, b_after = is_after_numeric(va), is_after_numeric(vb)
+        if a_after and b_after:
             return (ta > tb) - (ta < tb)
-        if ma:
+        if a_after:
             return 1
-        if mb:
+        if b_after:
             return -1
         if isinstance(va, str) or isinstance(vb, str):
             base = (str(va) > str(vb)) - (str(va) < str(vb))
