@@ -146,7 +146,9 @@ python3 tools/migrate_eps_history.py --apply            # atomic; fail-closed if
 python3 tools/rebuild_daily_history.py                  # runtime cache from canonical
 ```
 
-`--apply` builds the entire proposed canonical tree, validates, detects every identity conflict, and only then writes monthly JSONL. Conflicts (same ticker + normalized `reportedFiscalPeriodEnding` + date + `updateTime` with different consensus/analysts) abort with **no partial mutation** and **no auto-picked winner**. Exact payload duplicates are no-ops. Existing Git canonical always stays unless the incoming payload is byte-for-byte the same observation.
+`--apply` acquires the same global `data/.pipeline.lock` as ingest (unless `PIPELINE_LOCK_HELD=1`) **before the plan is built** and holds it through validation + write, so a concurrent ingest cannot append then be overwritten by a stale migration plan. Concurrent `--apply` prints `RUN ALREADY IN PROGRESS` and exits non-zero with canonical/CURRENT/runtime unchanged. `--audit` takes the same lock for a coherent point-in-time report.
+
+`--apply` writes monthly JSONL only after the full proposed result validates with `conflicts=0`. Live month replaces are all-or-nothing: originals are snapshotted first; if any replace fails, every original month byte is restored and every newly-created month is removed. Conflicts abort with **no partial mutation** and **no auto-picked winner**. Exact payload duplicates are no-ops. Existing Git canonical always stays unless the incoming payload is byte-for-byte the same observation.
 
 Admission is the PR #12 canonical rule plus a mappedYear/slot identity guard. `reportedFiscalLabel` values such as `Jan 2027` map to canonical `reportedFiscalPeriodEnding` through the already-tested `normalize_fiscal_period_label` / `fiscal_identity_key` (Mon YYYY). A calendar date such as `2027-01-31` is never invented. `seed_from_revision_history` rows, aborted/orphan generations, null/non-finite consensus, and mappedYear-only rows are rejected. Partial recoverable history is reported honestly; missing periods are not synthesized.
 

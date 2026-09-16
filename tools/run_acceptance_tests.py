@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -7458,6 +7459,106 @@ def test_migration_failure_does_not_partially_write_canonical(fixture: Path) -> 
     )
 
 
+def _mig_side_channel(fixture: Path) -> dict:
+    """CURRENT / runtime daily / generations bytes — must stay put during migration failure."""
+    out: dict = {}
+    cur = fixture / "data" / "CURRENT.json"
+    out["current"] = cur.read_bytes() if cur.is_file() else None
+    daily = fixture / "data" / "daily_eps_snapshots" / "daily.jsonl"
+    out["daily"] = daily.read_bytes() if daily.is_file() else None
+    gens: dict[str, bytes] = {}
+    gdir = fixture / "data" / "generations"
+    if gdir.is_dir():
+        for p in sorted(gdir.rglob("*")):
+            if p.is_file():
+                gens[str(p.relative_to(fixture))] = p.read_bytes()
+    out["gens"] = gens
+    return out
+
+
+def test_migration_replace_failure_rolls_back_all_months(fixture: Path) -> None:
+    """Fault-inject: first month replace succeeds, second fails → full rollback."""
+    _mig_reset(fixture)
+    mig = import_mod(fixture, "migrate_eps_history")
+    existing = _mig_obs(date="2026-09-15", consensus=10.0)
+    _write_canonical_rows(fixture, [existing])
+    hist = fixture / "data" / "history" / "eps_daily"
+    sep_before = (hist / "2026-09.jsonl").read_bytes()
+    extra_sep = _mig_obs(date="2026-09-16", updateTime="2026-09-16T08:00:00Z", consensus=11.0)
+    octo = _mig_obs(date="2026-10-01", updateTime="2026-10-01T08:00:00Z", consensus=12.0)
+    daily_rows = [existing, extra_sep, octo]
+    _mig_write_jsonl(fixture / "data" / "daily_eps_snapshots" / "daily.jsonl", daily_rows)
+    _mig_write_generation(fixture, "run_cur", daily_rows, current=True, committed=True)
+    side_before = _mig_side_channel(fixture)
+    names_before = sorted(p.name for p in hist.glob("*.jsonl"))
+    prev = os.environ.get("FAULT_INJECT_MIGRATION_REPLACE_AFTER")
+    os.environ["FAULT_INJECT_MIGRATION_REPLACE_AFTER"] = "2"
+    try:
+        result = mig.apply_migration(fixture)
+    finally:
+        if prev is None:
+            os.environ.pop("FAULT_INJECT_MIGRATION_REPLACE_AFTER", None)
+        else:
+            os.environ["FAULT_INJECT_MIGRATION_REPLACE_AFTER"] = prev
+    sep_after = (hist / "2026-09.jsonl").read_bytes() if (hist / "2026-09.jsonl").is_file() else b""
+    oct_path = hist / "2026-10.jsonl"
+    side_after = _mig_side_channel(fixture)
+    leftover_staging = (hist / ".migration_staging").exists() or (hist / ".migration_backup").exists()
+    ok = result.get("ok") is False
+    ok = ok and result.get("rolledBack") is True
+    ok = ok and sep_after == sep_before
+    ok = ok and not oct_path.exists()
+    ok = ok and sorted(p.name for p in hist.glob("*.jsonl")) == names_before
+    ok = ok and side_after == side_before
+    ok = ok and not leftover_staging
+    record(
+        "migration_replace_failure_rolls_back_all_months_test",
+        ok,
+        f"ok={result.get('ok')} rolledBack={result.get('rolledBack')} "
+        f"sep_same={sep_after==sep_before} octo={oct_path.exists()} "
+        f"side_same={side_after==side_before} err={result.get('error')}",
+    )
+
+
+def test_migration_apply_busy_when_pipeline_locked(fixture: Path) -> None:
+    """Hold global pipeline lock in this process; CLI --apply in another exits busy."""
+    from atomic_io import GlobalPipelineLock, RUN_IN_PROGRESS_MSG, default_pipeline_lock_path
+
+    _mig_reset(fixture)
+    rows = [_mig_obs()]
+    _mig_write_jsonl(fixture / "data" / "daily_eps_snapshots" / "daily.jsonl", rows)
+    _mig_write_generation(fixture, "run_cur", rows, current=True, committed=True)
+    hist = fixture / "data" / "history" / "eps_daily"
+    hist.mkdir(parents=True, exist_ok=True)
+    side_before = _mig_side_channel(fixture)
+    jsonl_before = {p.name: p.read_bytes() for p in hist.glob("*.jsonl")}
+    lock_path = default_pipeline_lock_path(fixture)
+    env = os.environ.copy()
+    env.pop("PIPELINE_LOCK_HELD", None)
+    script = fixture / "tools" / "migrate_eps_history.py"
+    cmd = [sys.executable, str(script), "--apply", "--root", str(fixture), "--json"]
+    with GlobalPipelineLock(lock_path, non_blocking=True):
+        busy = subprocess.run(cmd, cwd=str(fixture), env=env, capture_output=True, text=True, timeout=30)
+    combined = (busy.stdout or "") + (busy.stderr or "")
+    side_busy = _mig_side_channel(fixture)
+    jsonl_busy = {p.name: p.read_bytes() for p in hist.glob("*.jsonl")}
+    ok = busy.returncode != 0
+    ok = ok and RUN_IN_PROGRESS_MSG in combined
+    ok = ok and side_busy == side_before
+    ok = ok and jsonl_busy == jsonl_before
+    ok = ok and not (hist / "2026-09.jsonl").exists()
+    # Lock released — normal apply must succeed.
+    free = subprocess.run(cmd, cwd=str(fixture), env=env, capture_output=True, text=True, timeout=30)
+    ok = ok and free.returncode == 0
+    ok = ok and (hist / "2026-09.jsonl").is_file()
+    record(
+        "migration_apply_busy_when_pipeline_locked_test",
+        ok,
+        f"busy_rc={busy.returncode} free_rc={free.returncode} "
+        f"msg={RUN_IN_PROGRESS_MSG in combined} side_same={side_busy==side_before}",
+    )
+
+
 # Suite classification: integration = subprocess/crash/publish/heavy ingest
 INTEGRATION_TEST_NAMES = {
     "test_full_export_2027_rollover",
@@ -7495,6 +7596,7 @@ INTEGRATION_TEST_NAMES = {
     "test_crash_before_financial_commit_does_not_mutate_canonical_history",
     "test_canonical_git_push_failure_retries_to_remote",
     "test_corrupt_pending_daily_rows_aborts_before_current",
+    "test_migration_apply_busy_when_pipeline_locked",
 }
 
 
@@ -7702,6 +7804,8 @@ def _all_suite_tests():
         ("test_recovered_30_60_90_windows_match_pre_migration_history", test_recovered_30_60_90_windows_match_pre_migration_history),
         ("test_migration_does_not_change_current_pointer", test_migration_does_not_change_current_pointer),
         ("test_migration_failure_does_not_partially_write_canonical", test_migration_failure_does_not_partially_write_canonical),
+        ("test_migration_replace_failure_rolls_back_all_months", test_migration_replace_failure_rolls_back_all_months),
+        ("test_migration_apply_busy_when_pipeline_locked", test_migration_apply_busy_when_pipeline_locked),
     ]
 
 

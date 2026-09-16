@@ -43,6 +43,7 @@ import re
 import shutil
 import sys
 from collections import defaultdict
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Iterable
 
@@ -51,7 +52,14 @@ ROOT = _here.parent
 if str(_here) not in sys.path:
     sys.path.insert(0, str(_here))
 
-from atomic_io import atomic_write_text  # noqa: E402
+from atomic_io import (  # noqa: E402
+    RUN_IN_PROGRESS_MSG,
+    GlobalPipelineLock,
+    PipelineBusy,
+    atomic_write_bytes,
+    atomic_write_text,
+    default_pipeline_lock_path,
+)
 import canonical_eps_history as ceh  # noqa: E402
 from revision_windows import to_num  # noqa: E402
 
@@ -65,6 +73,10 @@ PUBLIC_DERIVED_RELS = (
     Path("web") / "data" / "eps_history.json",
 )
 STAGING_DIRNAME = ".migration_staging"
+BACKUP_DIRNAME = ".migration_backup"
+# 1-based: FAULT_INJECT_MIGRATION_REPLACE_AFTER=2 → first live replace
+# succeeds, second raises (rollback must restore every original month).
+FAULT_INJECT_REPLACE_AFTER = "FAULT_INJECT_MIGRATION_REPLACE_AFTER"
 
 # Lower number = higher priority (documented ordering; not a conflict winner).
 SOURCE_PRIORITY = {
@@ -961,18 +973,100 @@ def format_human_report(plan: dict, *, mode: str) -> str:
     return "\n".join(lines) + "\n"
 
 
-def apply_migration(root: Path, plan: dict | None = None, *, source_order: str = "priority") -> dict:
-    """Atomically write proposed canonical files. Fail closed on conflicts.
+@contextmanager
+def pipeline_lock(root: Path, *, acquire: bool = True):
+    """Hold ``data/.pipeline.lock`` unless ``PIPELINE_LOCK_HELD=1`` (nested ingest).
 
+    ``--apply`` must acquire before the plan is built and hold through write.
+    """
+    if not acquire or os.environ.get("PIPELINE_LOCK_HELD") == "1":
+        yield None
+        return
+    lock = GlobalPipelineLock(default_pipeline_lock_path(Path(root)), non_blocking=True)
+    lock.__enter__()
+    prev = os.environ.get("PIPELINE_LOCK_HELD")
+    os.environ["PIPELINE_LOCK_HELD"] = "1"
+    try:
+        yield lock
+    finally:
+        if prev is None:
+            os.environ.pop("PIPELINE_LOCK_HELD", None)
+        else:
+            os.environ["PIPELINE_LOCK_HELD"] = prev
+        lock.__exit__(None, None, None)
+
+
+def _durable_copyfile(src: Path, dest: Path) -> None:
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    atomic_write_bytes(dest, src.read_bytes())
+
+
+def _maybe_fault_live_replace(index_1based: int) -> None:
+    raw = os.environ.get(FAULT_INJECT_REPLACE_AFTER)
+    if raw in (None, ""):
+        return
+    try:
+        n = int(raw)
+    except ValueError:
+        return
+    if index_1based == n:
+        raise OSError(f"{FAULT_INJECT_REPLACE_AFTER}={n}")
+
+
+def _restore_month_files(hist: Path, backup: Path, existed: dict[str, bool], month_keys: list[str]) -> None:
+    """Restore every affected month from the pre-replace backup. Newly created months are removed."""
+    for mk in month_keys:
+        dest = hist / f"{mk}.jsonl"
+        bak = backup / f"{mk}.jsonl"
+        if existed.get(mk):
+            if not bak.is_file():
+                raise MigrationError(f"rollback missing backup for {mk}.jsonl")
+            _durable_copyfile(bak, dest)
+        elif dest.exists():
+            dest.unlink()
+
+
+def apply_migration(
+    root: Path,
+    plan: dict | None = None,
+    *,
+    source_order: str = "priority",
+    acquire_lock: bool = True,
+) -> dict:
+    """Write proposed canonical files with all-or-nothing rollback.
+
+    Acquires the global pipeline lock (unless already held) before planning
+    when ``plan`` is omitted, and holds it through validation + write.
     Does not mutate CURRENT, runtime daily.jsonl, or generations.
     """
     root = Path(root)
+    try:
+        with pipeline_lock(root, acquire=acquire_lock):
+            return _apply_migration_locked(root, plan, source_order=source_order)
+    except PipelineBusy:
+        return {
+            "ok": False,
+            "mode": "apply",
+            "applied": False,
+            "written": [],
+            "error": RUN_IN_PROGRESS_MSG,
+            "busy": True,
+        }
+
+
+def _apply_migration_locked(
+    root: Path,
+    plan: dict | None,
+    *,
+    source_order: str,
+) -> dict:
     if plan is None:
         plan = plan_migration(root, source_order=source_order)
     result = public_plan(plan)
     result["mode"] = "apply"
     result["written"] = []
     result["applied"] = False
+    result["rolledBack"] = False
     if plan.get("conflicts"):
         result["ok"] = False
         result["error"] = "conflicts>0: apply fail-closed, no mutation"
@@ -992,26 +1086,43 @@ def apply_migration(root: Path, plan: dict | None = None, *, source_order: str =
     hist = ceh.history_dir(root)
     hist.mkdir(parents=True, exist_ok=True)
     staging = hist / STAGING_DIRNAME
-    if staging.exists():
-        shutil.rmtree(staging)
-    staging.mkdir(parents=True, exist_ok=True)
+    backup = hist / BACKUP_DIRNAME
+    for d in (staging, backup):
+        if d.exists():
+            shutil.rmtree(d)
+        d.mkdir(parents=True, exist_ok=True)
+
+    month_keys = sorted(payloads)
+    existed: dict[str, bool] = {}
     written: list[str] = []
     try:
-        for mk in sorted(payloads):
+        for mk in month_keys:
             atomic_write_text(staging / f"{mk}.jsonl", payloads[mk])
-        # Staging complete — only now replace live month files.
-        for mk in sorted(payloads):
+        # Snapshot originals BEFORE any live replace so a mid-loop failure can
+        # restore every affected month (including deleting newly created files).
+        for mk in month_keys:
+            dest = hist / f"{mk}.jsonl"
+            existed[mk] = dest.is_file()
+            if dest.is_file():
+                _durable_copyfile(dest, backup / f"{mk}.jsonl")
+        for i, mk in enumerate(month_keys, start=1):
+            _maybe_fault_live_replace(i)
             src = staging / f"{mk}.jsonl"
             dest = hist / f"{mk}.jsonl"
             os.replace(str(src), str(dest))
             written.append(dest.name)
-    except Exception:
-        # Do not delete already-replaced files (crash after staging is rare);
-        # conflicts never reach this path.
-        raise
+    except Exception as exc:
+        _restore_month_files(hist, backup, existed, month_keys)
+        result["ok"] = False
+        result["applied"] = False
+        result["rolledBack"] = True
+        result["error"] = f"apply failed; canonical months rolled back: {exc}"
+        result["written"] = []
+        return result
     finally:
-        if staging.exists():
-            shutil.rmtree(staging, ignore_errors=True)
+        for d in (staging, backup):
+            if d.exists():
+                shutil.rmtree(d, ignore_errors=True)
 
     result["ok"] = True
     result["applied"] = True
@@ -1047,7 +1158,6 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--json", action="store_true", help="Print JSON plan/result to stdout")
     args = ap.parse_args(argv)
     root = Path(args.root) if args.root else ROOT
-    mode_name = "apply" if args.apply else "audit"
 
     before = fingerprint_workspace(root) if args.audit else None
     current_before = None
@@ -1055,43 +1165,51 @@ def main(argv: list[str] | None = None) -> int:
     if cur_path.is_file():
         current_before = cur_path.read_bytes()
 
-    plan = plan_migration(root, source_order=args.source_order)
-    if args.apply:
-        result = apply_migration(root, plan, source_order=args.source_order)
-        public = result
-        human = format_human_report(plan, mode="apply")
-        if result.get("error"):
-            human += f"ERROR: {result['error']}\n"
-        if current_before is not None and cur_path.is_file() and cur_path.read_bytes() != current_before:
-            print("ERROR: CURRENT.json mutated during apply (forbidden)", file=sys.stderr)
-            return 1
-        _write_report_file(args.report, public, human)
-        if args.json:
-            print(json.dumps(public, indent=2, ensure_ascii=False))
-        else:
-            print(human, end="")
-            print("---JSON---")
-            print(json.dumps(public, indent=2, ensure_ascii=False))
-        return 0 if result.get("ok") else 1
+    # Lock before the plan is built; hold through validation + apply/audit.
+    try:
+        with pipeline_lock(root, acquire=True):
+            plan = plan_migration(root, source_order=args.source_order)
+            if args.apply:
+                result = apply_migration(
+                    root, plan, source_order=args.source_order, acquire_lock=False
+                )
+                public = result
+                human = format_human_report(plan, mode="apply")
+                if result.get("error"):
+                    human += f"ERROR: {result['error']}\n"
+                if current_before is not None and cur_path.is_file() and cur_path.read_bytes() != current_before:
+                    print("ERROR: CURRENT.json mutated during apply (forbidden)", file=sys.stderr)
+                    return 1
+                _write_report_file(args.report, public, human)
+                if args.json:
+                    print(json.dumps(public, indent=2, ensure_ascii=False))
+                else:
+                    print(human, end="")
+                    print("---JSON---")
+                    print(json.dumps(public, indent=2, ensure_ascii=False))
+                return 0 if result.get("ok") else 1
 
-    public = public_plan(plan)
-    public["mode"] = "audit"
-    human = format_human_report(plan, mode="audit")
-    after = fingerprint_workspace(root)
-    if before != after:
-        print("ERROR: --audit mutated workspace files (forbidden)", file=sys.stderr)
-        return 1
-    if current_before is not None and cur_path.is_file() and cur_path.read_bytes() != current_before:
-        print("ERROR: CURRENT.json mutated during audit (forbidden)", file=sys.stderr)
-        return 1
-    _write_report_file(args.report, public, human)
-    if args.json:
-        print(json.dumps(public, indent=2, ensure_ascii=False))
-    else:
-        print(human, end="")
-        print("---JSON---")
-        print(json.dumps(public, indent=2, ensure_ascii=False))
-    return 0
+            public = public_plan(plan)
+            public["mode"] = "audit"
+            human = format_human_report(plan, mode="audit")
+            after = fingerprint_workspace(root)
+            if before != after:
+                print("ERROR: --audit mutated workspace files (forbidden)", file=sys.stderr)
+                return 1
+            if current_before is not None and cur_path.is_file() and cur_path.read_bytes() != current_before:
+                print("ERROR: CURRENT.json mutated during audit (forbidden)", file=sys.stderr)
+                return 1
+            _write_report_file(args.report, public, human)
+            if args.json:
+                print(json.dumps(public, indent=2, ensure_ascii=False))
+            else:
+                print(human, end="")
+                print("---JSON---")
+                print(json.dumps(public, indent=2, ensure_ascii=False))
+            return 0
+    except PipelineBusy:
+        print(RUN_IN_PROGRESS_MSG, flush=True)
+        return 2
 
 
 if __name__ == "__main__":
