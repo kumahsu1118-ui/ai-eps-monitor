@@ -6433,26 +6433,18 @@ def test_canonical_to_runtime_deterministic(fixture: Path) -> None:
         },
     ]
     _write_canonical_rows(fixture, rows)
-    # Inject a malformed line into the month file — materializer must reject it
-    month = ceh.month_file_path(fixture, "2026-09")
-    buf = month.read_text(encoding="utf-8") if month.exists() else ""
-    buf += "NOT JSON\n"
-    buf += json.dumps({"date": "2026-09-15", "ticker": "AVGO", "consensus": None}) + "\n"
-    month.parent.mkdir(parents=True, exist_ok=True)
-    month.write_text(buf, encoding="utf-8")
     p1 = ceh.materialize_runtime_daily(fixture)
     b1 = p1.read_bytes()
     p2 = ceh.materialize_runtime_daily(fixture)
     b2 = p2.read_bytes()
     ok = b1 == b2
+    rc = ceh.main(["--materialize", "--root", str(fixture)])
+    ok = ok and rc == 0
     loaded = ceh.load_jsonl_rows(p1)
     dates = [r["date"] for r in loaded]
     ok = ok and "not-a-date" not in dates
     ok = ok and all(r.get("consensus") is not None for r in loaded)
     ok = ok and all("mappedYear" not in r and "slot" not in r for r in loaded)
-    text = p1.read_text(encoding="utf-8")
-    ok = ok and "NOT JSON" not in text
-    # unsorted incoming should still produce sorted runtime
     shuffled = list(reversed(ceh.load_all_canonical_rows(fixture)))
     hist = ceh.history_dir(fixture)
     for p in list(hist.glob("*.jsonl")):
@@ -6460,7 +6452,180 @@ def test_canonical_to_runtime_deterministic(fixture: Path) -> None:
     _write_canonical_rows(fixture, shuffled)
     b3 = ceh.materialize_runtime_daily(fixture).read_bytes()
     ok = ok and b3 == b1
-    record("canonical_to_runtime_deterministic_test", ok, f"bytes={len(b1)} n={len(loaded)}")
+    record("canonical_to_runtime_deterministic_test", ok, f"bytes={len(b1)} n={len(loaded)} rc={rc}")
+
+
+def test_materialize_malformed_json_fails_closed(fixture: Path) -> None:
+    """Malformed JSONL must fail materialize and not overwrite a valid runtime cache."""
+    _reset_canonical(fixture)
+    ceh = import_mod(fixture, "canonical_eps_history")
+    rows, _ = _fresh_clone_seed_rows()
+    _write_canonical_rows(fixture, rows)
+    dest = ceh.materialize_runtime_daily(fixture)
+    before = dest.read_bytes()
+    month = ceh.month_file_path(fixture, "2026-09")
+    month.write_text(month.read_text(encoding="utf-8") + "NOT JSON\n", encoding="utf-8")
+    raised = False
+    try:
+        ceh.materialize_runtime_daily(fixture)
+    except Exception as exc:
+        raised = isinstance(exc, ceh.CanonicalHistoryError) or "malformed" in str(exc).lower()
+    rc = ceh.main(["--materialize", "--root", str(fixture)])
+    ok = raised and rc != 0
+    ok = ok and dest.exists() and dest.read_bytes() == before
+    record(
+        "materialize_malformed_json_fails_closed_test",
+        ok,
+        f"raised={raised} rc={rc} unchanged={dest.read_bytes()==before}",
+    )
+
+
+def test_materialize_schema_invalid_row_fails_closed(fixture: Path) -> None:
+    """Schema-invalid canonical row (null consensus / missing fiscal) fails closed."""
+    _reset_canonical(fixture)
+    ceh = import_mod(fixture, "canonical_eps_history")
+    rows, _ = _fresh_clone_seed_rows()
+    _write_canonical_rows(fixture, rows)
+    dest = ceh.materialize_runtime_daily(fixture)
+    before = dest.read_bytes()
+    month = ceh.month_file_path(fixture, "2026-09")
+    bad = json.dumps({"date": "2026-09-15", "ticker": "AVGO", "consensus": None}) + "\n"
+    month.write_text(month.read_text(encoding="utf-8") + bad, encoding="utf-8")
+    raised = False
+    try:
+        ceh.materialize_runtime_daily(fixture)
+    except Exception as exc:
+        raised = isinstance(exc, ceh.CanonicalHistoryError) or "rejected" in str(exc).lower()
+    ok = raised and dest.read_bytes() == before
+    dest.unlink()
+    raised_absent = False
+    try:
+        ceh.materialize_runtime_daily(fixture)
+    except Exception:
+        raised_absent = True
+    ok = ok and raised_absent and not dest.exists()
+    rc = ceh.main(["--materialize", "--root", str(fixture)])
+    ok = ok and rc != 0 and not dest.exists()
+    record(
+        "materialize_schema_invalid_row_fails_closed_test",
+        ok,
+        f"raised={raised} absent={raised_absent} rc={rc} dest_exists={dest.exists()}",
+    )
+
+
+def _git_in(cwd: Path, args: list[str], check: bool = True) -> subprocess.CompletedProcess:
+    return subprocess.run(
+        ["git", *args],
+        cwd=str(cwd),
+        capture_output=True,
+        text=True,
+        check=check,
+    )
+
+
+def test_canonical_git_push_failure_retries_to_remote(fixture: Path) -> None:
+    """Local canonical commit + failed push must retry-push; clone reconstructs without dup."""
+    import os
+
+    ing = import_mod(fixture, "ingest_snapshot")
+    ceh = import_mod(fixture, "canonical_eps_history")
+    work = fixture / "_canon_git_work"
+    bare = fixture / "_canon_git_remote.git"
+    clone_a = fixture / "_canon_git_clone_a"
+    clone_b = fixture / "_canon_git_clone_b"
+    for p in (work, bare, clone_a, clone_b):
+        if p.exists():
+            shutil.rmtree(p)
+    bare.mkdir(parents=True)
+    _git_in(bare, ["init", "--bare"])
+    _git_in(bare, ["symbolic-ref", "HEAD", "refs/heads/main"], check=False)
+    hist = work / "data" / "history" / "eps_daily"
+    hist.mkdir(parents=True)
+    (hist / ".gitkeep").write_text("", encoding="utf-8")
+    _git_in(work, ["init"])
+    _git_in(work, ["symbolic-ref", "HEAD", "refs/heads/main"], check=False)
+    _git_in(work, ["add", "--", "data/history/eps_daily"])
+    _git_in(
+        work,
+        [
+            "-c", "user.email=test@example.com",
+            "-c", "user.name=test",
+            "-c", "commit.gpgsign=false",
+            "commit",
+            "-m",
+            "init canonical dir",
+        ],
+    )
+    _git_in(work, ["remote", "add", "origin", str(bare)])
+    _git_in(work, ["push", "-u", "origin", "HEAD"])
+
+    row = {
+        "date": "2026-09-15",
+        "ticker": "NVDA",
+        "reportedFiscalPeriodEnding": "Jan 2028",
+        "consensus": 15.61,
+        "analysts": 40,
+        "updateTime": "2026-09-15T08:00:00Z",
+    }
+    (hist / "2026-09.jsonl").write_text(ceh.dumps_canonical_row(row) + "\n", encoding="utf-8")
+
+    prev_skip = os.environ.get("SKIP_CANONICAL_GIT_PERSIST")
+    os.environ.pop("SKIP_CANONICAL_GIT_PERSIST", None)
+    os.environ.pop("SKIP_CANONICAL_GIT_PUSH", None)
+    ing.rebind_paths(work)
+    try:
+        _git_in(work, ["remote", "set-url", "origin", str(bare) + ".missing"])
+        first = ing.persist_canonical_history_to_source_git()
+        log1 = _git_in(work, ["log", "-1", "--pretty=%s"])
+        show_missing = _git_in(
+            bare, ["show", "HEAD:data/history/eps_daily/2026-09.jsonl"], check=False
+        )
+        _git_in(work, ["remote", "set-url", "origin", str(bare)])
+        retry = ing.retry_pending_canonical_git_if_needed()
+        show_ok = _git_in(
+            bare, ["show", "HEAD:data/history/eps_daily/2026-09.jsonl"], check=False
+        )
+        replay = ing.persist_canonical_history_to_source_git()
+    finally:
+        ing.rebind_paths(fixture)
+        if prev_skip is not None:
+            os.environ["SKIP_CANONICAL_GIT_PERSIST"] = prev_skip
+        else:
+            os.environ["SKIP_CANONICAL_GIT_PERSIST"] = "1"
+
+    ok = first.get("status") == "pending"
+    ok = ok and "canonical eps history" in (log1.stdout or "")
+    ok = ok and show_missing.returncode != 0
+    ok = ok and retry is not None and retry.get("status") == "ok"
+    ok = ok and show_ok.returncode == 0 and "15.61" in (show_ok.stdout or "")
+    ok = ok and replay.get("status") in {"ok", "clean"}
+
+    subprocess.run(
+        ["git", "clone", "--branch", "main", str(bare), str(clone_a)],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    cloned = ceh.load_jsonl_rows(clone_a / "data" / "history" / "eps_daily" / "2026-09.jsonl")
+    ok = ok and len(cloned) == 1
+    ok = ok and abs(float(cloned[0]["consensus"]) - 15.61) < 1e-9
+    ceh.materialize_runtime_daily(clone_a)
+    daily = ceh.load_jsonl_rows(ceh.runtime_daily_path(clone_a))
+    ok = ok and len(daily) == 1
+    subprocess.run(
+        ["git", "clone", "--branch", "main", str(bare), str(clone_b)],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    cloned2 = ceh.load_jsonl_rows(clone_b / "data" / "history" / "eps_daily" / "2026-09.jsonl")
+    ok = ok and len(cloned2) == 1
+    record(
+        "canonical_git_push_failure_retries_to_remote_test",
+        ok,
+        f"first={first.get('status')} retry={retry.get('status') if retry else None} "
+        f"replay={replay.get('status')} n={len(cloned2)} missing_rc={show_missing.returncode}",
+    )
 
 
 def test_canonical_history_no_mapped_year_identity(fixture: Path) -> None:
@@ -6539,6 +6704,7 @@ INTEGRATION_TEST_NAMES = {
     "test_committed_generation_never_mutated_by_replay",
     "test_materialized_marker_with_missing_live_file_repairs_from_current",
     "test_crash_before_financial_commit_does_not_mutate_canonical_history",
+    "test_canonical_git_push_failure_retries_to_remote",
 }
 
 
@@ -6723,6 +6889,9 @@ def _all_suite_tests():
         ("test_crash_before_financial_commit_does_not_mutate_canonical_history", test_crash_before_financial_commit_does_not_mutate_canonical_history),
         ("test_monthly_rollover_history", test_monthly_rollover_history),
         ("test_canonical_to_runtime_deterministic", test_canonical_to_runtime_deterministic),
+        ("test_materialize_malformed_json_fails_closed", test_materialize_malformed_json_fails_closed),
+        ("test_materialize_schema_invalid_row_fails_closed", test_materialize_schema_invalid_row_fails_closed),
+        ("test_canonical_git_push_failure_retries_to_remote", test_canonical_git_push_failure_retries_to_remote),
         ("test_canonical_history_no_mapped_year_identity", test_canonical_history_no_mapped_year_identity),
     ]
 

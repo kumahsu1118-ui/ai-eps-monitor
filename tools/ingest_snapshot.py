@@ -767,14 +767,64 @@ def write_canonical_git_state(state: dict) -> None:
     atomic_write_json(canonical_git_state_path(), state)
 
 
+def _canonical_git(args: list[str]) -> subprocess.CompletedProcess:
+    return subprocess.run(
+        ["git", *args],
+        cwd=str(ROOT),
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+
+def _canonical_git_unpushed() -> tuple[bool, str]:
+    """Whether HEAD has commits not known to be on the remote.
+
+    Nothing staged ≠ remote is durable. No upstream with a remote configured
+    is treated as unpushed so retry still calls ``git push``.
+    """
+    rem = _canonical_git(["remote"])
+    remotes = [r.strip() for r in (rem.stdout or "").splitlines() if r.strip()]
+    up = _canonical_git(["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"])
+    upstream = (up.stdout or "").strip() if up.returncode == 0 else ""
+    if not upstream:
+        if not remotes:
+            return False, "no_remote"
+        return True, "no_upstream"
+    cnt = _canonical_git(["rev-list", "--count", f"{upstream}..HEAD"])
+    if cnt.returncode != 0:
+        return True, "rev_list_failed"
+    try:
+        n = int((cnt.stdout or "0").strip() or 0)
+    except ValueError:
+        return True, "rev_list_unparseable"
+    return n > 0, f"ahead={n}"
+
+
+def _canonical_git_push() -> subprocess.CompletedProcess:
+    """Push HEAD. If no upstream, ``git push -u origin HEAD``."""
+    pushed = _canonical_git(["push"])
+    if pushed.returncode == 0:
+        return pushed
+    tracked = _canonical_git(["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"])
+    if tracked.returncode != 0:
+        return _canonical_git(["push", "-u", "origin", "HEAD"])
+    return pushed
+
+
 def persist_canonical_history_to_source_git(*, push: bool = True) -> dict:
     """Commit/push data/history/eps_daily/ only. Never rolls back financial COMMIT.
 
     Source-repo git persist is separate from Pages publish (site-repo public assets).
     Failure → status pending/failed for retry; observation already in canonical files.
+
+    A local commit with a failed push leaves state=pending. Retry MUST push that
+    unpushed commit even when the working tree is clean — do not treat
+    ``git diff --cached --quiet`` as "remote is durable".
     """
     now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     state = read_canonical_git_state()
+    prior_status = str(state.get("status") or "")
     state["lastAttempt"] = now
     if os.environ.get("SKIP_CANONICAL_GIT_PERSIST") == "1":
         return {"status": "skipped", "lastAttempt": now}
@@ -784,73 +834,65 @@ def persist_canonical_history_to_source_git(*, push: bool = True) -> dict:
         state["error"] = "not_a_git_repo"
         write_canonical_git_state(state)
         return state
-    hist = HISTORY_DIR
-    hist.mkdir(parents=True, exist_ok=True)
+    HISTORY_DIR.mkdir(parents=True, exist_ok=True)
     rel = "data/history/eps_daily"
     try:
-        add = subprocess.run(
-            ["git", "add", "--", rel],
-            cwd=str(ROOT),
-            capture_output=True,
-            text=True,
-            check=False,
-        )
+        add = _canonical_git(["add", "--", rel])
         if add.returncode != 0:
             raise RuntimeError(add.stderr or add.stdout or f"git add rc={add.returncode}")
-        diff = subprocess.run(
-            ["git", "diff", "--cached", "--quiet", "--", rel],
-            cwd=str(ROOT),
-            capture_output=True,
-            text=True,
-            check=False,
+        diff = _canonical_git(["diff", "--cached", "--quiet", "--", rel])
+        staged_changes = diff.returncode != 0
+        if staged_changes:
+            msg = f"canonical eps history {now}"
+            commit = _canonical_git(
+                [
+                    "-c",
+                    "user.email=kumahsu1118-ui@users.noreply.github.com",
+                    "-c",
+                    "user.name=AI EPS Monitor",
+                    "-c",
+                    "commit.gpgsign=false",
+                    "commit",
+                    "-m",
+                    msg,
+                    "--",
+                    rel,
+                ]
+            )
+            if commit.returncode != 0:
+                raise RuntimeError(commit.stderr or commit.stdout or f"git commit rc={commit.returncode}")
+
+        do_push = bool(push) and os.environ.get("SKIP_CANONICAL_GIT_PUSH") != "1"
+        unpushed, ahead_reason = _canonical_git_unpushed()
+        # Pending/failed retry or a fresh local commit must still push.
+        must_push = do_push and (
+            unpushed or prior_status in {"pending", "failed"} or staged_changes
         )
-        if diff.returncode == 0:
-            state["status"] = "clean"
+        if not must_push:
+            # In sync with remote (or push disabled). Never treat "nothing staged"
+            # as durable while commits remain unpushed.
+            state["status"] = "ok" if do_push else "clean"
             state["error"] = None
+            state["ahead"] = ahead_reason
             write_canonical_git_state(state)
             return state
-        msg = f"canonical eps history {now}"
-        commit = subprocess.run(
-            [
-                "git",
-                "-c",
-                "user.email=kumahsu1118-ui@users.noreply.github.com",
-                "-c",
-                "user.name=AI EPS Monitor",
-                "commit",
-                "-m",
-                msg,
-                "--",
-                rel,
-            ],
-            cwd=str(ROOT),
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-        if commit.returncode != 0:
-            raise RuntimeError(commit.stderr or commit.stdout or f"git commit rc={commit.returncode}")
-        if push and os.environ.get("SKIP_CANONICAL_GIT_PUSH") != "1":
-            push_p = subprocess.run(
-                ["git", "push"],
-                cwd=str(ROOT),
-                capture_output=True,
-                text=True,
-                check=False,
+
+        push_p = _canonical_git_push()
+        if push_p.returncode != 0:
+            state["status"] = "pending"
+            state["error"] = (push_p.stderr or push_p.stdout or f"git push rc={push_p.returncode}")[-500:]
+            state["ahead"] = ahead_reason
+            write_canonical_git_state(state)
+            print(
+                "WARNING: canonical source-git push failed — financial commit intact; "
+                "retry will push the unpushed local commit (no duplicate observations)",
+                file=sys.stderr,
             )
-            if push_p.returncode != 0:
-                state["status"] = "pending"
-                state["error"] = (push_p.stderr or push_p.stdout or f"git push rc={push_p.returncode}")[-500:]
-                write_canonical_git_state(state)
-                print(
-                    "WARNING: canonical source-git push failed — financial commit intact; "
-                    "retry will not duplicate observations",
-                    file=sys.stderr,
-                )
-                return state
+            return state
         state["status"] = "ok"
         state["lastSuccessful"] = now
         state["error"] = None
+        state["ahead"] = "in_sync"
         write_canonical_git_state(state)
         return state
     except Exception as exc:

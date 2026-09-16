@@ -191,8 +191,8 @@ def dumps_canonical_row(obs: dict) -> str:
     return json.dumps(payload, ensure_ascii=False, allow_nan=False)
 
 
-def parse_canonical_line(line: str, *, strict: bool = False) -> dict | None:
-    """Parse one JSONL line. Malformed → None (or raise if strict). Never invents EPS."""
+def parse_canonical_line(line: str, *, strict: bool = True) -> dict | None:
+    """Parse one JSONL line. Malformed → raise if strict, else None. Never invents EPS."""
     s = line.strip()
     if not s:
         return None
@@ -214,7 +214,7 @@ def parse_canonical_line(line: str, *, strict: bool = False) -> dict | None:
     return obs
 
 
-def load_jsonl_rows(path: Path, *, strict: bool = False) -> list[dict]:
+def load_jsonl_rows(path: Path, *, strict: bool = True) -> list[dict]:
     if not path.exists():
         return []
     rows: list[dict] = []
@@ -276,7 +276,7 @@ def list_month_files(root: Path | None = None) -> list[Path]:
     return sorted(files, key=lambda p: p.name)
 
 
-def load_all_canonical_rows(root: Path | None = None, *, strict: bool = False) -> list[dict]:
+def load_all_canonical_rows(root: Path | None = None, *, strict: bool = True) -> list[dict]:
     rows: list[dict] = []
     for path in list_month_files(root):
         rows.extend(load_jsonl_rows(path, strict=strict))
@@ -304,7 +304,7 @@ def build_generation_month_payloads(
     payloads: dict[str, str] = {}
     for mk, new_rows in by_month.items():
         path = month_file_path(root, mk)
-        existing = load_jsonl_rows(path)
+        existing = load_jsonl_rows(path, strict=True)
         merged, n_new = merge_observations(existing, new_rows)
         if n_new == 0:
             continue
@@ -326,17 +326,20 @@ def write_month_payloads(dest_dir: Path, payloads: dict[str, str]) -> list[Path]
 def materialize_runtime_daily(
     root: Path | None = None,
     *,
-    strict: bool = False,
+    strict: bool = True,
 ) -> Path:
     """Deterministic materializer: canonical monthly JSONL → runtime daily.jsonl.
 
-    Atomic write. Malformed rows are rejected (skipped unless strict).
-    Does not invent or repair EPS. Ordering is stable.
+    Production/default is fail-closed (``strict=True``): malformed or schema-invalid
+    rows raise ``CanonicalHistoryError`` and MUST NOT overwrite an existing valid
+    runtime ``daily.jsonl``. Pass ``strict=False`` only for explicit inspection
+    / recovery. Does not invent or repair EPS. Ordering is stable.
     """
     root = Path(root or ROOT)
+    dest = runtime_daily_path(root)
+    # Load (and reject) BEFORE any write so a corrupt SoT cannot clobber a good cache.
     rows = load_all_canonical_rows(root, strict=strict)
     text = format_jsonl(rows)
-    dest = runtime_daily_path(root)
     dest.parent.mkdir(parents=True, exist_ok=True)
     atomic_write_text(dest, text)
     return dest
@@ -367,17 +370,21 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument(
         "--materialize",
         action="store_true",
-        help="Rebuild data/daily_eps_snapshots/daily.jsonl from data/history/eps_daily/*.jsonl",
+        help="Rebuild data/daily_eps_snapshots/daily.jsonl from data/history/eps_daily/*.jsonl (fail-closed)",
     )
     ap.add_argument(
-        "--strict",
+        "--lenient",
         action="store_true",
-        help="Fail closed on malformed canonical rows (default: skip malformed)",
+        help="Inspection/recovery only: skip malformed canonical rows instead of failing",
     )
     args = ap.parse_args(argv)
     root = args.root or ROOT
     if args.materialize:
-        dest = materialize_runtime_daily(root, strict=args.strict)
+        try:
+            dest = materialize_runtime_daily(root, strict=not args.lenient)
+        except CanonicalHistoryError as exc:
+            print(f"ERROR: canonical materialize failed (runtime daily.jsonl unchanged): {exc}", file=sys.stderr)
+            return 1
         n = 0
         if dest.exists() and dest.stat().st_size:
             n = sum(1 for line in dest.read_text(encoding="utf-8").splitlines() if line.strip())

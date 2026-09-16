@@ -132,7 +132,9 @@ Writer: `tools/canonical_eps_history.py` (called from ingest COMMIT). Materializ
 
 Admission: only quality-gate-passed observations enter canonical history (never quarantined, invalid fiscal, null/non-finite EPS, revision-history seeds, or staged-but-never-committed). Canonical files are built into the generation **before** CURRENT flips; live `data/history/` is updated only on materialize after a successful financial commit.
 
-Source-git persist (`git add data/history/eps_daily`) runs **after** CURRENT. Push failure does not roll back financial state; retry is idempotent (identical observation = no-op). Pages publish is unchanged (public `web/` only).
+Materialize (`python3 tools/canonical_eps_history.py --materialize`) is **fail-closed**: malformed or schema-invalid canonical rows abort and do **not** overwrite an existing valid runtime `daily.jsonl`. `--lenient` is inspection/recovery only.
+
+Source-git persist (`git add data/history/eps_daily`) runs **after** CURRENT. Push failure does not roll back financial state; retry **pushes the unpushed local commit** even when the working tree is clean (nothing staged ≠ remote is durable). Pages publish is unchanged (public `web/` only).
 
 **No production backfill in this change.** Existing workspace `daily.jsonl` / generations are not copied into canonical (that is a later backfill). Until backfill, a fresh clone reconstructs only observations that have been committed to canonical files going forward.
 

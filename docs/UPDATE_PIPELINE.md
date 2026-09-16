@@ -122,7 +122,7 @@ Shared helper: `tools/revision_windows.py` — used by both `export_web_data.py`
 | Path | Role | Git-tracked? |
 |------|------|----------------|
 | `data/history/eps_daily/YYYY-MM.jsonl` | Canonical durable SoT (monthly append-only). | Yes (source repo) |
-| `data/daily_eps_snapshots/daily.jsonl` | Runtime cache. Rebuild: `python3 tools/canonical_eps_history.py --materialize`. | No |
+| `data/daily_eps_snapshots/daily.jsonl` | Runtime cache. Rebuild: `python3 tools/canonical_eps_history.py --materialize` (fail-closed). | No |
 | `data/generations/<runId>/` | Immutable generation; CURRENT is the financial commit. Updated canonical months only — not a full history copy. | No |
 | `data/*.json`, `web/data/*.json` | Public derived exports (Pages). | Public JSON only |
 
