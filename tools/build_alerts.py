@@ -4,11 +4,17 @@
 Rules (documented, no ML / no invented thresholds beyond these):
   1. Single consensus EPS revision |revisionPct| > 2% (from revision events;
      baselines / n/a skipped). Computes pct from previous→current when missing.
-  2. Cumulative INTERNAL 30D revision from daily.jsonl (same ticker +
-     reportedFiscalPeriodEnding): nearest valid obs at window start vs latest.
-     Stateful hysteresis: |pct|>=5% Open; stays >=5% Update same alert ID;
-     |pct|<4% Resolve. History only Open / material Update / Resolved (no daily spam).
+     2. Cumulative INTERNAL 30D revision from daily.jsonl (same ticker +
+     reportedFiscalPeriodEnding) via shared tools/revision_windows.py:
+     latest-observation anchor, schedule-aware weekday-gap baseline (Friday→Monday
+     valid; ancient obs cannot fake 30D). Stateful hysteresis: |pct|>=5% Open;
+     stays >=5% Update same alert ID; |pct|<4% Resolve. History only Open /
+     material Update / Resolved (no daily spam).
      If <2 usable daily points in window → alertDiagnostics only (NOT alertHistory).
+     NEVER reconstruct Internal 30D from revision-event history when daily.jsonl is empty.
+     Missing/unavailable daily history must not mint a new Internal 30D and must not
+     resolve a prior open (data loss ≠ abs(pct)<4%). True Resolved requires a valid
+     computed Internal 30D with |pct|<4%.
   2b. Source-reported SA 1M |rev1M|>=5% → source_reported_1m_revision
      labeled "Source window: Seeking Alpha 1M" (NEVER Internal 30D).
   3. Results vs consensus (resultsVsConsensus) and guidance vs consensus
@@ -52,6 +58,16 @@ if not (ROOT / "data" / "snapshots").exists():
             ROOT = cand
             break
         cand = cand.parent
+
+if str(_here) not in sys.path:
+    sys.path.insert(0, str(_here))
+
+from revision_windows import (  # noqa: E402
+    compute_internal_window,
+    evaluate_internal_window,
+    fiscal_identity_key,
+    group_daily_by_fiscal_identity,
+)
 
 REV_PATH = ROOT / "data" / "revisions" / "history.jsonl"
 EARNINGS_DIR = ROOT / "data" / "earnings"
@@ -392,13 +408,21 @@ def rule2_cumulative(
     """Cumulative first→last revision in TRUE lookback window — stateful.
 
     Primary source: data/daily_eps_snapshots/daily.jsonl grouped by
-    (ticker, reportedFiscalPeriodEnding). Uses nearest valid observation at
-    or before window start vs the latest observation in the window.
+    (ticker, reportedFiscalPeriodEnding) via shared revision_windows.py.
+    Latest-observation anchor; schedule-aware weekday-gap baseline (not 2-day
+    calendar slack). Friday→Monday is valid; ancient obs cannot fake 30D.
+    NEVER substitute revision-event history when daily.jsonl has no groups —
+    Internal 30D is fail-closed without daily observations (exporter has no
+    equivalent fallback). Missing/unavailable daily history also must not
+    resolve a prior open: empty groups or an unevaluable window is not
+    evidence that |pct| fell below 4%. Preserve the prior open (diagnostics
+    only) until a valid window can be computed.
 
     Stateful hysteresis (Internal 30D — never SA 1M):
       |pct| >= 5% → Open (or Update same active alert ID while stays >=5%)
-      |pct| < 4%  → Resolve active alert
+      |pct| < 4%  → Resolve active alert (valid computed window only)
       4% <= |pct| < 5% → hold prior Open/Updated (hysteresis band)
+      window unavailable / daily missing → no new Open, no Resolved
 
     History only records Open / material Update / Resolved — no daily spam.
     Stable alert ID per open episode (no daily minting).
@@ -410,44 +434,15 @@ def rule2_cumulative(
     now = now or datetime.now(timezone.utc)
     if now.tzinfo is None:
         now = now.replace(tzinfo=timezone.utc)
-    window_start = now - timedelta(days=lookback_days)
 
     rows = daily_rows if daily_rows is not None else load_daily_jsonl()
-    groups: dict[tuple, list] = {}
-    for row in rows:
-        ticker = row.get("ticker") or row.get("Ticker")
-        fiscal = (
-            row.get("reportedFiscalLabel")
-            or row.get("reportedFiscalPeriodEnding")
-            or row.get("fiscalKey")
-            or row.get("Fiscal Year")
-        )
-        if not ticker or not fiscal:
-            continue
-        cons = to_num(row.get("consensus") if "consensus" in row else row.get("Current EPS"))
-        if cons is None:
-            continue
-        dt = parse_date(row.get("date") or row.get("Date") or row.get("updateTime") or row.get("Update Time"))
-        if dt is None:
-            continue
-        groups.setdefault((ticker, fiscal), []).append((dt, cons, row))
+    groups = group_daily_by_fiscal_identity(rows)
+    # history (revision events) is intentionally unused for Internal 30D.
+    # Exporter has no revision-event fallback; labeling a history-derived
+    # move "Internal 30D" would disagree with the UI on a lost daily.jsonl.
+    _ = history
 
-    # Fallback: if no daily rows at all, derive sparse points from revision history
-    if not groups and history:
-        for row in history:
-            ticker = row.get("Ticker")
-            fiscal = row.get("Fiscal Year") or row.get("Calendar Alignment")
-            if not ticker or not fiscal:
-                continue
-            cur = to_num(row.get("Current EPS"))
-            if cur is None:
-                continue
-            dt = parse_date(row.get("Date") or row.get("Update Time"))
-            if dt is None:
-                continue
-            groups.setdefault((ticker, fiscal), []).append((dt, cur, row))
-
-    # Index prior open cumulative alerts by (ticker, fiscal)
+    # Index prior open cumulative alerts by normalized (ticker, fiscal)
     prior_open: dict[tuple, dict] = {}
     for a in prior_history or []:
         if not isinstance(a, dict):
@@ -457,9 +452,13 @@ def rule2_cumulative(
         st = str(a.get("status") or a.get("lifecycleStatus") or "").lower()
         if st == "resolved":
             continue
-        key = (a.get("ticker"), a.get("fiscalPeriod") or a.get("period") or a.get("fiscal"))
-        if not key[0] or not key[1]:
+        ident = fiscal_identity_key(
+            a.get("ticker"),
+            a.get("fiscalPeriod") or a.get("period") or a.get("fiscal"),
+        )
+        if not ident:
             continue
+        key = ident
         # Prefer most recently updated / opened
         prev = prior_open.get(key)
         if prev is None:
@@ -492,86 +491,65 @@ def rule2_cumulative(
         except Exception:
             return True
 
+    def _insufficient(ticker: str, fiscal: str, pts: list, message: str) -> None:
+        prior = prior_open.get((ticker, fiscal))
+        diagnostics.append(
+            {
+                "rule": "cumulative_revision_insufficient_history",
+                "severity": "info",
+                "ticker": ticker,
+                "period": fiscal,
+                "message": (
+                    message
+                    if prior is None
+                    else f"{message}; prior open Internal 30D preserved (window unavailable is not a resolve)"
+                ),
+                "lookbackDays": lookback_days,
+                "windowPointCount": len(pts),
+                "status": "insufficient history",
+                "eventAt": now_utc_iso(),
+                "diagnostic": True,
+                "priorAlertId": (prior or {}).get("id"),
+            }
+        )
+        # Fail closed: an unevaluable/missing window is not abs(pct)<4%.
+        # Do not mint a new Internal 30D and do not resolve a prior open.
+
     evaluated_keys = set()
     for (ticker, fiscal), pts in groups.items():
         evaluated_keys.add((ticker, fiscal))
-        pts_sorted = sorted(pts, key=lambda x: x[0])
-        before = [p for p in pts_sorted if p[0] <= window_start]
-        latest_candidates = [p for p in pts_sorted if p[0] <= now]
-        if not latest_candidates:
-            continue
-        latest = latest_candidates[-1]
-
-        start_pt = before[-1] if before else None
-        MAX_START_SLACK_DAYS = 2
-        if start_pt is not None and (window_start - start_pt[0]).days > MAX_START_SLACK_DAYS:
-            start_pt = None
-        if start_pt is None:
-            diagnostics.append(
-                {
-                    "rule": "cumulative_revision_insufficient_history",
-                    "severity": "info",
-                    "ticker": ticker,
-                    "period": fiscal,
-                    "message": (
-                        f"{ticker} {fiscal}: insufficient history for {lookback_days}D cumulative "
-                        "(no valid observation at/before window start)"
-                    ),
-                    "lookbackDays": lookback_days,
-                    "windowPointCount": len([p for p in pts_sorted if window_start <= p[0] <= now]),
-                    "status": "insufficient history",
-                    "eventAt": now_utc_iso(),
-                    "diagnostic": True,
-                }
-            )
-            # Resolve any prior open if we lost the window
-            prior = prior_open.get((ticker, fiscal))
-            if prior is not None:
-                resolved = dict(prior)
-                resolved["status"] = "Resolved"
-                resolved["lifecycleStatus"] = "Resolved"
-                resolved["lifecycleEvent"] = "Resolved"
-                resolved["resolvedAt"] = now.strftime("%Y-%m-%dT%H:%M:%SZ")
-                resolved["oneshot"] = False
-                resolved["expiresAt"] = now.strftime("%Y-%m-%dT%H:%M:%SZ")
-                resolved["activeUntil"] = resolved["expiresAt"]
-                resolved["message"] = (
-                    f"{ticker} {fiscal}: Internal 30D cumulative resolved "
-                    f"(insufficient history / window lost)"
-                )
-                resolved["title"] = resolved["message"]
-                resolved["windowLabel"] = "Internal 30D"
-                out.append(resolved)
-            continue
-
-        if latest[0] <= start_pt[0] or latest[1] is None:
-            diagnostics.append(
-                {
-                    "rule": "cumulative_revision_insufficient_history",
-                    "severity": "info",
-                    "ticker": ticker,
-                    "period": fiscal,
-                    "message": (
-                        f"{ticker} {fiscal}: insufficient history for {lookback_days}D cumulative "
-                        "(<2 distinct points spanning window)"
-                    ),
-                    "lookbackDays": lookback_days,
-                    "windowPointCount": 1,
-                    "status": "insufficient history",
-                    "eventAt": now_utc_iso(),
-                    "diagnostic": True,
-                }
+        ev = evaluate_internal_window(pts, as_of=now, window_days=lookback_days)
+        w = ev["window"]
+        latest = ev["latest"]
+        start_pt = ev["start"]
+        if w.get("status") != "ok" or latest is None or start_pt is None:
+            _insufficient(
+                ticker,
+                fiscal,
+                pts,
+                (
+                    f"{ticker} {fiscal}: insufficient history for {lookback_days}D cumulative "
+                    f"({w.get('reason') or 'no valid observation at/before window start'})"
+                ),
             )
             continue
 
-        first = start_pt[1]
-        last = latest[1]
-        if first is None or last is None or first == 0:
+        first = w.get("startEps")
+        last = w.get("endEps")
+        cum_pct = w.get("revisionPct")
+        if first is None or last is None or cum_pct is None:
+            _insufficient(
+                ticker,
+                fiscal,
+                pts,
+                f"{ticker} {fiscal}: insufficient history for {lookback_days}D cumulative (unusable EPS)",
+            )
             continue
-        cum_pct = (last - first) / abs(first) * 100.0
         abs_pct = abs(cum_pct)
         direction = "upgrade" if cum_pct > 0 else "downgrade"
-        last_date = latest[0].strftime("%Y-%m-%d")
+        last_date = w.get("endDate") or latest[0].strftime("%Y-%m-%d")
+        start_date = w.get("startDate") or start_pt[0].strftime("%Y-%m-%d")
+        latest_iso = latest[0].strftime("%Y-%m-%dT%H:%M:%SZ")
         prior = prior_open.get((ticker, fiscal))
 
         if abs_pct >= CUMULATIVE_OPEN_PCT:
@@ -586,20 +564,20 @@ def rule2_cumulative(
                     period=fiscal,
                     event_date=open_date,
                     event_key="internal_30d",
-                    event_at=latest[0].strftime("%Y-%m-%dT%H:%M:%SZ"),
+                    event_at=latest_iso,
                     cumulativePct=cum_pct,
                     lookbackDays=lookback_days,
                     fiscal=fiscal,
                     startEps=first,
                     endEps=last,
-                    startDate=start_pt[0].strftime("%Y-%m-%d"),
+                    startDate=start_date,
                     oneshot=False,
                     status="Open",
                     lifecycleStatus="Open",
                     lifecycleEvent="Open",
                     windowLabel="Internal 30D",
-                    openedAt=latest[0].strftime("%Y-%m-%dT%H:%M:%SZ"),
-                    updatedAt=latest[0].strftime("%Y-%m-%dT%H:%M:%SZ"),
+                    openedAt=latest_iso,
+                    updatedAt=latest_iso,
                     direction=direction,
                 )
                 a["id"] = _stable_cum_id(ticker, fiscal, open_date)
@@ -615,7 +593,7 @@ def rule2_cumulative(
                 a["cumulativePct"] = cum_pct
                 a["endEps"] = last
                 a["startEps"] = first
-                a["startDate"] = start_pt[0].strftime("%Y-%m-%d")
+                a["startDate"] = start_date
                 a["direction"] = direction
                 a["lookbackDays"] = lookback_days
                 a["oneshot"] = False
@@ -677,22 +655,36 @@ def rule2_cumulative(
                 a["windowLabel"] = "Internal 30D"
                 out.append(a)
 
-    # Resolve prior opens for keys no longer in groups (ticker/fiscal disappeared)
+    # Keys not in groups (empty/missing daily.jsonl, or this fiscal identity
+    # absent this run) are NOT a true resolve. Empty daily is data loss, not
+    # abs(pct)<4%, and is not independently proven fiscal-identity removal.
+    # Preserve prior opens until a valid Internal 30D window can be evaluated.
     for key, prior in prior_open.items():
         if key in evaluated_keys:
             continue
-        a = dict(prior)
-        a["status"] = "Resolved"
-        a["lifecycleStatus"] = "Resolved"
-        a["lifecycleEvent"] = "Resolved"
-        a["resolvedAt"] = now.strftime("%Y-%m-%dT%H:%M:%SZ")
-        a["oneshot"] = False
-        a["expiresAt"] = now.strftime("%Y-%m-%dT%H:%M:%SZ")
-        a["activeUntil"] = a["expiresAt"]
-        a["windowLabel"] = "Internal 30D"
-        a["message"] = f"{key[0]} {key[1]}: Internal 30D cumulative resolved (no longer tracked)"
-        a["title"] = a["message"]
-        out.append(a)
+        reason = (
+            "daily history unavailable"
+            if not groups
+            else "fiscal identity not in daily history"
+        )
+        diagnostics.append(
+            {
+                "rule": "cumulative_revision_insufficient_history",
+                "severity": "info",
+                "ticker": key[0],
+                "period": key[1],
+                "message": (
+                    f"{key[0]} {key[1]}: Internal 30D cannot be evaluated "
+                    f"({reason}); prior open preserved"
+                ),
+                "lookbackDays": lookback_days,
+                "windowPointCount": 0,
+                "status": "insufficient history",
+                "eventAt": now_utc_iso(),
+                "diagnostic": True,
+                "priorAlertId": prior.get("id"),
+            }
+        )
 
     return out, diagnostics
 

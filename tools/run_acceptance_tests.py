@@ -136,6 +136,7 @@ def build_fixture(dest: Path) -> Path:
     for name in (
         "export_web_data.py",
         "build_alerts.py",
+        "revision_windows.py",
         "sa_parser.py",
         "atomic_io.py",
         "snapshot_quality.py",
@@ -745,9 +746,9 @@ def test_cumulative_30d_window(fixture: Path) -> None:
         and a.get("ticker") == "TSM"
         and a.get("lookbackDays") == 30
     ]
-    # Must NOT emit a >5% 30D alert from all-history fallback
-    ok = len(insuff) >= 1 and len(fake_30d) == 0
-    ok = ok and any("insufficient history" in str(a.get("status") or a.get("message") or "").lower() for a in insuff)
+    # Must NOT emit a >5% 30D alert from revision-event / all-history fallback.
+    # Internal 30D is daily.jsonl only; empty daily_rows fail closed (no TSM window).
+    ok = len(fake_30d) == 0
     record("cumulative_30d_window_test", ok, f"insuff={len(insuff)} fake30d={len(fake_30d)}")
 
 
@@ -1386,11 +1387,12 @@ def test_cumulative_alert_no_daily_spam(fixture: Path) -> None:
     ids = {a.get("id") for a in cum_hist}
     ok = ok and aid in ids and len(ids) == 1
 
-    # Resolve when drops below 4%
+    # Resolve when a valid Internal 30D window drops below 4% (not missing history).
     now3 = now1 + timedelta(days=2)
     d2 = now3.strftime("%Y-%m-%d")
+    d30_now3 = (now3 - timedelta(days=30)).strftime("%Y-%m-%d")
     daily3 = [
-        {"date": d30, "ticker": "KEYS", "reportedFiscalLabel": "Oct 2027", "consensus": 10.0},
+        {"date": d30_now3, "ticker": "KEYS", "reportedFiscalLabel": "Oct 2027", "consensus": 10.0},
         {"date": d2, "ticker": "KEYS", "reportedFiscalLabel": "Oct 2027", "consensus": 10.3},  # +3%
     ]
     out3, _ = ba.rule2_cumulative(
@@ -5535,6 +5537,454 @@ def test_revision_momentum_public_schema(fixture: Path) -> None:
     )
 
 
+def test_revision_window_monday_friday_baseline_valid(fixture: Path) -> None:
+    """Monday targetDate + prior Friday baseline is valid (2-day slack used to reject)."""
+    exp = import_mod(fixture, "export_web_data")
+    rw = import_mod(fixture, "revision_windows")
+    # targetDate Monday 2026-08-17; latest = Monday + 30d = 2026-09-16 (Wed)
+    friday = datetime(2026, 8, 14, tzinfo=timezone.utc)
+    monday_target = datetime(2026, 8, 17, tzinfo=timezone.utc)
+    latest = datetime(2026, 9, 16, tzinfo=timezone.utc)
+    ok = (latest - monday_target).days == 30
+    ok = ok and friday.weekday() == 4 and monday_target.weekday() == 0
+    # Old 2-day calendar slack: (Mon - Fri).days = 3 > 2 → would be unavailable.
+    old_slack_days = (monday_target - friday).days
+    ok = ok and old_slack_days == 3
+    ticker, fiscal = "NVDA", "Jan 2028"
+    daily = [
+        _daily_pt(friday.strftime("%Y-%m-%d"), ticker, fiscal, 10.0, "2027E"),
+        _daily_pt(latest.strftime("%Y-%m-%d"), ticker, fiscal, 12.0, "2027E"),
+    ]
+    pts = exp.group_daily_by_fiscal_identity(daily)[exp.fiscal_identity_key(ticker, fiscal)]
+    w30 = exp.compute_internal_window(pts, as_of=latest, window_days=30)
+    ok = ok and w30.get("status") == "ok"
+    ok = ok and w30.get("targetDate") == monday_target.strftime("%Y-%m-%d")
+    ok = ok and w30.get("startDate") == friday.strftime("%Y-%m-%d")
+    ok = ok and abs(float(w30["revisionPct"]) - 20.0) < 1e-6
+    ok = ok and rw.baseline_gap_allowed(friday.date(), monday_target.date()) is True
+    ok = ok and rw.weekday_gap(friday.date(), monday_target.date()) == 1
+    ok = ok and rw.MAX_BASELINE_WEEKDAY_GAP == 1
+    # Alert engine must agree on the same input.
+    ba = import_mod(fixture, "build_alerts")
+    out, diag = ba.rule2_cumulative(history=[], lookback_days=30, daily_rows=daily, now=latest, prior_history=[])
+    hits = [a for a in out if a.get("ticker") == ticker and a.get("rule") == "cumulative_revision_gt_5pct"]
+    ok = ok and len(hits) == 1
+    if hits:
+        ok = ok and abs(float(hits[0]["cumulativePct"]) - 20.0) < 1e-6
+        ok = ok and hits[0].get("startDate") == friday.strftime("%Y-%m-%d")
+        ok = ok and hits[0].get("startEps") == 10.0
+        ok = ok and hits[0].get("endEps") == 12.0
+    ok = ok and not any(d.get("rule") == "cumulative_revision_insufficient_history" for d in diag if d.get("ticker") == ticker)
+    record(
+        "revision_window_monday_friday_baseline_valid_test",
+        ok,
+        f"status={w30.get('status')} pct={w30.get('revisionPct')} old_slack={old_slack_days}d alerts={len(hits)}",
+    )
+
+
+def test_revision_window_too_old_baseline_unavailable(fixture: Path) -> None:
+    """Ancient observation must not masquerade as a valid 30D baseline."""
+    exp = import_mod(fixture, "export_web_data")
+    rw = import_mod(fixture, "revision_windows")
+    as_of = datetime(2026, 9, 15, tzinfo=timezone.utc)
+    ticker, fiscal = "TSM", "Dec 2027"
+    ancient = as_of - timedelta(days=90)
+    daily = [
+        _daily_pt(ancient.strftime("%Y-%m-%d"), ticker, fiscal, 8.0, "2027E"),
+        _daily_pt(as_of.strftime("%Y-%m-%d"), ticker, fiscal, 12.0, "2027E"),
+    ]
+    pts = exp.group_daily_by_fiscal_identity(daily)[exp.fiscal_identity_key(ticker, fiscal)]
+    w30 = exp.compute_internal_window(pts, as_of=as_of, window_days=30)
+    fake_30 = (12.0 - 8.0) / 8.0 * 100.0
+    target = (as_of - timedelta(days=30)).date()
+    ok = w30.get("status") == "unavailable" and w30.get("revisionPct") is None
+    ok = ok and w30.get("reason") == "insufficient_history"
+    ok = ok and w30.get("revisionPct") != fake_30
+    ok = ok and rw.baseline_gap_allowed(ancient.date(), target) is False
+    ok = ok and rw.weekday_gap(ancient.date(), target) > rw.MAX_BASELINE_WEEKDAY_GAP
+    ba = import_mod(fixture, "build_alerts")
+    out, diag = ba.rule2_cumulative(history=[], lookback_days=30, daily_rows=daily, now=as_of, prior_history=[])
+    fake_alerts = [
+        a
+        for a in out
+        if a.get("ticker") == ticker
+        and a.get("rule") == "cumulative_revision_gt_5pct"
+        and str(a.get("lifecycleEvent") or "").lower() != "resolved"
+    ]
+    insuff = [d for d in diag if d.get("ticker") == ticker and d.get("rule") == "cumulative_revision_insufficient_history"]
+    ok = ok and len(fake_alerts) == 0 and len(insuff) >= 1
+    record(
+        "revision_window_too_old_baseline_unavailable_test",
+        ok,
+        f"30={w30.get('status')} fake={fake_30} gap={rw.weekday_gap(ancient.date(), target)} alerts={len(fake_alerts)}",
+    )
+
+
+def test_revision_window_same_day_prefers_latest_updatetime(fixture: Path) -> None:
+    """Same calendar day: latest updateTime wins; missing updateTime → last append."""
+    exp = import_mod(fixture, "export_web_data")
+    as_of = datetime(2026, 9, 15, 20, 0, tzinfo=timezone.utc)
+    ticker, fiscal = "MSFT", "Jun 2027"
+    d0 = as_of.strftime("%Y-%m-%d")
+    d30 = (as_of - timedelta(days=30)).strftime("%Y-%m-%d")
+    # Later updateTime is appended FIRST; earlier updateTime appended LAST.
+    daily_time = [
+        _daily_pt(d30, ticker, fiscal, 10.0, "2027E"),
+        {
+            **_daily_pt(d0, ticker, fiscal, 12.0, "2027E"),
+            "updateTime": "2026-09-15T18:00:00Z",
+        },
+        {
+            **_daily_pt(d0, ticker, fiscal, 10.5, "2027E"),
+            "updateTime": "2026-09-15T08:00:00Z",
+        },
+    ]
+    pts = exp.group_daily_by_fiscal_identity(daily_time)[exp.fiscal_identity_key(ticker, fiscal)]
+    w30 = exp.compute_internal_window(pts, as_of=as_of, window_days=30)
+    ok = w30.get("status") == "ok"
+    ok = ok and abs(float(w30["revisionPct"]) - 20.0) < 1e-6  # 10 → 12, not 10 → 10.5
+    ok = ok and abs(float(w30["endEps"]) - 12.0) < 1e-9
+    # Cutoff-aware: as_of=12:00 must keep 08:00 (10.5), not look ahead to 18:00 (12.0).
+    as_of_noon = datetime(2026, 9, 15, 12, 0, tzinfo=timezone.utc)
+    w_noon = exp.compute_internal_window(pts, as_of=as_of_noon, window_days=30)
+    ok = ok and w_noon.get("status") == "ok"
+    ok = ok and abs(float(w_noon["endEps"]) - 10.5) < 1e-9
+    ok = ok and abs(float(w_noon["revisionPct"]) - 5.0) < 1e-6  # 10 → 10.5
+    # No updateTime: last append order wins (10.5).
+    daily_append = [
+        _daily_pt(d30, ticker, fiscal, 10.0, "2027E"),
+        _daily_pt(d0, ticker, fiscal, 11.0, "2027E"),
+        _daily_pt(d0, ticker, fiscal, 10.5, "2027E"),
+    ]
+    pts2 = exp.group_daily_by_fiscal_identity(daily_append)[exp.fiscal_identity_key(ticker, fiscal)]
+    w30b = exp.compute_internal_window(pts2, as_of=as_of, window_days=30)
+    ok = ok and w30b.get("status") == "ok"
+    ok = ok and abs(float(w30b["endEps"]) - 10.5) < 1e-9
+    ok = ok and abs(float(w30b["revisionPct"]) - 5.0) < 1e-6  # 10 → 10.5
+    record(
+        "revision_window_same_day_prefers_latest_updatetime_test",
+        ok,
+        f"timed_end={w30.get('endEps')} noon_end={w_noon.get('endEps')} append_end={w30b.get('endEps')}",
+    )
+
+
+def test_export_30d_matches_alert_engine_30d(fixture: Path) -> None:
+    """export 30D and alert-engine 30D are identical on the same input (shared helper)."""
+    exp = import_mod(fixture, "export_web_data")
+    ba = import_mod(fixture, "build_alerts")
+    ok = getattr(exp.compute_internal_window, "__module__", "") == "revision_windows"
+    ok = ok and getattr(ba.compute_internal_window, "__module__", "") == "revision_windows"
+    ok = ok and getattr(exp.group_daily_by_fiscal_identity, "__module__", "") == "revision_windows"
+    as_of = datetime(2026, 9, 15, 12, 0, tzinfo=timezone.utc)
+    ticker, fiscal = "KEYS", "Oct 2027"
+    daily = [
+        _daily_pt((as_of - timedelta(days=30)).strftime("%Y-%m-%d"), ticker, fiscal, 15.0, "2027E"),
+        _daily_pt(as_of.strftime("%Y-%m-%d"), ticker, fiscal, 16.0, "2027E"),
+    ]
+    pts = exp.group_daily_by_fiscal_identity(daily)[exp.fiscal_identity_key(ticker, fiscal)]
+    w30 = exp.compute_internal_window(pts, as_of=as_of, window_days=30)
+    out, diag = ba.rule2_cumulative(history=[], lookback_days=30, daily_rows=daily, now=as_of, prior_history=[])
+    hits = [
+        a
+        for a in out
+        if a.get("ticker") == ticker and a.get("rule") == "cumulative_revision_gt_5pct"
+    ]
+    ok = ok and w30.get("status") == "ok"
+    ok = ok and len(hits) == 1
+    if hits:
+        ok = ok and abs(float(hits[0]["cumulativePct"]) - float(w30["revisionPct"])) < 1e-12
+        ok = ok and hits[0].get("startEps") == w30.get("startEps")
+        ok = ok and hits[0].get("endEps") == w30.get("endEps")
+        ok = ok and hits[0].get("startDate") == w30.get("startDate")
+        ok = ok and str(hits[0].get("eventDate") or "")[:10] == w30.get("endDate")
+    companies = {
+        ticker: {
+            "epsByFiscal": {
+                fiscal: {
+                    "consensus": 16.0,
+                    "reportedFiscalLabel": fiscal,
+                    "mappedYear": "2027E",
+                }
+            },
+            "eps": {},
+        }
+    }
+    rows = exp.build_revision_momentum(companies, [ticker], daily, as_of=as_of, year_keys=["2027E"])
+    w30b = ((rows[0].get("internal") or {}).get("30D") if rows else {}) or {}
+    ok = ok and abs(float(w30b.get("revisionPct")) - float(w30["revisionPct"])) < 1e-12
+    ok = ok and (
+        len(diag) == 0
+        or not any(
+            d.get("ticker") == ticker and d.get("rule") == "cumulative_revision_insufficient_history" for d in diag
+        )
+    )
+    record(
+        "export_30d_matches_alert_engine_30d_test",
+        ok,
+        f"exp={w30.get('revisionPct')} alert={(hits[0].get('cumulativePct') if hits else None)} module={getattr(exp.compute_internal_window, '__module__', None)}",
+    )
+
+
+def test_revision_window_same_day_as_of_cutoff(fixture: Path) -> None:
+    """08:00 EPS=10 + 18:00 EPS=12 same day: as_of=12:00 keeps 08:00; as_of=20:00 keeps 18:00."""
+    exp = import_mod(fixture, "export_web_data")
+    ba = import_mod(fixture, "build_alerts")
+    ticker, fiscal = "AVGO", "Oct 2027"
+    d0 = "2026-09-15"
+    d30 = "2026-08-16"
+    daily = [
+        _daily_pt(d30, ticker, fiscal, 9.0, "2027E"),
+        {**_daily_pt(d0, ticker, fiscal, 10.0, "2027E"), "updateTime": "2026-09-15T08:00:00Z"},
+        {**_daily_pt(d0, ticker, fiscal, 12.0, "2027E"), "updateTime": "2026-09-15T18:00:00Z"},
+    ]
+    pts = exp.group_daily_by_fiscal_identity(daily)[exp.fiscal_identity_key(ticker, fiscal)]
+    noon = datetime(2026, 9, 15, 12, 0, tzinfo=timezone.utc)
+    evening = datetime(2026, 9, 15, 20, 0, tzinfo=timezone.utc)
+    w_noon = exp.compute_internal_window(pts, as_of=noon, window_days=30)
+    w_eve = exp.compute_internal_window(pts, as_of=evening, window_days=30)
+    ok = w_noon.get("status") == "ok" and abs(float(w_noon["endEps"]) - 10.0) < 1e-9
+    ok = ok and abs(float(w_noon["revisionPct"]) - ((10.0 - 9.0) / 9.0 * 100.0)) < 1e-6
+    ok = ok and w_eve.get("status") == "ok" and abs(float(w_eve["endEps"]) - 12.0) < 1e-9
+    ok = ok and abs(float(w_eve["revisionPct"]) - ((12.0 - 9.0) / 9.0 * 100.0)) < 1e-6
+    # Alert engine must not look ahead either.
+    out_noon, _ = ba.rule2_cumulative(history=[], lookback_days=30, daily_rows=daily, now=noon, prior_history=[])
+    noon_hits = [a for a in out_noon if a.get("ticker") == ticker and a.get("rule") == "cumulative_revision_gt_5pct"]
+    # 9→10 is ~11.11% ≥ 5%, so an alert may open; endEps must be 10 not 12.
+    if noon_hits:
+        ok = ok and abs(float(noon_hits[0].get("endEps")) - 10.0) < 1e-9
+        ok = ok and abs(float(noon_hits[0].get("cumulativePct")) - float(w_noon["revisionPct"])) < 1e-12
+    record(
+        "revision_window_same_day_as_of_cutoff_test",
+        ok,
+        f"noon_end={w_noon.get('endEps')} eve_end={w_eve.get('endEps')} noon_alerts={len(noon_hits)}",
+    )
+
+
+def test_internal_30d_no_revision_event_fallback(fixture: Path) -> None:
+    """Revision events alone cannot create an Internal 30D alert when daily history is absent."""
+    ba = import_mod(fixture, "build_alerts")
+    exp = import_mod(fixture, "export_web_data")
+    now = datetime(2026, 9, 15, 12, 0, tzinfo=timezone.utc)
+    ticker, fiscal = "NVDA", "Jan 2028"
+    history = [
+        {
+            "Date": (now - timedelta(days=30)).strftime("%Y-%m-%d"),
+            "Ticker": ticker,
+            "Fiscal Year": fiscal,
+            "Calendar Alignment": "CY2027",
+            "Previous EPS": "n/a (baseline)",
+            "Current EPS": 10.0,
+            "Revision %": "n/a (baseline)",
+            "Reason": "baseline",
+            "Update Time": (now - timedelta(days=30)).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        },
+        {
+            "Date": now.strftime("%Y-%m-%d"),
+            "Ticker": ticker,
+            "Fiscal Year": fiscal,
+            "Calendar Alignment": "CY2027",
+            "Previous EPS": 10.0,
+            "Current EPS": 16.0,
+            "Revision %": 60.0,
+            "Reason": "upgrade",
+            "Update Time": now.strftime("%Y-%m-%dT%H:%M:%SZ"),
+        },
+    ]
+    out, diag = ba.rule2_cumulative(
+        history=history, lookback_days=30, daily_rows=[], now=now, prior_history=[]
+    )
+    internal_opens = [
+        a
+        for a in out
+        if a.get("rule") == "cumulative_revision_gt_5pct"
+        and str(a.get("lifecycleEvent") or a.get("status") or "").lower() not in {"resolved"}
+    ]
+    labeled = [a for a in out if "Internal 30D" in str(a.get("windowLabel") or a.get("message") or "")]
+    # Exporter also has no history fallback: empty daily → unavailable, not 60%.
+    w30 = exp.compute_internal_window([], as_of=now, window_days=30)
+    ok = len(internal_opens) == 0
+    ok = ok and not any(str(a.get("lifecycleEvent") or "").lower() == "open" for a in labeled)
+    ok = ok and w30.get("status") == "unavailable" and w30.get("revisionPct") is None
+    # Also via evaluate_alerts with empty daily.jsonl + revision history on disk.
+    hist_path = fixture / "data" / "revisions" / "history.jsonl"
+    hist_path.write_text("\n".join(json.dumps(r) for r in history) + "\n", encoding="utf-8")
+    jsonl = fixture / "data" / "daily_eps_snapshots" / "daily.jsonl"
+    jsonl.parent.mkdir(parents=True, exist_ok=True)
+    if jsonl.exists():
+        jsonl.write_text("", encoding="utf-8")
+    (fixture / "data" / "alerts" / "index.json").write_text(
+        json.dumps({"alerts": [], "activeAlerts": [], "alertHistory": []}, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    payload = ba.evaluate_alerts(now=now)
+    hist_alerts = [
+        a
+        for a in (payload.get("alertHistory") or []) + (payload.get("activeAlerts") or [])
+        if a.get("rule") == "cumulative_revision_gt_5pct"
+        and a.get("ticker") == ticker
+        and str(a.get("lifecycleEvent") or a.get("status") or "").lower() not in {"resolved"}
+    ]
+    ok = ok and len(hist_alerts) == 0
+    record(
+        "internal_30d_no_revision_event_fallback_test",
+        ok,
+        f"opens={len(internal_opens)} labeled={len(labeled)} eval={len(hist_alerts)} exp={w30.get('status')} diag={len(diag)}",
+    )
+
+
+def test_internal_30d_missing_daily_does_not_false_resolve(fixture: Path) -> None:
+    """Prior open Internal 30D + empty/missing daily history must not emit Resolved."""
+    ba = import_mod(fixture, "build_alerts")
+    now = datetime(2026, 9, 15, 12, 0, tzinfo=timezone.utc)
+    ticker, fiscal = "KEYS", "Oct 2027"
+    d0 = now.strftime("%Y-%m-%d")
+    d30 = (now - timedelta(days=30)).strftime("%Y-%m-%d")
+    daily_open = [
+        _daily_pt(d30, ticker, fiscal, 10.0, "2027E"),
+        _daily_pt(d0, ticker, fiscal, 11.0, "2027E"),  # +10% ≥ 5%
+    ]
+    out_open, _ = ba.rule2_cumulative(
+        history=[], lookback_days=30, daily_rows=daily_open, now=now, prior_history=[]
+    )
+    opens = [
+        a
+        for a in out_open
+        if a.get("ticker") == ticker
+        and a.get("rule") == "cumulative_revision_gt_5pct"
+        and str(a.get("lifecycleEvent") or "").lower() == "open"
+    ]
+    ok = len(opens) == 1
+    aid = opens[0]["id"] if opens else None
+    prior = opens[:1]
+
+    # Empty daily_rows: no new Open, no Resolved; prior stays unevaluated.
+    out_empty, diag_empty = ba.rule2_cumulative(
+        history=[], lookback_days=30, daily_rows=[], now=now + timedelta(days=1), prior_history=prior
+    )
+    empty_cum = [a for a in out_empty if a.get("rule") == "cumulative_revision_gt_5pct"]
+    empty_resolved = [
+        a
+        for a in empty_cum
+        if str(a.get("lifecycleEvent") or a.get("status") or "").lower() == "resolved"
+        or "no longer tracked" in str(a.get("message") or "").lower()
+        or "window lost" in str(a.get("message") or "").lower()
+    ]
+    empty_new_open = [a for a in empty_cum if str(a.get("lifecycleEvent") or "").lower() == "open"]
+    ok = ok and len(empty_resolved) == 0 and len(empty_new_open) == 0
+    ok = ok and not any(str(a.get("id")) == str(aid) and str(a.get("status") or "").lower() == "resolved" for a in out_empty)
+
+    # Identity present but window unevaluable (single point) also must not resolve.
+    daily_one = [_daily_pt((now + timedelta(days=1)).strftime("%Y-%m-%d"), ticker, fiscal, 11.0, "2027E")]
+    out_one, diag_one = ba.rule2_cumulative(
+        history=[], lookback_days=30, daily_rows=daily_one, now=now + timedelta(days=1), prior_history=prior
+    )
+    one_resolved = [
+        a
+        for a in out_one
+        if a.get("rule") == "cumulative_revision_gt_5pct"
+        and str(a.get("lifecycleEvent") or a.get("status") or "").lower() == "resolved"
+    ]
+    ok = ok and len(one_resolved) == 0
+    ok = ok and any(
+        d.get("diagnostic") and d.get("ticker") == ticker for d in list(diag_empty) + list(diag_one)
+    )
+
+    # evaluate_alerts merge: empty daily.jsonl keeps prior in activeAlerts / history (not Resolved).
+    jsonl = fixture / "data" / "daily_eps_snapshots" / "daily.jsonl"
+    jsonl.parent.mkdir(parents=True, exist_ok=True)
+    jsonl.write_text("", encoding="utf-8")
+    (fixture / "data" / "alerts" / "index.json").write_text(
+        json.dumps({"alerts": prior, "activeAlerts": prior, "alertHistory": prior}, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    payload = ba.evaluate_alerts(now=now + timedelta(days=1))
+    hist = payload.get("alertHistory") or []
+    active = payload.get("activeAlerts") or []
+    hist_hit = [a for a in hist if a.get("id") == aid]
+    active_hit = [a for a in active if a.get("id") == aid]
+    hist_resolved = [
+        a
+        for a in hist
+        if a.get("id") == aid and str(a.get("lifecycleEvent") or a.get("status") or "").lower() == "resolved"
+    ]
+    ok = ok and len(hist_hit) == 1 and str(hist_hit[0].get("status") or "").lower() != "resolved"
+    ok = ok and len(active_hit) == 1 and str(active_hit[0].get("status") or "").lower() != "resolved"
+    ok = ok and len(hist_resolved) == 0
+    record(
+        "internal_30d_missing_daily_does_not_false_resolve_test",
+        ok,
+        f"aid={aid} empty_res={len(empty_resolved)} one_res={len(one_resolved)} "
+        f"active={len(active_hit)} hist_res={len(hist_resolved)}",
+    )
+
+
+def test_internal_30d_valid_window_below_4pct_resolves(fixture: Path) -> None:
+    """Valid Internal 30D with abs(pct)<4% still resolves a prior open."""
+    ba = import_mod(fixture, "build_alerts")
+    now = datetime(2026, 9, 15, 12, 0, tzinfo=timezone.utc)
+    ticker, fiscal = "KEYS", "Oct 2027"
+    d0 = now.strftime("%Y-%m-%d")
+    d30 = (now - timedelta(days=30)).strftime("%Y-%m-%d")
+    daily_open = [
+        _daily_pt(d30, ticker, fiscal, 10.0, "2027E"),
+        _daily_pt(d0, ticker, fiscal, 11.0, "2027E"),  # +10%
+    ]
+    out_open, _ = ba.rule2_cumulative(
+        history=[], lookback_days=30, daily_rows=daily_open, now=now, prior_history=[]
+    )
+    opens = [
+        a
+        for a in out_open
+        if a.get("ticker") == ticker
+        and a.get("rule") == "cumulative_revision_gt_5pct"
+        and str(a.get("lifecycleEvent") or "").lower() == "open"
+    ]
+    ok = len(opens) == 1
+    aid = opens[0]["id"] if opens else None
+    now2 = now + timedelta(days=2)
+    d2 = now2.strftime("%Y-%m-%d")
+    d30b = (now2 - timedelta(days=30)).strftime("%Y-%m-%d")
+    daily_resolve = [
+        _daily_pt(d30b, ticker, fiscal, 10.0, "2027E"),
+        _daily_pt(d2, ticker, fiscal, 10.3, "2027E"),  # +3% < 4%
+    ]
+    out_res, _ = ba.rule2_cumulative(
+        history=[], lookback_days=30, daily_rows=daily_resolve, now=now2, prior_history=opens
+    )
+    resolved = [
+        a
+        for a in out_res
+        if a.get("id") == aid
+        and (
+            str(a.get("lifecycleEvent") or "").lower() == "resolved"
+            or str(a.get("status") or "").lower() == "resolved"
+        )
+    ]
+    ok = ok and len(resolved) == 1
+    ok = ok and "< 4" in str(resolved[0].get("message") or "")
+    # evaluate_alerts: prior open + valid <4% window → no longer active.
+    jsonl = fixture / "data" / "daily_eps_snapshots" / "daily.jsonl"
+    jsonl.parent.mkdir(parents=True, exist_ok=True)
+    jsonl.write_text("\n".join(json.dumps(r) for r in daily_resolve) + "\n", encoding="utf-8")
+    (fixture / "data" / "alerts" / "index.json").write_text(
+        json.dumps({"alerts": opens, "activeAlerts": opens, "alertHistory": opens}, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    payload = ba.evaluate_alerts(now=now2)
+    hist_resolved = [
+        a
+        for a in (payload.get("alertHistory") or [])
+        if a.get("id") == aid and str(a.get("status") or a.get("lifecycleEvent") or "").lower() == "resolved"
+    ]
+    active_hit = [a for a in (payload.get("activeAlerts") or []) if a.get("id") == aid]
+    ok = ok and len(hist_resolved) == 1 and len(active_hit) == 0
+    record(
+        "internal_30d_valid_window_below_4pct_resolves_test",
+        ok,
+        f"aid={aid} resolved={len(resolved)} hist_res={len(hist_resolved)} active={len(active_hit)}",
+    )
+
+
 # Suite classification: integration = subprocess/crash/publish/heavy ingest
 INTEGRATION_TEST_NAMES = {
     "test_full_export_2027_rollover",
@@ -5736,6 +6186,14 @@ def _all_suite_tests():
         ("test_analyst_direction_unavailable_when_not_in_source", test_analyst_direction_unavailable_when_not_in_source),
         ("test_internal_revision_anchor_latest_observation", test_internal_revision_anchor_latest_observation),
         ("test_revision_momentum_public_schema", test_revision_momentum_public_schema),
+        ("test_revision_window_monday_friday_baseline_valid", test_revision_window_monday_friday_baseline_valid),
+        ("test_revision_window_too_old_baseline_unavailable", test_revision_window_too_old_baseline_unavailable),
+        ("test_revision_window_same_day_prefers_latest_updatetime", test_revision_window_same_day_prefers_latest_updatetime),
+        ("test_export_30d_matches_alert_engine_30d", test_export_30d_matches_alert_engine_30d),
+        ("test_revision_window_same_day_as_of_cutoff", test_revision_window_same_day_as_of_cutoff),
+        ("test_internal_30d_no_revision_event_fallback", test_internal_30d_no_revision_event_fallback),
+        ("test_internal_30d_missing_daily_does_not_false_resolve", test_internal_30d_missing_daily_does_not_false_resolve),
+        ("test_internal_30d_valid_window_below_4pct_resolves", test_internal_30d_valid_window_below_4pct_resolves),
     ]
 
 

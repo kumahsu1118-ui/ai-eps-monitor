@@ -21,7 +21,7 @@ Repo: https://github.com/kumahsu1118-ui/ai-eps-monitor
 
 ### 3. Pull consensus & prices
 - For each ticker: earnings estimates & revisions (SA **1M/3M/6M** only; never invent SA 7D/30D/90D; never treat **1M as 30D** or **3M as 90D**).
-- **Internal 30D/60D/90D** are computed later at export from `data/daily_eps_snapshots/daily.jsonl` (identity = ticker + Reported Fiscal Period Ending). Each window is anchored on the **latest valid observation** for that identity (`targetDate = latestDate − N days`), not the snapshot timestamp. Insufficient history → unavailable.
+- **Internal 30D/60D/90D** are computed later at export from `data/daily_eps_snapshots/daily.jsonl` (identity = ticker + Reported Fiscal Period Ending). Shared helper: `tools/revision_windows.py` (also used by the alert engine). Each window is anchored on the **latest valid observation** for that identity (`targetDate = latestDate − N days`), not the snapshot timestamp. Baseline uses a **schedule-aware weekday-gap** rule (weekdays `0 8 * * 1-5` Taipei): Friday→Monday is valid; an ancient observation cannot fake a 30D baseline. Insufficient history → unavailable.
 - Record **Last Close** (regular session) and **After Hours** separately if shown.
 - Preserve **Reported Fiscal Period Ending**; map only to FY-mapped calendar **slots** (not true CY EPS).
 
@@ -109,9 +109,19 @@ Seeking Alpha cookies/sessions, GitHub tokens beyond Actions secrets (none requi
 
 ## EPS Revision Momentum (Internal 30/60/90D)
 
-- Computed in `export_web_data.py` from append-only `daily.jsonl` during the ingest export/read path (no second persistent writer).
+- Computed from append-only `daily.jsonl` during the ingest export/read path (no second persistent writer). Formula lives in **`tools/revision_windows.py`** and is used by both `export_web_data.py` and `build_alerts.py`.
 - Identity = ticker + normalized `reportedFiscalPeriodEnding`. Mapped year/slot is display-only.
 - Windows are independent: missing 30D history does not borrow 60D/90D or the oldest observation.
 - Window origin = latest valid daily observation for that fiscal identity; `targetDate = latestDate − N days` (snapshot `as_of` is only a cutoff).
+- Same-day `(ticker, reportedFiscalPeriodEnding, date)`: effective time is `updateTime` when present (else date midnight). Collapse is **cutoff-aware**: latest `updateTime` at or before `as_of`, else last append among remaining rows. An 18:00 observation must not leak into an `as_of=12:00` window.
+- Baseline admission is a **schedule-aware weekday-gap** rule (`MAX_BASELINE_WEEKDAY_GAP = 1` weekdays in `(baselineDate, targetDate]`). Collection is weekdays 08:00 Taipei, so Friday→Monday is valid. An observation many collection days before `targetDate` is fail-closed unavailable and cannot masquerade as a 30D baseline. Documented in `tools/revision_windows.py`.
+- Internal 30D alerts use the same helper and **daily.jsonl only**. Revision-event history is never substituted when daily observations are absent (fail closed). Missing/unavailable daily history also must not resolve a prior open Internal 30D — that is not `|pct| < 4%`. True `Resolved` requires a valid computed Internal 30D below the 4% hysteresis threshold.
 - SA **1M/3M/6M** remain Source-reported on `#/revisions` and are never copied onto Internal 30/60/90D.
 - Up/Down Analyst counts: captured SA sources in this repo do not include them → `null` / unavailable (never derived from EPS moves).
+
+## daily.jsonl persistence (location only)
+
+- Live cache: `data/daily_eps_snapshots/daily.jsonl`
+- Committed copy: `data/generations/<runId>/daily_eps_snapshots/daily.jsonl` (CURRENT pointer is the financial commit)
+- Ingest COMMIT copies live JSONL into the new generation, then appends pending rows; materialize copies CURRENT → live.
+- **Not in git / not in the GitHub Pages payload.** Public `data/*.json` and `web/data/*.json` are derived exports. A fresh clone or fresh Cloud Agent workspace does **not** carry `daily.jsonl`; Internal 30/60/90D will be unavailable until enough weekday collections accumulate on that machine. Restart of the same workspace is durable only if `data/generations/` (CURRENT) survives.

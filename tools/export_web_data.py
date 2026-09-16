@@ -33,6 +33,16 @@ import sys as _sys
 if str(_here) not in _sys.path:
     _sys.path.insert(0, str(_here))
 
+from revision_windows import (  # noqa: E402
+    INTERNAL_REVISION_WINDOWS,
+    MAX_BASELINE_WEEKDAY_GAP,
+    compute_internal_window,
+    evaluate_internal_window,
+    fiscal_identity_key,
+    group_daily_by_fiscal_identity,
+    parse_obs_datetime,
+)
+
 SNAP_DIR = ROOT / "data" / "snapshots"
 REV_PATH = ROOT / "data" / "revisions" / "history.jsonl"
 DRIVERS_DIR = ROOT / "data" / "drivers"
@@ -761,16 +771,14 @@ REVISION_REGIME_DOC = (
     "Complements Momentum (which can be Neutral when legs diverge)."
 )
 
-INTERNAL_REVISION_WINDOWS = (30, 60, 90)
-# Allow a weekday/holiday gap at the window-start boundary. Observations older
-# than this are NOT used as a substitute baseline (never "oldest in series").
-INTERNAL_WINDOW_START_SLACK_DAYS = 2
 INTERNAL_REVISION_NOTE = (
     "Internal 30D/60D/90D are computed from daily EPS history keyed by "
     "ticker + reportedFiscalPeriodEnding (normalized). Each window is anchored "
     "on the latest valid observation for that identity (targetDate = latestDate − N days), "
-    "not the snapshot timestamp. Insufficient history → unavailable "
-    "(never substitute the oldest observation). "
+    "not the snapshot timestamp. Baseline admission is the schedule-aware "
+    "weekday-gap rule in tools/revision_windows.py (Friday→Monday valid; "
+    "ancient observations cannot fake an N-day baseline). Insufficient history "
+    "→ unavailable (never substitute the oldest observation). "
     "Seeking Alpha 1M/3M/6M are Source-reported windows and are never treated "
     "as Internal 30/60/90D. Up/Down Analyst counts are unavailable unless "
     "present as source-native fields (captured SA sources in this repo do not "
@@ -1296,165 +1304,6 @@ def build_eps_history_from_daily(daily_rows: list[dict]) -> dict:
     return hist
 
 
-def _parse_obs_datetime(value) -> datetime | None:
-    """Parse a daily-snapshot timestamp to UTC datetime."""
-    if value is None:
-        return None
-    if isinstance(value, datetime):
-        dt = value
-        if dt.tzinfo is None:
-            dt = dt.replace(tzinfo=timezone.utc)
-        return dt.astimezone(timezone.utc)
-    s = str(value).strip()
-    if not s:
-        return None
-    for fmt in ("%Y-%m-%d", "%Y-%m-%dT%H:%M:%SZ", "%Y-%m-%dT%H:%M:%S"):
-        try:
-            piece = s[:10] if fmt == "%Y-%m-%d" else s[:19]
-            dt = datetime.strptime(piece, fmt)
-            return dt.replace(tzinfo=timezone.utc)
-        except Exception:
-            continue
-    try:
-        if s.endswith("Z"):
-            s = s[:-1] + "+00:00"
-        dt = datetime.fromisoformat(s)
-        if dt.tzinfo is None:
-            dt = dt.replace(tzinfo=timezone.utc)
-        return dt.astimezone(timezone.utc)
-    except Exception:
-        return None
-
-
-def fiscal_identity_key(ticker, fiscal_label) -> tuple[str, str] | None:
-    """Cross-time identity: ticker + normalized reportedFiscalPeriodEnding.
-
-    Mapped year / slot is display-only and must not be used as identity.
-    """
-    import sa_parser as _sa
-
-    t = str(ticker or "").strip().upper()
-    lab = _sa.normalize_fiscal_period_label(fiscal_label)
-    if not t or not lab:
-        return None
-    return (t, lab)
-
-
-def group_daily_by_fiscal_identity(daily_rows: list[dict] | None) -> dict[tuple[str, str], list]:
-    """Group daily.jsonl observations by (ticker, reportedFiscalPeriodEnding)."""
-    groups: dict[tuple[str, str], list] = {}
-    for row in daily_rows or []:
-        if not isinstance(row, dict):
-            continue
-        ticker = row.get("ticker") or row.get("Ticker")
-        fiscal = (
-            row.get("reportedFiscalPeriodEnding")
-            or row.get("reportedFiscalLabel")
-            or row.get("fiscalKey")
-            or row.get("Fiscal Year")
-        )
-        # Explicitly ignore mappedYear / slot as identity.
-        key = fiscal_identity_key(ticker, fiscal)
-        if not key:
-            continue
-        cons = to_num(row.get("consensus") if "consensus" in row else row.get("Current EPS"))
-        if cons is None:
-            continue
-        dt = _parse_obs_datetime(
-            row.get("date") or row.get("Date") or row.get("updateTime") or row.get("Update Time")
-        )
-        if dt is None:
-            continue
-        groups.setdefault(key, []).append((dt, cons, row))
-    for key in groups:
-        groups[key].sort(key=lambda x: x[0])
-    return groups
-
-
-def compute_internal_window(
-    points: list | None,
-    *,
-    as_of: datetime,
-    window_days: int,
-    max_start_slack_days: int = INTERNAL_WINDOW_START_SLACK_DAYS,
-) -> dict:
-    """Internal N-day consensus revision from real daily history.
-
-    Anchor: latest valid observation at or before as_of for this fiscal identity.
-    targetDate = latestDate − N days. Snapshot/as_of is only a cutoff for which
-    points are eligible — it is not the window origin when it is ahead of the
-    latest usable daily observation (weekend, stale/partial, missing ticker day).
-
-    Baseline = nearest valid observation at or before targetDate (within slack)
-    vs that latest observation. Insufficient history → unavailable. Never
-    substitutes the oldest observation when it is outside the window-start slack.
-    Zero baseline → unavailable (no division by zero).
-    """
-    label = f"Internal {int(window_days)}D"
-    unavailable = {
-        "windowDays": int(window_days),
-        "windowLabel": label,
-        "status": "unavailable",
-        "reason": "insufficient_history",
-        "revisionPct": None,
-        "startEps": None,
-        "endEps": None,
-        "startDate": None,
-        "endDate": None,
-        "anchorDate": None,
-        "targetDate": None,
-    }
-    if as_of.tzinfo is None:
-        as_of = as_of.replace(tzinfo=timezone.utc)
-    as_of = as_of.astimezone(timezone.utc)
-    pts = list(points or [])
-    if not pts:
-        return dict(unavailable)
-    latest_candidates = [p for p in pts if p[0] <= as_of]
-    if not latest_candidates:
-        return dict(unavailable)
-    latest = latest_candidates[-1]
-    # Derive the N-day target from the latest observation, not snapshot as_of.
-    window_start = latest[0] - timedelta(days=int(window_days))
-    before = [p for p in pts if p[0] <= window_start]
-    start_pt = before[-1] if before else None
-    if start_pt is not None and (window_start - start_pt[0]).days > max_start_slack_days:
-        # Oldest-in-series (or any far-before point) is not a valid N-day baseline.
-        start_pt = None
-    end_meta = {
-        "endEps": latest[1],
-        "endDate": latest[0].strftime("%Y-%m-%d"),
-        "anchorDate": latest[0].strftime("%Y-%m-%d"),
-        "targetDate": window_start.strftime("%Y-%m-%d"),
-    }
-    if start_pt is None:
-        return {**unavailable, **end_meta}
-    if latest[0] <= start_pt[0]:
-        return {**unavailable, **end_meta}
-    first = start_pt[1]
-    last = latest[1]
-    start_meta = {
-        "startEps": first,
-        "startDate": start_pt[0].strftime("%Y-%m-%d"),
-        **end_meta,
-    }
-    if first is None or last is None:
-        return {**unavailable, **start_meta}
-    if first == 0:
-        return {**unavailable, "reason": "zero_baseline", **start_meta}
-    pct = (last - first) / abs(first) * 100.0
-    if not math.isfinite(pct):
-        return {**unavailable, "reason": "zero_baseline", **start_meta}
-    return {
-        "windowDays": int(window_days),
-        "windowLabel": label,
-        "status": "ok",
-        "reason": None,
-        "revisionPct": pct,
-        **start_meta,
-    }
-
-
 def _source_reported_windows(eps_entry: dict | None) -> dict:
     e = eps_entry or {}
     out = {}
@@ -1485,7 +1334,7 @@ def build_revision_momentum(
     import sa_parser as _sa
 
     if isinstance(as_of, str):
-        as_of_dt = _parse_obs_datetime(as_of)
+        as_of_dt = parse_obs_datetime(as_of)
     else:
         as_of_dt = as_of
     as_of_dt = as_of_dt or datetime.now(timezone.utc)
