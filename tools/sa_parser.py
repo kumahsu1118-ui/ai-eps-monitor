@@ -99,23 +99,74 @@ _ROW_RE = re.compile(
     re.I | re.S,
 )
 
+# Captured Seeking Alpha estimate/revision fixtures in this repo expose
+# Fiscal Period Ending, consensus, high, low, # Analysts, and 1M/3M/6M only.
+# There is no source-native Up/Down Analyst count column or JSON key.
+# Pass through these aliases IF a future capture actually includes them;
+# never derive counts from consensus changes.
+SA_UP_ANALYST_KEYS = (
+    "upAnalysts",
+    "analystsUp",
+    "numUp",
+    "upCount",
+    "up_analysts",
+    "analystsRaising",
+    "upRevisions",
+    "numberOfUpwardRevisions",
+)
+SA_DOWN_ANALYST_KEYS = (
+    "downAnalysts",
+    "analystsDown",
+    "numDown",
+    "downCount",
+    "down_analysts",
+    "analystsLowering",
+    "downRevisions",
+    "numberOfDownwardRevisions",
+)
+
+
+def source_analyst_direction(row: dict | None = None) -> dict:
+    """Return source-native Up/Down Analyst counts, or unavailable.
+
+    Does **not** invent or derive counts from EPS moves, High/Low, or # Analysts.
+    """
+    row = row if isinstance(row, dict) else {}
+    up = None
+    down = None
+    for k in SA_UP_ANALYST_KEYS:
+        if k in row and row.get(k) is not None:
+            up = to_num(row.get(k))
+            break
+    for k in SA_DOWN_ANALYST_KEYS:
+        if k in row and row.get(k) is not None:
+            down = to_num(row.get(k))
+            break
+    present = up is not None or down is not None
+    return {
+        "upAnalysts": up,
+        "downAnalysts": down,
+        "analystDirectionStatus": "ok" if present else "unavailable",
+        "analystDirectionReason": None if present else "not_in_source",
+    }
+
 
 def parse_estimates_html_table(html: str) -> list[dict]:
     """Parse fiscal estimate table rows from sanitized HTML."""
     rows = []
     for m in _ROW_RE.finditer(html or ""):
-        rows.append(
-            {
-                "fiscalPeriodEnding": m.group(2).strip(),
-                "consensus": to_num(m.group(3)),
-                "high": to_num(m.group(4)),
-                "low": to_num(m.group(5)),
-                "analystCount": to_num(m.group(6)),
-                "rev1M": to_num(m.group(7)),
-                "rev3M": to_num(m.group(8)),
-                "rev6M": to_num(m.group(9)),
-            }
-        )
+        row = {
+            "fiscalPeriodEnding": m.group(2).strip(),
+            "consensus": to_num(m.group(3)),
+            "high": to_num(m.group(4)),
+            "low": to_num(m.group(5)),
+            "analystCount": to_num(m.group(6)),
+            "rev1M": to_num(m.group(7)),
+            "rev3M": to_num(m.group(8)),
+            "rev6M": to_num(m.group(9)),
+        }
+        row.update(source_analyst_direction(row))
+        rows.append(row)
     return rows
 
 
@@ -128,22 +179,23 @@ def parse_estimates(content: str) -> dict:
     if data and isinstance(data.get("rows"), list):
         rows = []
         for r in data["rows"]:
-            rows.append(
-                {
-                    "fiscalPeriodEnding": _first_present(
-                        r.get("fiscalPeriodEnding"), r.get("Fiscal Period Ending")
-                    ),
-                    "consensus": to_num(r.get("consensus")),
-                    "high": to_num(r.get("high")),
-                    "low": to_num(r.get("low")),
-                    "analystCount": to_num(
-                        _first_present(r.get("analystCount"), r.get("analysts"))
-                    ),
-                    "rev1M": to_num(_first_present(r.get("rev1M"), r.get("rev_1M_pct"))),
-                    "rev3M": to_num(_first_present(r.get("rev3M"), r.get("rev_3M_pct"))),
-                    "rev6M": to_num(_first_present(r.get("rev6M"), r.get("rev_6M_pct"))),
-                }
-            )
+            row = {
+                "fiscalPeriodEnding": _first_present(
+                    r.get("fiscalPeriodEnding"), r.get("Fiscal Period Ending")
+                ),
+                "consensus": to_num(r.get("consensus")),
+                "high": to_num(r.get("high")),
+                "low": to_num(r.get("low")),
+                "analystCount": to_num(
+                    _first_present(r.get("analystCount"), r.get("analysts"))
+                ),
+                "rev1M": to_num(_first_present(r.get("rev1M"), r.get("rev_1M_pct"))),
+                "rev3M": to_num(_first_present(r.get("rev3M"), r.get("rev_3M_pct"))),
+                "rev6M": to_num(_first_present(r.get("rev6M"), r.get("rev_6M_pct"))),
+            }
+            # Pass through source-native Up/Down only; captured SA fixtures have none.
+            row.update(source_analyst_direction(r if isinstance(r, dict) else {}))
+            rows.append(row)
         return {"ticker": data.get("ticker"), "rows": rows}
     # HTML table fallback
     ticker = None

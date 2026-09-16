@@ -11,6 +11,7 @@
     companies: {},
     valuation: [],
     revisions: [],
+    revisionMomentum: [],
     epsHistory: {},
     earnings: {},
     alerts: [],
@@ -214,8 +215,12 @@
     return bits.join(" · ");
   }
 
-  function naCell(display) {
-    const span = el("span", { className: "na", title: NA_TITLE, text: display == null ? "—" : display });
+  function naCell(display, title) {
+    const span = el("span", {
+      className: "na",
+      title: title || NA_TITLE,
+      text: display == null ? "—" : display,
+    });
     return span;
   }
 
@@ -431,6 +436,10 @@
     state.companies = companies || {};
     state.valuation = (valuation && valuation.rows) || (Array.isArray(valuation) ? valuation : []);
     state.revisions = (revisions && revisions.revisions) || (Array.isArray(revisions) ? revisions : []);
+    state.revisionMomentum =
+      (revisions && revisions.revisionMomentum) ||
+      (dash && dash.revisionMomentum) ||
+      [];
     state.epsHistory = epsHistory || {};
     state.earnings = earnings || {};
     state.alerts = (alerts && (alerts.activeAlerts || alerts.alerts)) || [];
@@ -1201,15 +1210,255 @@
     });
   }
 
+  function revisionMomentumRows() {
+    const rows = Array.isArray(state.revisionMomentum) ? state.revisionMomentum.slice() : [];
+    if (rows.length) {
+      const f = state.revFilters;
+      return rows.filter((r) => {
+        if (f.ticker && r.ticker !== f.ticker) return false;
+        if (f.year) {
+          const mapped = r.mappedYear || yearFromAlignment(r.calendarAlignment);
+          if (mapped !== f.year) return false;
+        }
+        return true;
+      });
+    }
+    /* Fallback when export payload is older: SA source windows from companies; Internal unavailable. */
+    const out = [];
+    (state.watchlist || []).forEach((t) => {
+      const c = state.companies[t] || {};
+      const byFiscal = c.epsByFiscal && typeof c.epsByFiscal === "object" ? c.epsByFiscal : null;
+      const entries = [];
+      if (byFiscal) {
+        Object.keys(byFiscal).forEach((lab) => {
+          const e = byFiscal[lab] || {};
+          entries.push({
+            ticker: t,
+            reportedFiscalPeriodEnding: e.reportedFiscalLabel || lab,
+            mappedYear: e.mappedYear,
+            calendarAlignment: e.calendarAlignment,
+            currentEps: e.consensus,
+            analysts: e.analysts,
+            rev1M: e.rev1M,
+            rev3M: e.rev3M,
+            rev6M: e.rev6M,
+          });
+        });
+      } else {
+        const years = displayYearKeys();
+        years.forEach((y) => {
+          const e = (c.eps && c.eps[y]) || {};
+          if (!e.reportedFiscalLabel && e.consensus == null) return;
+          entries.push({
+            ticker: t,
+            reportedFiscalPeriodEnding: e.reportedFiscalLabel || "—",
+            mappedYear: y,
+            calendarAlignment: e.calendarAlignment,
+            currentEps: e.consensus,
+            analysts: e.analysts,
+            rev1M: e.rev1M,
+            rev3M: e.rev3M,
+            rev6M: e.rev6M,
+          });
+        });
+      }
+      entries.forEach((e) => {
+        out.push({
+          ticker: e.ticker,
+          reportedFiscalPeriodEnding: e.reportedFiscalPeriodEnding,
+          mappedYear: e.mappedYear,
+          calendarAlignment: e.calendarAlignment,
+          currentEps: e.currentEps,
+          analysts: e.analysts,
+          internal: {
+            "30D": { status: "unavailable", revisionPct: null, windowLabel: "Internal 30D" },
+            "60D": { status: "unavailable", revisionPct: null, windowLabel: "Internal 60D" },
+            "90D": { status: "unavailable", revisionPct: null, windowLabel: "Internal 90D" },
+          },
+          sourceReported: {
+            "1M": {
+              revisionPct: e.rev1M,
+              windowLabel: "Source-reported · Seeking Alpha 1M",
+              sourceWindow: "Seeking Alpha 1M",
+            },
+            "3M": {
+              revisionPct: e.rev3M,
+              windowLabel: "Source-reported · Seeking Alpha 3M",
+              sourceWindow: "Seeking Alpha 3M",
+            },
+            "6M": {
+              revisionPct: e.rev6M,
+              windowLabel: "Source-reported · Seeking Alpha 6M",
+              sourceWindow: "Seeking Alpha 6M",
+            },
+          },
+          upAnalysts: null,
+          downAnalysts: null,
+          analystDirectionStatus: "unavailable",
+          analystDirectionReason: "not_in_source",
+        });
+      });
+    });
+    const f = state.revFilters;
+    return out.filter((r) => {
+      if (f.ticker && r.ticker !== f.ticker) return false;
+      if (f.year) {
+        const mapped = r.mappedYear || yearFromAlignment(r.calendarAlignment);
+        if (mapped !== f.year) return false;
+      }
+      return true;
+    });
+  }
+
+  function internalWindowCell(win) {
+    const w = win || {};
+    if (w.status === "ok" && !isMissing(w.revisionPct)) {
+      const node = revCell(w.revisionPct);
+      if (node && node.setAttribute) {
+        const bits = [];
+        if (w.startDate && w.endDate) bits.push(w.startDate + " → " + w.endDate);
+        if (!isMissing(w.startEps) && !isMissing(w.endEps)) {
+          bits.push(fmtNum(w.startEps, 2) + " → " + fmtNum(w.endEps, 2));
+        }
+        node.setAttribute("title", (w.windowLabel || "Internal") + (bits.length ? " · " + bits.join(" · ") : ""));
+      }
+      return node;
+    }
+    const reason = w.reason === "zero_baseline" ? "Zero baseline — unavailable" : "Insufficient history — unavailable";
+    return naCell(null, reason);
+  }
+
+  function sourceWindowCell(win) {
+    const w = win || {};
+    const node = revCell(w.revisionPct);
+    const label = w.windowLabel || w.sourceWindow || "Source-reported";
+    if (node && node.setAttribute) node.setAttribute("title", label);
+    else if (isMissing(w.revisionPct)) return naCell(null, label + " unavailable");
+    return node;
+  }
+
+  function renderRevisionMomentum() {
+    const sec = el("div", { className: "section", id: "eps-revision-momentum" });
+    sec.appendChild(el("h2", { className: "section-title", text: "EPS Revision Momentum" }));
+    const note =
+      (state.meta && (state.meta.internalRevisionNote || state.meta.revisionMomentumNote)) ||
+      "Internal 30D/60D/90D from daily EPS history (ticker + Reported Fiscal Period Ending). Seeking Alpha 1M/3M/6M are Source-reported and are never treated as Internal 30/60/90D. Up/Down Analysts unavailable unless present in source.";
+    sec.appendChild(el("p", { className: "section-note", text: note }));
+
+    const tableWrap = el("div", { className: "table-wrap" });
+    const table = el("table", { className: "data revision-momentum" });
+    const thead = el("thead");
+    const g1 = el("tr");
+    g1.appendChild(el("th", { className: "left", text: "Ticker", rowspan: "2" }));
+    g1.appendChild(el("th", { className: "left", text: "Fiscal Period Ending", rowspan: "2" }));
+    g1.appendChild(el("th", { text: "Current EPS", rowspan: "2" }));
+    g1.appendChild(el("th", { className: "group-internal", text: "Internal (computed)", colspan: "3" }));
+    g1.appendChild(el("th", { className: "group-analysts", text: "Up / Down", rowspan: "2" }));
+    g1.appendChild(el("th", { text: "Analysts", rowspan: "2" }));
+    g1.appendChild(
+      el("th", {
+        className: "group-source col-group-sep",
+        text: "Source-reported (Seeking Alpha)",
+        colspan: "3",
+      })
+    );
+    thead.appendChild(g1);
+    const g2 = el("tr");
+    [
+      ["Internal 30D", ""],
+      ["Internal 60D", ""],
+      ["Internal 90D", ""],
+      ["SA 1M", "col-group-sep"],
+      ["SA 3M", ""],
+      ["SA 6M", ""],
+    ].forEach(([lab, extra]) => {
+      g2.appendChild(el("th", { className: extra, text: lab }));
+    });
+    thead.appendChild(g2);
+    table.appendChild(thead);
+
+    const tbody = el("tbody");
+    const rows = revisionMomentumRows();
+    rows.forEach((r) => {
+      const tr = el("tr");
+      const tdT = el("td", { className: "ticker left" });
+      tdT.appendChild(el("a", { href: "#/company/" + r.ticker, text: r.ticker }));
+      tr.appendChild(tdT);
+      const fiscal = r.reportedFiscalPeriodEnding || r.reportedFiscalLabel || "—";
+      const fyTd = el("td", { className: "left", text: fiscal });
+      if (r.mappedYear) {
+        fyTd.appendChild(
+          el("span", {
+            className: "price-sub",
+            text: "slot " + r.mappedYear + " (display)",
+            title: "Mapped slot is display-only; identity is ticker + Reported Fiscal Period Ending",
+          })
+        );
+      }
+      tr.appendChild(fyTd);
+      const tdEps = el("td");
+      tdEps.appendChild(numCell(r.currentEps, 2));
+      tr.appendChild(tdEps);
+      const internal = r.internal || {};
+      ["30D", "60D", "90D"].forEach((k) => {
+        const td = el("td");
+        td.appendChild(internalWindowCell(internal[k]));
+        tr.appendChild(td);
+      });
+      const dirTitle =
+        r.analystDirectionReason === "not_in_source" || r.analystDirectionStatus === "unavailable"
+          ? "Up/Down Analysts unavailable — not present in captured Seeking Alpha sources"
+          : "Analyst direction";
+      const tdUpDown = el("td");
+      if (
+        r.analystDirectionStatus === "unavailable" ||
+        (isMissing(r.upAnalysts) && isMissing(r.downAnalysts))
+      ) {
+        tdUpDown.appendChild(naCell("— / —", dirTitle));
+      } else {
+        const up = isMissing(r.upAnalysts) ? "—" : fmtNum(r.upAnalysts, 0);
+        const down = isMissing(r.downAnalysts) ? "—" : fmtNum(r.downAnalysts, 0);
+        tdUpDown.appendChild(el("span", { text: up + " / " + down, title: dirTitle }));
+      }
+      tr.appendChild(tdUpDown);
+      const tdAn = el("td");
+      tdAn.appendChild(isMissing(r.analysts) ? naCell() : numCell(r.analysts, 0));
+      tr.appendChild(tdAn);
+      const src = r.sourceReported || {};
+      ["1M", "3M", "6M"].forEach((k, i) => {
+        const td = el("td", { className: i === 0 ? "col-group-sep" : "" });
+        td.appendChild(sourceWindowCell(src[k]));
+        tr.appendChild(td);
+      });
+      tbody.appendChild(tr);
+    });
+    if (!rows.length) {
+      const tr = el("tr");
+      const td = el("td", {
+        className: "left",
+        text: "No fiscal identities available.",
+        colspan: "11",
+      });
+      td.style.color = "var(--text-muted)";
+      tr.appendChild(td);
+      tbody.appendChild(tr);
+    }
+    table.appendChild(tbody);
+    tableWrap.appendChild(table);
+    sec.appendChild(tableWrap);
+    return sec;
+  }
+
   function renderRevisions() {
     const root = el("div");
+    root.appendChild(renderRevisionMomentum());
 
     const chartSec = el("div", { className: "section" });
     chartSec.appendChild(el("h2", { className: "section-title", text: "EPS Consensus History" }));
     chartSec.appendChild(
       el("p", {
         className: "section-note",
-        text: "Built from daily EPS snapshots (mapped FY slots). Revision Index mode sets the first history point to 100. Table below still uses revision events only.",
+        text: "Built from daily EPS snapshots (mapped FY slots). Revision Index mode sets the first history point to 100. Internal 30/60/90D use ticker + Reported Fiscal Period Ending. Event table below is revision events only.",
       })
     );
 
