@@ -128,11 +128,21 @@ Shared helper: `tools/revision_windows.py` — used by both `export_web_data.py`
 
 Canonical joins financial COMMIT: generation package includes updated month files **before** CURRENT; live `data/history/` updates only after CURRENT. Pre-CURRENT crash → canonical live unchanged. Same identity + different consensus/analysts aborts COMMIT (never first-wins). Corrupt `pending_daily_rows.json` aborts before CURRENT. Source-git persist of `data/history/eps_daily/` is after COMMIT; push failure does not roll back CURRENT; retry is idempotent. Pages publish is unchanged (public `web/` only). Actual pending-publish state is `data/publish_state.json` (docs historically mentioned `data/.pending-publish`, which is gitignored).
 
-**No production backfill here.** Workspace `daily.jsonl` is not copied into canonical.
+## Migration / backfill (PR #13)
+
+```bash
+python3 tools/migrate_eps_history.py --audit
+python3 tools/migrate_eps_history.py --apply
+python3 tools/rebuild_daily_history.py
+```
+
+`--audit` is read-only. `--apply` never mutates `data/CURRENT.json`, never invents EPS/fiscal endings, never auto-picks a conflict winner, and writes monthly canonical files only after the full proposed result validates with `conflicts=0`. Identity = ticker + normalized `reportedFiscalPeriodEnding` + date + `updateTime` (PR #12). `reportedFiscalLabel` (`Jan 2027`) is reconstructed via the existing `normalize_fiscal_period_label` mapping — not a fabricated calendar ending. mappedYear/slot is not identity. `seed_from_revision_history` and aborted/orphan generations are not imported. Public `eps_history.json` is used only when exact canonical fields (including `updateTime` or proven absence) are reconstructable.
+
+Fresh clone: Git canonical exists → runtime `daily.jsonl` / generations absent → `python3 tools/rebuild_daily_history.py` → Internal 30/60/90D match recoverable history. Partial history is OK; missing periods stay unavailable.
 
 ## daily.jsonl persistence (runtime cache)
 
-Live cache `data/daily_eps_snapshots/daily.jsonl`; committed copy under `data/generations/<runId>/`. Rebuildable from canonical history; not published to GitHub Pages and not tracked in git. Until production backfill, a fresh clone reconstructs only observations that have been committed to `data/history/eps_daily/`.
+Live cache `data/daily_eps_snapshots/daily.jsonl`; committed copy under `data/generations/<runId>/`. Rebuildable from canonical history; not published to GitHub Pages and not tracked in git. After backfill, a fresh clone reconstructs recoverable observations from `data/history/eps_daily/` via `python3 tools/rebuild_daily_history.py`.
 
 ## What is NOT in the public repo
 Seeking Alpha cookies/sessions, GitHub tokens beyond Actions secrets (none required for static Pages from this machine’s push), `.env`, browser profiles, private raw pulls beyond published JSON fields.

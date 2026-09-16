@@ -15,11 +15,11 @@ Buy-side monitor for NVDA, AVGO, TSM, MSFT, BE, KEYS.
 
 | Path | Role |
 |------|------|
-| `tools/` | Exporter, alert engine, SA parser, acceptance tests, publish, canonical history writer/materializer |
+| `tools/` | Exporter, alert engine, SA parser, acceptance tests, publish, canonical history writer/materializer, migrate/rebuild |
 | `web/` | SPA (`index.html`, `app.js`, `styles.css`) + exported `web/data/*.json` |
 | `data/history/eps_daily/` | **Canonical durable EPS daily history** (Git-tracked monthly JSONL). Fresh clone SoT for Internal 30D/60D/90D. |
-| `data/daily_eps_snapshots/daily.jsonl` | Runtime cache materialized from canonical history (not sole durable SoT; not Git-tracked). |
-| `data/generations/<runId>/` | Immutable committed generation packages; `data/CURRENT.json` is the financial commit pointer. Not Git-tracked. |
+| `data/daily_eps_snapshots/daily.jsonl` | Runtime cache materialized from canonical history (not sole durable SoT; not Git-tracked). Rebuildable. |
+| `data/generations/<runId>/` | Immutable committed generation packages; `data/CURRENT.json` is the financial commit pointer. Not Git-tracked. Not long-term sole history. |
 | `data/*.json`, `web/data/*.json` | Public derived exports (Pages payload). |
 | `data/` (other) | Pipeline DB (`snapshots/`, `revisions/`, `drivers/`, `earnings/`, `alerts/`) |
 | `tests/fixtures/` | Sanitized universe/snapshots + SA HTML parser fixtures |
@@ -32,8 +32,13 @@ python3 tools/ingest_snapshot.py --publish
 # or publish-only from CURRENT generation web/:
 bash tools/publish_github_pages.sh
 
-# Rebuild runtime daily.jsonl from Git-tracked canonical history (fresh clone):
-python3 tools/canonical_eps_history.py --materialize
+# Rebuild runtime daily.jsonl from Git-tracked canonical history (fresh clone / disaster recovery):
+python3 tools/rebuild_daily_history.py
+# equivalent: python3 tools/canonical_eps_history.py --materialize
+
+# Backfill workspace history into Git canonical (never mutates CURRENT):
+python3 tools/migrate_eps_history.py --audit
+python3 tools/migrate_eps_history.py --apply
 ```
 
 ## Tests (must PASS on a clean checkout)

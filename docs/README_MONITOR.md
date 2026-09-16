@@ -11,8 +11,9 @@ Buy-side monitor for: NVDA, AVGO, TSM, MSFT, BE, KEYS
 
 ## Layout
 - `data/history/eps_daily/YYYY-MM.jsonl` — **canonical durable EPS daily history** (Git-tracked)
-- `data/daily_eps_snapshots/daily.jsonl` — runtime cache materialized from canonical (not sole durable SoT)
-- `data/generations/<runId>/` — immutable committed generation; `data/CURRENT.json` financial commit pointer
+- `data/daily_eps_snapshots/daily.jsonl` — runtime cache materialized from canonical (not sole durable SoT); rebuild with `python3 tools/rebuild_daily_history.py`
+- `data/generations/<runId>/` — immutable committed generation; `data/CURRENT.json` financial commit pointer (not long-term sole history)
+- Historical backfill: `python3 tools/migrate_eps_history.py --audit` / `--apply` (never mutates CURRENT; fail-closed on conflicts)
 - `data/snapshots/YYYY-MM-DD.json` — full consensus + price snapshot (append by date)
 - `data/revisions/history.jsonl` — one revision event per line
 - `data/earnings/` — per-ticker earnings call digests

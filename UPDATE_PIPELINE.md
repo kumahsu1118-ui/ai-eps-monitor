@@ -132,15 +132,36 @@ Writer: `tools/canonical_eps_history.py` (called from ingest COMMIT). Materializ
 
 Admission: only quality-gate-passed observations enter canonical history (never quarantined, invalid fiscal, null/non-finite EPS, revision-history seeds, or staged-but-never-committed). Identical identity + identical canonical payload (consensus/analysts) is a no-op replay. Identical identity + different consensus/analysts is a collision: COMMIT aborts (`CanonicalHistoryError`); never silent first-wins. mappedYear/slot-only differences are display-only and still dedupe. Canonical files are built into the generation **before** CURRENT flips; live `data/history/` is updated only on materialize after a successful financial commit. If `pending_daily_rows.json` exists but cannot be parsed or fails the staging contract, COMMIT aborts before CURRENT (no empty-rows fallback).
 
-Materialize (`python3 tools/canonical_eps_history.py --materialize`) is **fail-closed**: malformed or schema-invalid canonical rows abort and do **not** overwrite an existing valid runtime `daily.jsonl`. `--lenient` is inspection/recovery only.
+Materialize (`python3 tools/canonical_eps_history.py --materialize` or `python3 tools/rebuild_daily_history.py`) is **fail-closed**: malformed or schema-invalid canonical rows abort and do **not** overwrite an existing valid runtime `daily.jsonl`. `--lenient` is inspection/recovery only.
 
 Source-git persist (`git add data/history/eps_daily`) runs **after** CURRENT. Push failure does not roll back financial state; retry **pushes the unpushed local commit** even when the working tree is clean (nothing staged ≠ remote is durable). Pages publish is unchanged (public `web/` only).
 
-**No production backfill in this change.** Existing workspace `daily.jsonl` / generations are not copied into canonical (that is a later backfill). Until backfill, a fresh clone reconstructs only observations that have been committed to canonical files going forward.
+## Migration / backfill (PR #13)
+
+Historical observations already sitting in a workspace are **not** a new financial commit. Backfill uses a dedicated tool that never flips `data/CURRENT.json`.
+
+```bash
+python3 tools/migrate_eps_history.py --audit            # read-only
+python3 tools/migrate_eps_history.py --apply            # atomic; fail-closed if conflicts>0
+python3 tools/rebuild_daily_history.py                  # runtime cache from canonical
+```
+
+`--apply` builds the entire proposed canonical tree, validates, detects every identity conflict, and only then writes monthly JSONL. Conflicts (same ticker + normalized `reportedFiscalPeriodEnding` + date + `updateTime` with different consensus/analysts) abort with **no partial mutation** and **no auto-picked winner**. Exact payload duplicates are no-ops. Existing Git canonical always stays unless the incoming payload is byte-for-byte the same observation.
+
+Admission is the PR #12 canonical rule plus a mappedYear/slot identity guard. `reportedFiscalLabel` values such as `Jan 2027` map to canonical `reportedFiscalPeriodEnding` through the already-tested `normalize_fiscal_period_label` / `fiscal_identity_key` (Mon YYYY). A calendar date such as `2027-01-31` is never invented. `seed_from_revision_history` rows, aborted/orphan generations, null/non-finite consensus, and mappedYear-only rows are rejected. Partial recoverable history is reported honestly; missing periods are not synthesized.
+
+Source priority (audit documentation, not a silent winner): existing Git canonical → CURRENT generation canonical → runtime `daily.jsonl` → CURRENT generation `daily.jsonl` → older committed generations → public derived exports only when date, ticker, fiscal identity, consensus, and `updateTime` (or a field proving its absence) are reconstructable.
+
+## Disaster recovery / fresh clone
+
+1. Clone the source repo. Git-tracked SoT is `data/history/eps_daily/*.jsonl`.
+2. `data/daily_eps_snapshots/` and `data/generations/` are absent (runtime cache / crash-safety, not long-term sole history).
+3. Rebuild runtime: `python3 tools/rebuild_daily_history.py` (same as `python3 tools/canonical_eps_history.py --materialize`).
+4. Internal 30/60/90D then match the recoverable canonical history (count, identity, consensus, analysts, updateTime, window start/end/anchor/target). Insufficient history stays unavailable — never synthetic windows.
 
 ## daily.jsonl persistence (runtime cache)
 
 - Live cache: `data/daily_eps_snapshots/daily.jsonl` — rebuildable materialized state, **not** the sole durable SoT.
 - Committed copy: `data/generations/<runId>/daily_eps_snapshots/daily.jsonl` (CURRENT pointer is the financial commit).
-- Ingest COMMIT copies live JSONL into the new generation, then appends pending rows; materialize copies CURRENT → live. This preserves un-backfilled workspace history until canonical backfill.
-- **Not in git / not in the GitHub Pages payload.** Public `data/*.json` and `web/data/*.json` are derived exports.
+- Ingest COMMIT copies live JSONL into the new generation, then appends pending rows; materialize copies CURRENT → live.
+- **Not in git / not in the GitHub Pages payload.** Public `data/*.json` and `web/data/*.json` are derived exports. Rebuild after clone: `python3 tools/rebuild_daily_history.py`.
