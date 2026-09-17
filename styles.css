@@ -415,14 +415,6 @@ table.data .ticker a:hover {
   min-width: 7rem;
 }
 
-#comparison-year-controls {
-  margin-top: 0.15rem;
-}
-
-table.data.valuation-compare th[title] {
-  cursor: help;
-}
-
 .btn-group {
   display: inline-flex;
   border: 1px solid var(--border);
@@ -906,28 +898,6 @@ nav.tabs,
   padding: 1px 6px;
   margin-top: 2px;
 }
-
-table.data.revision-momentum th.group-internal,
-table.data.revision-momentum th.group-source,
-table.data.revision-momentum th.group-analysts {
-  text-align: center;
-  letter-spacing: 0.02em;
-}
-table.data.revision-momentum th.group-internal,
-table.data.revision-momentum th.group-source {
-  color: var(--text);
-}
-table.data.revision-momentum th.group-analysts {
-  color: var(--text-muted);
-}
-table.data.revision-momentum th.col-group-sep,
-table.data.revision-momentum td.col-group-sep {
-  border-left: 2px solid var(--border);
-}
-table.data.revision-momentum td .price-sub {
-  display: block;
-}
-
 .failed-ticker-badge {
   background: rgba(248, 81, 73, 0.2) !important;
   color: #ff7b72 !important;
