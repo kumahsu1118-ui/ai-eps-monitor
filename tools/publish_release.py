@@ -247,20 +247,49 @@ def _validate_ticker_map(name: str, obj: dict, *, label: str) -> None:
             )
 
 
-def _validate_web_json_file_schema(name: str, obj: dict, *, label: str) -> None:
+def _web_generation_run_id(meta: dict | None) -> str:
+    if not isinstance(meta, dict):
+        return ""
+    return _nonempty(meta.get("generationRunId") or meta.get("runId"))
+
+
+def proven_generation_run_id(current: dict, gmeta: dict) -> str:
+    """CURRENT.runId must equal generation_meta.runId. Never invent a runId."""
+    rid = _nonempty(current.get("runId"))
+    g_rid = _nonempty(gmeta.get("runId") or gmeta.get("run_id"))
+    if not rid:
+        raise PublishError("CURRENT.json missing generation ID (runId)")
+    if not g_rid:
+        raise PublishError("generation_meta.json missing runId")
+    if g_rid != rid:
+        raise PublishError(
+            f"inconsistent generationRunId CURRENT={rid} generation_meta={g_rid}"
+        )
+    return rid
+
+
+def _validate_web_json_file_schema(
+    name: str,
+    obj: dict,
+    *,
+    label: str,
+    require_generation_run_id: bool = True,
+) -> None:
     """Per-file schema: required collections/fields, not merely 'is object'."""
     if name == "meta.json":
         qg = obj.get("qualityGate")
         if not isinstance(qg, dict):
             raise PublishError(f"{label} meta.json qualityGate missing or not an object")
-        for key in (
+        keys = [
             "schemaVersion",
             "dataVersion",
             "refreshVersion",
             "lastSuccessfulCollection",
-            "generationRunId",
             "buildId",
-        ):
+        ]
+        if require_generation_run_id:
+            keys.insert(4, "generationRunId")
+        for key in keys:
             if not _nonempty(obj.get(key)):
                 raise PublishError(f"{label} meta.json missing required field {key}")
         return
@@ -289,19 +318,34 @@ def _validate_web_json_file_schema(name: str, obj: dict, *, label: str) -> None:
     raise PublishError(f"{label} {name} schema invalid: unknown required web json")
 
 
-def validate_required_web_json(data_dir: Path, *, label: str) -> dict:
+def validate_required_web_json(
+    data_dir: Path,
+    *,
+    label: str,
+    require_generation_run_id: bool = True,
+) -> dict:
     """Parse every REQUIRED_WEB_JSON file; per-file schema + consistent build identity.
 
     Empty objects, wrong types, missing collections/fields, and missing/inconsistent
     buildId fail closed before any remote mutation.
+
+    ``require_generation_run_id`` is True for staging/remote payloads. Generation
+    packages that predate the field may omit it when CURRENT.runId already equals
+    generation_meta.runId (proven separately); other REQUIRED_WEB_JSON checks stay
+    fail-closed.
     """
     loaded: dict[str, dict] = {}
     for name in REQUIRED_WEB_JSON:
         loaded[name] = _load_json_object(data_dir / name, label=f"{label} {name}")
-        _validate_web_json_file_schema(name, loaded[name], label=label)
+        _validate_web_json_file_schema(
+            name,
+            loaded[name],
+            label=label,
+            require_generation_run_id=require_generation_run_id,
+        )
     meta = loaded["meta.json"]
-    run_id = _nonempty(meta.get("generationRunId") or meta.get("runId"))
-    if not run_id:
+    run_id = _web_generation_run_id(meta)
+    if require_generation_run_id and not run_id:
         raise PublishError(f"{label} meta.json missing generationRunId")
     meta_build = _nonempty(meta.get("buildId"))
     if not meta_build:
@@ -328,8 +372,8 @@ def validate_required_web_json(data_dir: Path, *, label: str) -> dict:
                     f"{label} meta/dashboard consistency failed for {key}: "
                     f"meta={meta.get(key)!r} dashboard.meta={dash_meta.get(key)!r}"
                 )
-    dash_run = _nonempty(dash_meta.get("generationRunId") or dash_meta.get("runId"))
-    if dash_run and dash_run != run_id:
+    dash_run = _web_generation_run_id(dash_meta)
+    if dash_run and run_id and dash_run != run_id:
         raise PublishError(
             f"{label} meta/dashboard generationRunId mismatch meta={run_id} dashboard={dash_run}"
         )
@@ -354,17 +398,17 @@ def validate_required_web_json(data_dir: Path, *, label: str) -> dict:
 
 
 def require_identity_consistency(current: dict, gmeta: dict, gen_web_meta: dict) -> str:
-    """CURRENT / generation_meta / generation web meta: runId+schemaVersion+timestamp."""
-    rid = _nonempty(current.get("runId"))
-    g_rid = _nonempty(gmeta.get("runId"))
-    w_rid = _nonempty(gen_web_meta.get("generationRunId") or gen_web_meta.get("runId"))
-    if not rid or not g_rid or not w_rid:
+    """CURRENT / generation_meta / generation web meta: runId+schemaVersion+timestamp.
+
+    CURRENT.runId and generation_meta.runId must both be present and equal.
+    Web generationRunId/runId is optional on pre-PR17 generation packages; if
+    present it must match the proven CURRENT/generation_meta identity. Never invent.
+    """
+    rid = proven_generation_run_id(current, gmeta)
+    w_rid = _web_generation_run_id(gen_web_meta)
+    if w_rid and w_rid != rid:
         raise PublishError(
-            "missing runId: CURRENT/generation_meta/generation web meta must all present it"
-        )
-    if g_rid != rid or w_rid != rid:
-        raise PublishError(
-            f"inconsistent generationRunId CURRENT={rid} generation_meta={g_rid} "
+            f"inconsistent generationRunId CURRENT={rid} generation_meta={rid} "
             f"generation web meta={w_rid}"
         )
     schemas = (
@@ -429,15 +473,71 @@ def require_current_generation(root: Path) -> tuple[dict, Path, dict, dict, str]
         raise PublishError(
             f"generation aborted abortReason={gmeta.get('abortReason')} runId={current['runId']}"
         )
-    validate_required_web_json(gen_dir / "web" / "data", label="generation")
+    # Prove CURRENT ↔ generation_meta before accepting a missing web generationRunId.
+    proven = proven_generation_run_id(current, gmeta)
     gen_meta = _load_json_object(
         gen_dir / "web" / "data" / "meta.json", label="generation web/data/meta.json"
+    )
+    web_rid = _web_generation_run_id(gen_meta)
+    validate_required_web_json(
+        gen_dir / "web" / "data",
+        label="generation",
+        require_generation_run_id=bool(web_rid),
     )
     ok, reason = _quality_gate_ok(gen_meta)
     if not ok:
         raise PublishError(f"generation failed quality gate: {reason}")
     collection_iso = require_identity_consistency(current, gmeta, gen_meta)
+    dash = _load_json_object(
+        gen_dir / "web" / "data" / "dashboard.json",
+        label="generation web/data/dashboard.json",
+    )
+    dash_meta = dash.get("meta") if isinstance(dash.get("meta"), dict) else {}
+    dash_rid = _web_generation_run_id(dash_meta)
+    if dash_rid and dash_rid != proven:
+        raise PublishError(
+            f"inconsistent generationRunId CURRENT={proven} generation_meta={proven} "
+            f"generation dashboard.meta={dash_rid}"
+        )
     return current, gen_dir, gmeta, gen_meta, collection_iso
+
+
+def stamp_proven_generation_run_id_into_staging(staging: Path, *, run_id: str) -> None:
+    """Stamp generationRunId into disposable staging copies only.
+
+    Never writes ``data/generations/<runId>/``. Caller must pass the proven
+    CURRENT.runId (== generation_meta.runId). Does not invent runIds.
+    """
+    rid = _nonempty(run_id)
+    if not rid:
+        raise PublishError("cannot stamp empty generationRunId into staging")
+    meta_path = staging / "web" / "data" / "meta.json"
+    meta = _load_json_object(meta_path, label="staging web/data/meta.json")
+    existing = _web_generation_run_id(meta)
+    if existing and existing != rid:
+        raise PublishError(
+            f"staging meta.json generationRunId {existing} disagrees with proven {rid}"
+        )
+    if existing != rid:
+        meta["generationRunId"] = rid
+        atomic_write_json(meta_path, meta)
+    dash_path = staging / "web" / "data" / "dashboard.json"
+    if not dash_path.is_file():
+        return
+    dash = _load_json_object(dash_path, label="staging web/data/dashboard.json")
+    dm = dash.get("meta")
+    if not isinstance(dm, dict):
+        return
+    d_existing = _web_generation_run_id(dm)
+    if d_existing and d_existing != rid:
+        raise PublishError(
+            f"staging dashboard.json.meta generationRunId {d_existing} disagrees with proven {rid}"
+        )
+    if d_existing != rid:
+        dm = dict(dm)
+        dm["generationRunId"] = rid
+        dash["meta"] = dm
+        atomic_write_json(dash_path, dash)
 
 
 def rematerialize_into_staging(staging: Path, current: dict, gen_dir: Path) -> None:
@@ -465,7 +565,10 @@ def rematerialize_into_staging(staging: Path, current: dict, gen_dir: Path) -> N
             raise
         except OSError as exc:
             raise PublishError(f"rematerialization failure: {exc}") from exc
-    rid = str(current.get("runId") or gen_dir.name)
+    gmeta = _load_json_object(gen_dir / "generation_meta.json", label="generation_meta.json")
+    rid = proven_generation_run_id(current, gmeta)
+    # Stamp identity into staging copies only. Generation package stays byte-identical.
+    stamp_proven_generation_run_id_into_staging(staging, run_id=rid)
     marker = staging / "data" / ".materialized_run_id"
     marker.parent.mkdir(parents=True, exist_ok=True)
     atomic_write_text(marker, rid + "\n")
