@@ -11,7 +11,6 @@
     companies: {},
     valuation: [],
     revisions: [],
-    revisionMomentum: [],
     epsHistory: {},
     earnings: {},
     alerts: [],
@@ -24,7 +23,6 @@
     chartTicker: null,
     chartYear: null, /* set from meta.displayMappedYears on load */
     chartMode: "absolute", /* absolute | index */
-    comparisonYear: null, /* displayMappedYears[1] else [0] */
   };
 
   /* ---------- utils ---------- */
@@ -108,118 +106,6 @@
     }
     if (y == null) y = new Date().getFullYear();
     return [y + "E", (y + 1) + "E", (y + 2) + "E", (y + 3) + "E"];
-  }
-
-  function isMappedYearKey(value) {
-    return typeof value === "string" && /^\d{4}E$/.test(value);
-  }
-
-  function comparisonYearKeys() {
-    /* Fail-closed Comparison Year options. ONLY meta.displayMappedYears.
-       Never invents years from clock/timestamp. Invalid/empty → []. */
-    const m = state.meta || {};
-    const raw = m.displayMappedYears;
-    if (!Array.isArray(raw) || !raw.length) return [];
-    const out = [];
-    for (let i = 0; i < raw.length; i++) {
-      if (!isMappedYearKey(raw[i])) return [];
-      out.push(raw[i]);
-    }
-    return out;
-  }
-
-  function defaultComparisonYear(years) {
-    const ys = [];
-    if (Array.isArray(years)) {
-      years.forEach(function (y) {
-        if (isMappedYearKey(y)) ys.push(y);
-      });
-    }
-    if (ys.length > 1) return ys[1];
-    return ys.length ? ys[0] : null;
-  }
-
-  function selectedComparisonYear() {
-    const years = comparisonYearKeys();
-    const cur = state.comparisonYear;
-    if (cur && years.indexOf(cur) >= 0) return cur;
-    return defaultComparisonYear(years);
-  }
-
-  function finiteNum(v) {
-    if (isMissing(v) || typeof v === "string") return null;
-    const n = Number(v);
-    return Number.isFinite(n) ? n : null;
-  }
-
-  function growthAdjustedPe(forwardPe, cagrFraction) {
-    /* ForwardPE / (CAGR as percent units). 20 / 25 → 0.80. CAGR<=0 → N/M. */
-    const peV = finiteNum(forwardPe);
-    const cagrV = finiteNum(cagrFraction);
-    if (peV == null || cagrV == null || cagrV <= 0) return null;
-    const pctUnits = cagrV * 100;
-    if (!(pctUnits > 0)) return null;
-    const result = peV / pctUnits;
-    return Number.isFinite(result) ? result : null;
-  }
-
-  const FISCAL_MONTH_NUM = {
-    jan: 1, january: 1,
-    feb: 2, february: 2,
-    mar: 3, march: 3,
-    apr: 4, april: 4,
-    may: 5,
-    jun: 6, june: 6,
-    jul: 7, july: 7,
-    aug: 8, august: 8,
-    sep: 9, sept: 9, september: 9,
-    oct: 10, october: 10,
-    nov: 11, november: 11,
-    dec: 12, december: 12,
-  };
-  const FISCAL_MONTH_ABBR = [
-    "Jan", "Feb", "Mar", "Apr", "May", "Jun",
-    "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
-  ];
-
-  function normalizeFiscalPeriodLabel(label) {
-    /* Match backend sa_parser.normalize_fiscal_period_label: Jan..Dec + YYYY. */
-    if (label == null || label === "") return null;
-    const s = String(label).replace(/\s+/g, " ").trim();
-    if (!s) return null;
-    const m = s.match(/^([A-Za-z]+)\s+(\d{4})$/);
-    if (!m) return s;
-    const mon = FISCAL_MONTH_NUM[m[1].toLowerCase()];
-    if (!mon) return s;
-    return FISCAL_MONTH_ABBR[mon - 1] + " " + m[2];
-  }
-
-  function fiscalIdentityKey(ticker, fiscal) {
-    const t = String(ticker || "").trim().toUpperCase();
-    const lab = normalizeFiscalPeriodLabel(fiscal);
-    if (!t || !lab) return null;
-    return t + "\0" + lab;
-  }
-
-  function revisionMomentumIdentityMap() {
-    const map = {};
-    (state.revisionMomentum || []).forEach(function (r) {
-      if (!r) return;
-      const ident = r.identity && typeof r.identity === "object" ? r.identity : {};
-      const key = fiscalIdentityKey(
-        r.ticker || ident.ticker,
-        r.reportedFiscalPeriodEnding || r.reportedFiscalLabel || ident.reportedFiscalPeriodEnding
-      );
-      if (key) map[key] = r;
-    });
-    return map;
-  }
-
-  function valuationPrice(r) {
-    if (!r) return null;
-    if (!isMissing(r.lastClose)) return r.lastClose;
-    if (!isMissing(r.price)) return r.price;
-    return null;
   }
 
   /* Schedule-aware freshness — mirrors export_web_data.compute_freshness
@@ -328,12 +214,8 @@
     return bits.join(" · ");
   }
 
-  function naCell(display, title) {
-    const span = el("span", {
-      className: "na",
-      title: title || NA_TITLE,
-      text: display == null ? "—" : display,
-    });
+  function naCell(display) {
+    const span = el("span", { className: "na", title: NA_TITLE, text: display == null ? "—" : display });
     return span;
   }
 
@@ -549,10 +431,6 @@
     state.companies = companies || {};
     state.valuation = (valuation && valuation.rows) || (Array.isArray(valuation) ? valuation : []);
     state.revisions = (revisions && revisions.revisions) || (Array.isArray(revisions) ? revisions : []);
-    state.revisionMomentum =
-      (revisions && revisions.revisionMomentum) ||
-      (dash && dash.revisionMomentum) ||
-      [];
     state.epsHistory = epsHistory || {};
     state.earnings = earnings || {};
     state.alerts = (alerts && (alerts.activeAlerts || alerts.alerts)) || [];
@@ -568,10 +446,6 @@
     const dy = displayYearKeys();
     if (!state.chartYear || dy.indexOf(state.chartYear) < 0) {
       state.chartYear = dy[1] || dy[0] || null;
-    }
-    const cy = comparisonYearKeys();
-    if (!state.comparisonYear || cy.indexOf(state.comparisonYear) < 0) {
-      state.comparisonYear = defaultComparisonYear(cy);
     }
   }
 
@@ -730,11 +604,11 @@
     rows.forEach((r) => {
       const p1 = periodOf(r, y1);
       const p2 = periodOf(r, y2);
-      const rev1 = p1.rev1M != null ? p1.rev1M : null;
-      const rev2 = p2.rev1M != null ? p2.rev1M : null;
-      const pe1 = p1.pe != null ? p1.pe : null;
-      const cagr = r.cagrY0Y2 != null ? r.cagrY0Y2 : null;
-      const eps0 = periodOf(r, y0).eps;
+      const rev1 = p1.rev1M != null ? p1.rev1M : r.rev1M;
+      const rev2 = p2.rev1M != null ? p2.rev1M : r.rev1M28;
+      const pe1 = p1.pe != null ? p1.pe : r.pe27;
+      const cagr = r.cagrY0Y2 != null ? r.cagrY0Y2 : r.cagr2628;
+      const eps0 = (periodOf(r, y0).eps != null ? periodOf(r, y0).eps : r.eps26);
 
       if (rev1 != null && !Number.isNaN(Number(rev1))) {
         if (Number(rev1) > 0 && (!largestUp || Number(rev1) > Number(largestUp._rev))) {
@@ -1058,183 +932,32 @@
   }
 
   /* ---------- valuation ---------- */
-  const VALUATION_COL_KEYS = {
-    ticker: 1,
-    price: 1,
-    eps: 1,
-    pe: 1,
-    growth: 1,
-    cagr: 1,
-    growthAdjPe: 1,
-    internal30: 1,
-    internal60: 1,
-    internal90: 1,
-    source1M: 1,
-    analysts: 1,
-    fiscal: 1,
-    regime: 1,
-  };
-
-  const GROWTH_ADJ_PE_TITLE =
-    "Comparison tool only — not a fair value, score, or recommendation. Forward P/E ÷ (Forward EPS CAGR as percent units), e.g. 20 / 25 → 0.80.";
-
-  function companyEpsEntry(ticker, yearKey) {
-    const c = (state.companies || {})[ticker] || {};
-    return ((c.eps || {})[yearKey]) || {};
-  }
-
-  function comparisonPeriod(row, yearKey) {
-    const p = periodOf(row, yearKey);
-    return p && typeof p === "object" ? p : {};
-  }
-
-  function comparisonMomentumRow(row, yearKey, identMap) {
-    const p = comparisonPeriod(row, yearKey);
-    /* Prefer canonical reportedFiscalPeriodEnding; never the mapped year slot. */
-    const key = fiscalIdentityKey(
-      row && row.ticker,
-      p.reportedFiscalPeriodEnding || p.reportedFiscalLabel
-    );
-    if (!key) return null;
-    return (identMap || {})[key] || null;
-  }
-
-  function comparisonFields(row, yearKey, identMap) {
-    const p = comparisonPeriod(row, yearKey);
-    const mom = comparisonMomentumRow(row, yearKey, identMap);
-    const cagr = row && row.cagrY0Y2 != null ? row.cagrY0Y2 : null;
-    const peV = p.pe;
-    let analysts = p.analysts;
-    if (analysts == null) {
-      const ce = companyEpsEntry(row && row.ticker, yearKey);
-      analysts = ce.analysts != null ? ce.analysts : ce.analystCount;
-    }
-    if (analysts == null && mom && "analysts" in mom) analysts = mom.analysts;
-    const internal = (p.internal && typeof p.internal === "object" ? p.internal : null) ||
-      (mom && mom.internal) ||
-      null;
-    return {
-      ticker: row && row.ticker,
-      price: valuationPrice(row),
-      afterHours: row && row.afterHours,
-      eps: p.eps,
-      pe: peV,
-      growth: p.growthFromPrior,
-      cagr: cagr,
-      growthAdjPe: p.growthAdjustedPe != null ? p.growthAdjustedPe : growthAdjustedPe(peV, cagr),
-      internal: internal,
-      source1M: p.rev1M,
-      analysts: analysts,
-      fiscal: p.reportedFiscalLabel || p.reportedFiscalPeriodEnding || (mom && (mom.reportedFiscalPeriodEnding || mom.reportedFiscalLabel)),
-      regime: row && row.revisionRegime,
-    };
-  }
-
-  function comparisonSortValue(fields, key) {
-    if (!fields) return null;
-    if (key === "ticker") return fields.ticker;
-    if (key === "price") return finiteNum(fields.price);
-    if (key === "eps") return finiteNum(fields.eps);
-    if (key === "pe") return finiteNum(fields.pe);
-    if (key === "growth") {
-      return typeof fields.growth === "string" ? fields.growth : finiteNum(fields.growth);
-    }
-    if (key === "cagr") return finiteNum(fields.cagr);
-    if (key === "growthAdjPe") return finiteNum(fields.growthAdjPe);
-    if (key === "internal30") return internalSortPct(fields.internal && fields.internal["30D"]);
-    if (key === "internal60") return internalSortPct(fields.internal && fields.internal["60D"]);
-    if (key === "internal90") return internalSortPct(fields.internal && fields.internal["90D"]);
-    if (key === "source1M") return finiteNum(fields.source1M);
-    if (key === "analysts") return finiteNum(fields.analysts);
-    if (key === "fiscal") return fields.fiscal || null;
-    if (key === "regime") return fields.regime || null;
-    return null;
-  }
-
-  function internalSortPct(win) {
-    const w = win || {};
-    if (w.status === "ok" && w.revisionPct != null) return finiteNum(w.revisionPct);
-    return null;
-  }
-
-  function sortMissing(v) {
-    if (v == null || v === "") return true;
-    if (typeof v === "number" && !Number.isFinite(v)) return true;
-    if (v === "N/M" || v === "—") return true;
-    return false;
-  }
-
-  function isAfterNumericSortValue(v, key) {
-    /* Semantic growth labels / N/M / unavailable always after numeric (asc and desc). */
-    if (sortMissing(v)) return true;
-    if ((key === "growth" || key === "growthFromPrior") && typeof v === "string") return true;
-    return false;
-  }
-
-  function compareComparisonRows(aFields, bFields, key, dir, aTicker, bTicker) {
-    /* Numeric first; semantic/N/M last regardless of direction; ticker A–Z tie-break. Display sort, not a ranking. */
-    const mul = dir === "desc" ? -1 : 1;
-    const va = comparisonSortValue(aFields, key);
-    const vb = comparisonSortValue(bFields, key);
-    const ma = isAfterNumericSortValue(va, key);
-    const mb = isAfterNumericSortValue(vb, key);
-    const ta = String(aTicker || "");
-    const tb = String(bTicker || "");
-    if (ma && mb) return ta.localeCompare(tb);
-    if (ma) return 1;
-    if (mb) return -1;
-    let base;
-    if (typeof va === "string" || typeof vb === "string") {
-      base = String(va).localeCompare(String(vb));
-    } else {
-      base = Number(va) - Number(vb);
-    }
-    if (base === 0) return ta.localeCompare(tb);
-    return mul * (base > 0 ? 1 : base < 0 ? -1 : 0);
-  }
-
-  function peDisplayCell(eps, peV) {
-    if (!isMissing(eps) && Number(eps) <= 0) {
-      return naCell("N/M", "EPS ≤ 0 — P/E not meaningful (never shown as a negative multiple)");
-    }
-    if (isMissing(peV) || !Number.isFinite(Number(peV))) return naCell();
-    return numCell(peV, 2);
-  }
-
-  function analystsDisplayCell(v) {
-    if (v === null || v === undefined || v === "") return naCell();
-    const n = Number(v);
-    if (!Number.isFinite(n)) return naCell();
-    return numCell(n, 0);
-  }
-
-  function growthAdjPeCell(peV, cagrV, stored) {
-    const v = stored != null ? finiteNum(stored) : growthAdjustedPe(peV, cagrV);
-    if (v == null) return naCell("N/M", GROWTH_ADJ_PE_TITLE);
-    return el("span", { text: fmtNum(v, 2), title: GROWTH_ADJ_PE_TITLE });
+  function sortValuation(rows) {
+    const { key, dir } = state.sort;
+    const mul = dir === "asc" ? 1 : -1;
+    return rows.slice().sort((a, b) => {
+      let va = a[key];
+      let vb = b[key];
+      if (va == null && vb == null) return 0;
+      if (va == null) return 1;
+      if (vb == null) return -1;
+      if (typeof va === "string") return mul * va.localeCompare(vb);
+      return mul * (Number(va) - Number(vb));
+    });
   }
 
   function renderValuation() {
-    const root = el("div", { className: "section", id: "valuation-comparison" });
-    root.appendChild(el("h2", { className: "section-title", text: "Valuation × EPS Growth" }));
-    const years = comparisonYearKeys();
+    const root = el("div", { className: "section" });
+    root.appendChild(el("h2", { className: "section-title", text: "Valuation" }));
+    const years = displayYearKeys().slice(0, 3);
     const y0 = years[0] || "";
-    const y2 = years[2] || years[years.length - 1] || "";
-    const year = selectedComparisonYear();
-    state.comparisonYear = year;
-
-    const known = VALUATION_COL_KEYS;
-    if (!state.sort.key || !known[state.sort.key]) {
-      state.sort = { key: "pe", dir: "asc" };
-    }
-
+    const y1 = years[1] || "";
+    const y2 = years[2] || "";
     root.appendChild(
       el("p", {
         className: "section-note",
         text:
-          "Comparison of current valuation with mapped EPS growth and revision state. Not an investment rating. " +
-          "Forward P/E = Last Close / selected mapped consensus EPS (EPS ≤ 0 → N/M). " +
-          "Forward EPS CAGR " +
+          "Forward PE = Last Close / Mapped Consensus EPS. Mapped CAGR " +
           y0 +
           "–" +
           y2 +
@@ -1242,72 +965,70 @@
           y2 +
           "/EPS" +
           y0 +
-          ")^(1/2)−1. Growth-adjusted P/E = Forward P/E ÷ (CAGR as percent units). " +
-          "Internal 30/60/90D from daily history by ticker + Reported Fiscal Period Ending; Source-reported 1M is Seeking Alpha 1M and is never treated as Internal 30D. " +
-          "Missing values stay — (never 0). Default Comparison Year is displayMappedYears[1] else [0]; missing or invalid displayMappedYears yields no Comparison Year (fail-closed, no clock years). " +
-          "Sort is a table convenience (default Forward P/E ascending; numeric first; null/N/M last; semantic growth labels also last in both directions; ticker A–Z tie-break), not a ranking. " +
-          "Revenue growth is omitted: no forward revenue consensus is aligned to mapped fiscal periods (earnings revenue is historical transcript text; rev1M is EPS revision %, not revenue).",
+          ")^(1/2)−1. FY labels under EPS/PE. Click headers to sort. Years from meta.displayMappedYears.",
       })
     );
 
-    const controls = el("div", { className: "controls", id: "comparison-year-controls" });
-    const yearWrap = el("div");
-    yearWrap.appendChild(el("span", { className: "section-note", text: "Comparison Year  ", style: "margin:0" }));
-    const btnGroup = el("div", { className: "btn-group", id: "comparison-year" });
-    years.forEach((y) => {
-      btnGroup.appendChild(
-        el("button", {
-          type: "button",
-          className: year === y ? "active" : "",
-          text: y,
-          "data-year": y,
-          onClick: () => {
-            state.comparisonYear = y;
-            route();
-          },
-        })
-      );
-    });
-    yearWrap.appendChild(btnGroup);
-    controls.appendChild(yearWrap);
-    root.appendChild(controls);
-    if (!years.length) {
-      root.appendChild(
-        el("p", {
-          className: "section-note",
-          id: "comparison-year-unavailable",
-          text: "Comparison Year unavailable — displayMappedYears missing or invalid. Comparison data unavailable. No years invented from the clock.",
-        })
-      );
-    }
-
-    const cagrLabel = "Forward EPS CAGR";
-    const cagrTitle =
-      "Mapped " +
-      y0 +
-      "–" +
-      y2 +
-      " CAGR from consensus EPS. Company-level (does not change with Comparison Year). Non-positive endpoints → N/M.";
     const cols = [
       { key: "ticker", label: "Ticker", align: "left" },
-      { key: "price", label: "Price", title: "Last close; after-hours shown underneath when present. Same price is the P/E numerator." },
-      { key: "eps", label: "EPS " + (year || "") },
-      { key: "pe", label: "Forward P/E " + (year || ""), title: "Last Close / selected mapped EPS. Missing → —. EPS ≤ 0 → N/M." },
-      { key: "growth", label: "EPS Growth", title: "Vs prior mapped year (growthFromPrior). Turn profitable / Turn loss when the series crosses zero. Negative → 0 is Break-even. Zero prior → N/M. Negative-to-negative is Loss narrowing / Loss widening / Loss unchanged — never an ordinary %. Prior EPS ≤ 0 never shows an ordinary %." },
-      { key: "cagr", label: cagrLabel, title: cagrTitle },
-      { key: "growthAdjPe", label: "Growth-adjusted P/E", title: GROWTH_ADJ_PE_TITLE },
-      { key: "internal30", label: "Internal 30D", title: "Internal 30D from daily EPS history (ticker + Reported Fiscal Period Ending). Insufficient history → —. Never aliased to Source-reported 1M." },
-      { key: "internal60", label: "Internal 60D", title: "Internal 60D from daily EPS history (ticker + Reported Fiscal Period Ending). Insufficient history → —." },
-      { key: "internal90", label: "Internal 90D", title: "Internal 90D from daily EPS history (ticker + Reported Fiscal Period Ending). Insufficient history → —." },
-      { key: "source1M", label: "Source-reported 1M", title: "Seeking Alpha 1M revision % on the selected mapped year. Separate from Internal 30D." },
-      { key: "analysts", label: "Analysts", title: "Analyst count paired to this fiscal identity. Null → —. 0 only when the source reported 0." },
-      { key: "fiscal", label: "Fiscal Period", align: "left", title: "Reported Fiscal Period Ending for the selected mapped year. Identity key with ticker for revisions." },
-      { key: "regime", label: "Revision Regime", align: "left", title: "Company-level regime from mapped Y+1 vs Y+2 Seeking Alpha 1M (not year-specific)." },
+      { key: "lastClose", label: "Last Close" },
+      { key: "eps:" + y0, label: "Mapped " + y0, year: y0, field: "eps" },
+      { key: "eps:" + y1, label: "Mapped " + y1, year: y1, field: "eps" },
+      { key: "eps:" + y2, label: "Mapped " + y2, year: y2, field: "eps" },
+      { key: "pe:" + y0, label: y0 + " PE", year: y0, field: "pe" },
+      { key: "pe:" + y1, label: y1 + " PE", year: y1, field: "pe" },
+      { key: "pe:" + y2, label: y2 + " PE", year: y2, field: "pe" },
+      { key: "growth:" + y1, label: y1 + " Growth", year: y1, field: "growthFromPrior" },
+      { key: "growth:" + y2, label: y2 + " Growth", year: y2, field: "growthFromPrior" },
+      { key: "cagrY0Y2", label: "Mapped CAGR " + y0.replace("E", "") + "–" + y2.replace("E", "") },
+      { key: "rev1M:" + y1, label: "1M Rev " + y1, year: y1, field: "rev1M" },
+      { key: "momentum", label: "Momentum", align: "left" },
     ];
 
-    const identMap = revisionMomentumIdentityMap();
+    if (!state.sort.key || String(state.sort.key).indexOf("pe27") >= 0 || state.sort.key === "pe27") {
+      state.sort = { key: "pe:" + y1, dir: "asc" };
+    }
+
+    function cellValue(r, c) {
+      if (c.year && c.field) {
+        const p = periodOf(r, c.year);
+        if (p && p[c.field] != null) return p[c.field];
+        /* legacy flat fallback */
+        if (c.field === "eps") {
+          if (c.year === y0) return r.eps26;
+          if (c.year === y1) return r.eps27;
+          if (c.year === y2) return r.eps28;
+        }
+        if (c.field === "pe") {
+          if (c.year === y0) return r.pe26;
+          if (c.year === y1) return r.pe27;
+          if (c.year === y2) return r.pe28;
+        }
+        if (c.field === "rev1M") {
+          if (c.year === y1) return r.rev1M;
+          if (c.year === y2) return r.rev1M28;
+        }
+        if (c.field === "growthFromPrior") {
+          if (c.year === y1) return r.growth27;
+          if (c.year === y2) return r.growth28;
+        }
+        return null;
+      }
+      if (c.key === "cagrY0Y2") return r.cagrY0Y2 != null ? r.cagrY0Y2 : r.cagr2628;
+      return r[c.key];
+    }
+
+    function fyLabel(r, year) {
+      const p = periodOf(r, year);
+      if (p && p.reportedFiscalLabel) return p.reportedFiscalLabel;
+      if (year === y0) return r.reportedFy26;
+      if (year === y1) return r.reportedFy27;
+      if (year === y2) return r.reportedFy28;
+      return null;
+    }
+
     const tableWrap = el("div", { className: "table-wrap" });
-    const table = el("table", { className: "data valuation-compare", id: "valuation-compare-table" });
+    const table = el("table", { className: "data" });
     const thead = el("thead");
     const hr = el("tr");
     cols.forEach((c) => {
@@ -1317,7 +1038,6 @@
           (c.align === "left" ? " left" : "") +
           (state.sort.key === c.key ? (state.sort.dir === "asc" ? " sorted-asc" : " sorted-desc") : ""),
         text: c.label,
-        title: c.title || undefined,
         onClick: () => {
           if (state.sort.key === c.key) {
             state.sort.dir = state.sort.dir === "asc" ? "desc" : "asc";
@@ -1334,76 +1054,42 @@
     table.appendChild(thead);
 
     const tbody = el("tbody");
-    const decorated = (state.valuation || []).map((r) => ({
-      row: r,
-      fields: comparisonFields(r, year, identMap),
-    }));
-    decorated.sort((a, b) =>
-      compareComparisonRows(
-        a.fields,
-        b.fields,
-        state.sort.key,
-        state.sort.dir,
-        a.row && a.row.ticker,
-        b.row && b.row.ticker
-      )
-    );
-    decorated.forEach((item) => {
-      const r = item.row;
-      const f = item.fields;
-      const tr = el("tr", { "data-ticker": r.ticker, "data-year": year });
+    const rows = state.valuation.slice().sort((a, b) => {
+      const { key, dir } = state.sort;
+      const mul = dir === "asc" ? 1 : -1;
+      const ca = cols.find((x) => x.key === key) || { key: key };
+      let va = cellValue(a, ca);
+      let vb = cellValue(b, ca);
+      if (va == null && vb == null) return 0;
+      if (va == null) return 1;
+      if (vb == null) return -1;
+      if (typeof va === "string") return mul * va.localeCompare(vb);
+      return mul * (Number(va) - Number(vb));
+    });
+    rows.forEach((r) => {
+      const tr = el("tr");
       cols.forEach((c) => {
-        const td = el("td", { className: c.align === "left" ? "left" : "", "data-col": c.key });
+        const td = el("td", { className: c.align === "left" ? "left" : "" });
+        const v = cellValue(r, c);
         if (c.key === "ticker") {
           td.classList.add("ticker");
           td.appendChild(el("a", { href: "#/company/" + r.ticker, text: r.ticker }));
-        } else if (c.key === "price") {
-          td.appendChild(isMissing(f.price) ? naCell() : numCell(f.price, 2));
-          if (!isMissing(f.afterHours)) {
-            td.appendChild(el("span", { className: "price-sub", text: "AH " + fmtNum(f.afterHours, 2) }));
+        } else if (c.field === "rev1M") {
+          td.appendChild(revCell(v));
+        } else if (c.field === "growthFromPrior" || c.key === "cagrY0Y2") {
+          td.appendChild(c.key === "cagrY0Y2" ? cagrCell(v) : growthCell(v));
+        } else if (c.key === "momentum") {
+          td.appendChild(momentumCell(v, r.revisionRegime));
+        } else if (c.key === "lastClose" || c.key === "price") {
+          const px = r.lastClose != null ? r.lastClose : r.price;
+          td.appendChild(numCell(px, 2));
+          if (!isMissing(r.afterHours)) {
+            td.appendChild(el("span", { className: "price-sub", text: "AH " + fmtNum(r.afterHours, 2) }));
           }
-        } else if (c.key === "eps") {
-          td.appendChild(isMissing(f.eps) ? naCell() : numCell(f.eps, 2));
-        } else if (c.key === "pe") {
-          td.appendChild(peDisplayCell(f.eps, f.pe));
-        } else if (c.key === "growth") {
-          td.appendChild(growthCell(f.growth));
-        } else if (c.key === "cagr") {
-          const node = cagrCell(f.cagr);
-          if (node && node.setAttribute) node.setAttribute("title", cagrTitle);
-          td.appendChild(node);
-        } else if (c.key === "growthAdjPe") {
-          td.appendChild(growthAdjPeCell(f.pe, f.cagr, f.growthAdjPe));
-        } else if (c.key === "internal30") {
-          td.appendChild(internalWindowCell(f.internal && f.internal["30D"]));
-        } else if (c.key === "internal60") {
-          td.appendChild(internalWindowCell(f.internal && f.internal["60D"]));
-        } else if (c.key === "internal90") {
-          td.appendChild(internalWindowCell(f.internal && f.internal["90D"]));
-        } else if (c.key === "source1M") {
-          td.appendChild(sourceWindowCell({
-            revisionPct: f.source1M,
-            windowLabel: "Source-reported · Seeking Alpha 1M",
-            sourceWindow: "Seeking Alpha 1M",
-          }));
-        } else if (c.key === "analysts") {
-          td.appendChild(analystsDisplayCell(f.analysts));
-        } else if (c.key === "fiscal") {
-          if (isMissing(f.fiscal)) td.appendChild(naCell());
-          else td.textContent = f.fiscal;
-        } else if (c.key === "regime") {
-          if (isMissing(f.regime)) td.appendChild(naCell());
-          else {
-            td.appendChild(
-              el("span", {
-                className: "revision-regime",
-                text: String(f.regime),
-                title: "Company-level revision regime from mapped Y+1 vs Y+2 Seeking Alpha 1M — not specific to Comparison Year.",
-              })
-            );
-          }
+        } else if (c.field === "eps" || c.field === "pe") {
+          td.appendChild(valueWithFy(numCell(v, 2), fyLabel(r, c.year)));
         } else {
-          td.appendChild(naCell());
+          td.appendChild(numCell(v, 2));
         }
         tr.appendChild(td);
       });
@@ -1515,255 +1201,15 @@
     });
   }
 
-  function revisionMomentumRows() {
-    const rows = Array.isArray(state.revisionMomentum) ? state.revisionMomentum.slice() : [];
-    if (rows.length) {
-      const f = state.revFilters;
-      return rows.filter((r) => {
-        if (f.ticker && r.ticker !== f.ticker) return false;
-        if (f.year) {
-          const mapped = r.mappedYear || yearFromAlignment(r.calendarAlignment);
-          if (mapped !== f.year) return false;
-        }
-        return true;
-      });
-    }
-    /* Fallback when export payload is older: SA source windows from companies; Internal unavailable. */
-    const out = [];
-    (state.watchlist || []).forEach((t) => {
-      const c = state.companies[t] || {};
-      const byFiscal = c.epsByFiscal && typeof c.epsByFiscal === "object" ? c.epsByFiscal : null;
-      const entries = [];
-      if (byFiscal) {
-        Object.keys(byFiscal).forEach((lab) => {
-          const e = byFiscal[lab] || {};
-          entries.push({
-            ticker: t,
-            reportedFiscalPeriodEnding: e.reportedFiscalLabel || lab,
-            mappedYear: e.mappedYear,
-            calendarAlignment: e.calendarAlignment,
-            currentEps: e.consensus,
-            analysts: e.analysts,
-            rev1M: e.rev1M,
-            rev3M: e.rev3M,
-            rev6M: e.rev6M,
-          });
-        });
-      } else {
-        const years = displayYearKeys();
-        years.forEach((y) => {
-          const e = (c.eps && c.eps[y]) || {};
-          if (!e.reportedFiscalLabel && e.consensus == null) return;
-          entries.push({
-            ticker: t,
-            reportedFiscalPeriodEnding: e.reportedFiscalLabel || "—",
-            mappedYear: y,
-            calendarAlignment: e.calendarAlignment,
-            currentEps: e.consensus,
-            analysts: e.analysts,
-            rev1M: e.rev1M,
-            rev3M: e.rev3M,
-            rev6M: e.rev6M,
-          });
-        });
-      }
-      entries.forEach((e) => {
-        out.push({
-          ticker: e.ticker,
-          reportedFiscalPeriodEnding: e.reportedFiscalPeriodEnding,
-          mappedYear: e.mappedYear,
-          calendarAlignment: e.calendarAlignment,
-          currentEps: e.currentEps,
-          analysts: e.analysts,
-          internal: {
-            "30D": { status: "unavailable", revisionPct: null, windowLabel: "Internal 30D" },
-            "60D": { status: "unavailable", revisionPct: null, windowLabel: "Internal 60D" },
-            "90D": { status: "unavailable", revisionPct: null, windowLabel: "Internal 90D" },
-          },
-          sourceReported: {
-            "1M": {
-              revisionPct: e.rev1M,
-              windowLabel: "Source-reported · Seeking Alpha 1M",
-              sourceWindow: "Seeking Alpha 1M",
-            },
-            "3M": {
-              revisionPct: e.rev3M,
-              windowLabel: "Source-reported · Seeking Alpha 3M",
-              sourceWindow: "Seeking Alpha 3M",
-            },
-            "6M": {
-              revisionPct: e.rev6M,
-              windowLabel: "Source-reported · Seeking Alpha 6M",
-              sourceWindow: "Seeking Alpha 6M",
-            },
-          },
-          upAnalysts: null,
-          downAnalysts: null,
-          analystDirectionStatus: "unavailable",
-          analystDirectionReason: "not_in_source",
-        });
-      });
-    });
-    const f = state.revFilters;
-    return out.filter((r) => {
-      if (f.ticker && r.ticker !== f.ticker) return false;
-      if (f.year) {
-        const mapped = r.mappedYear || yearFromAlignment(r.calendarAlignment);
-        if (mapped !== f.year) return false;
-      }
-      return true;
-    });
-  }
-
-  function internalWindowCell(win) {
-    const w = win || {};
-    if (w.status === "ok" && !isMissing(w.revisionPct)) {
-      const node = revCell(w.revisionPct);
-      if (node && node.setAttribute) {
-        const bits = [];
-        if (w.startDate && w.endDate) bits.push(w.startDate + " → " + w.endDate);
-        if (!isMissing(w.startEps) && !isMissing(w.endEps)) {
-          bits.push(fmtNum(w.startEps, 2) + " → " + fmtNum(w.endEps, 2));
-        }
-        node.setAttribute("title", (w.windowLabel || "Internal") + (bits.length ? " · " + bits.join(" · ") : ""));
-      }
-      return node;
-    }
-    const reason = w.reason === "zero_baseline" ? "Zero baseline — unavailable" : "Insufficient history — unavailable";
-    return naCell(null, reason);
-  }
-
-  function sourceWindowCell(win) {
-    const w = win || {};
-    const node = revCell(w.revisionPct);
-    const label = w.windowLabel || w.sourceWindow || "Source-reported";
-    if (node && node.setAttribute) node.setAttribute("title", label);
-    else if (isMissing(w.revisionPct)) return naCell(null, label + " unavailable");
-    return node;
-  }
-
-  function renderRevisionMomentum() {
-    const sec = el("div", { className: "section", id: "eps-revision-momentum" });
-    sec.appendChild(el("h2", { className: "section-title", text: "EPS Revision Momentum" }));
-    const note =
-      (state.meta && (state.meta.internalRevisionNote || state.meta.revisionMomentumNote)) ||
-      "Internal 30D/60D/90D from daily EPS history (ticker + Reported Fiscal Period Ending). Seeking Alpha 1M/3M/6M are Source-reported and are never treated as Internal 30/60/90D. Up/Down Analysts unavailable unless present in source.";
-    sec.appendChild(el("p", { className: "section-note", text: note }));
-
-    const tableWrap = el("div", { className: "table-wrap" });
-    const table = el("table", { className: "data revision-momentum" });
-    const thead = el("thead");
-    const g1 = el("tr");
-    g1.appendChild(el("th", { className: "left", text: "Ticker", rowspan: "2" }));
-    g1.appendChild(el("th", { className: "left", text: "Fiscal Period Ending", rowspan: "2" }));
-    g1.appendChild(el("th", { text: "Current EPS", rowspan: "2" }));
-    g1.appendChild(el("th", { className: "group-internal", text: "Internal (computed)", colspan: "3" }));
-    g1.appendChild(el("th", { className: "group-analysts", text: "Up / Down", rowspan: "2" }));
-    g1.appendChild(el("th", { text: "Analysts", rowspan: "2" }));
-    g1.appendChild(
-      el("th", {
-        className: "group-source col-group-sep",
-        text: "Source-reported (Seeking Alpha)",
-        colspan: "3",
-      })
-    );
-    thead.appendChild(g1);
-    const g2 = el("tr");
-    [
-      ["Internal 30D", ""],
-      ["Internal 60D", ""],
-      ["Internal 90D", ""],
-      ["SA 1M", "col-group-sep"],
-      ["SA 3M", ""],
-      ["SA 6M", ""],
-    ].forEach(([lab, extra]) => {
-      g2.appendChild(el("th", { className: extra, text: lab }));
-    });
-    thead.appendChild(g2);
-    table.appendChild(thead);
-
-    const tbody = el("tbody");
-    const rows = revisionMomentumRows();
-    rows.forEach((r) => {
-      const tr = el("tr");
-      const tdT = el("td", { className: "ticker left" });
-      tdT.appendChild(el("a", { href: "#/company/" + r.ticker, text: r.ticker }));
-      tr.appendChild(tdT);
-      const fiscal = r.reportedFiscalPeriodEnding || r.reportedFiscalLabel || "—";
-      const fyTd = el("td", { className: "left", text: fiscal });
-      if (r.mappedYear) {
-        fyTd.appendChild(
-          el("span", {
-            className: "price-sub",
-            text: "slot " + r.mappedYear + " (display)",
-            title: "Mapped slot is display-only; identity is ticker + Reported Fiscal Period Ending",
-          })
-        );
-      }
-      tr.appendChild(fyTd);
-      const tdEps = el("td");
-      tdEps.appendChild(numCell(r.currentEps, 2));
-      tr.appendChild(tdEps);
-      const internal = r.internal || {};
-      ["30D", "60D", "90D"].forEach((k) => {
-        const td = el("td");
-        td.appendChild(internalWindowCell(internal[k]));
-        tr.appendChild(td);
-      });
-      const dirTitle =
-        r.analystDirectionReason === "not_in_source" || r.analystDirectionStatus === "unavailable"
-          ? "Up/Down Analysts unavailable — not present in captured Seeking Alpha sources"
-          : "Analyst direction";
-      const tdUpDown = el("td");
-      if (
-        r.analystDirectionStatus === "unavailable" ||
-        (isMissing(r.upAnalysts) && isMissing(r.downAnalysts))
-      ) {
-        tdUpDown.appendChild(naCell("— / —", dirTitle));
-      } else {
-        const up = isMissing(r.upAnalysts) ? "—" : fmtNum(r.upAnalysts, 0);
-        const down = isMissing(r.downAnalysts) ? "—" : fmtNum(r.downAnalysts, 0);
-        tdUpDown.appendChild(el("span", { text: up + " / " + down, title: dirTitle }));
-      }
-      tr.appendChild(tdUpDown);
-      const tdAn = el("td");
-      tdAn.appendChild(isMissing(r.analysts) ? naCell() : numCell(r.analysts, 0));
-      tr.appendChild(tdAn);
-      const src = r.sourceReported || {};
-      ["1M", "3M", "6M"].forEach((k, i) => {
-        const td = el("td", { className: i === 0 ? "col-group-sep" : "" });
-        td.appendChild(sourceWindowCell(src[k]));
-        tr.appendChild(td);
-      });
-      tbody.appendChild(tr);
-    });
-    if (!rows.length) {
-      const tr = el("tr");
-      const td = el("td", {
-        className: "left",
-        text: "No fiscal identities available.",
-        colspan: "11",
-      });
-      td.style.color = "var(--text-muted)";
-      tr.appendChild(td);
-      tbody.appendChild(tr);
-    }
-    table.appendChild(tbody);
-    tableWrap.appendChild(table);
-    sec.appendChild(tableWrap);
-    return sec;
-  }
-
   function renderRevisions() {
     const root = el("div");
-    root.appendChild(renderRevisionMomentum());
 
     const chartSec = el("div", { className: "section" });
     chartSec.appendChild(el("h2", { className: "section-title", text: "EPS Consensus History" }));
     chartSec.appendChild(
       el("p", {
         className: "section-note",
-        text: "Built from daily EPS snapshots (mapped FY slots). Revision Index mode sets the first history point to 100. Internal 30/60/90D use ticker + Reported Fiscal Period Ending. Event table below is revision events only.",
+        text: "Built from daily EPS snapshots (mapped FY slots). Revision Index mode sets the first history point to 100. Table below still uses revision events only.",
       })
     );
 
@@ -2593,6 +2039,9 @@
     let view;
     try {
       if (r.name === "valuation") {
+        if (!state.sort.key || state.sort.key === "ticker") {
+          /* keep user sort; default pe27 asc on first visit via flag */
+        }
         view = renderValuation();
       } else if (r.name === "revisions") view = renderRevisions();
       else if (r.name === "earnings") view = renderEarnings();
@@ -2609,8 +2058,8 @@
 
   async function boot() {
     initTheme();
-    // default valuation sort: Forward P/E ascending (table convenience, not a ranking)
-    state.sort = { key: "pe", dir: "asc" };
+    // default valuation sort
+    state.sort = { key: "pe:" + (displayYearKeys()[1] || ""), dir: "asc" };
     const app = $("#app");
     try {
       await loadAll();

@@ -13,8 +13,8 @@
   "consensusDataAsOfDisplay": "Sep 17, 2026 08:40 Taipei Time",
   "lastSuccessfulCollection": "2026-09-17T00:40:03Z",
   "lastSuccessfulCollectionDisplay": "Sep 17, 2026 08:40 Taipei Time",
-  "sitePublished": "2026-09-17T00:40:55Z",
-  "sitePublishedDisplay": "Sep 17, 2026 08:40 Taipei Time",
+  "sitePublished": "2026-09-17T02:25:18Z",
+  "sitePublishedDisplay": "Sep 17, 2026 10:25 Taipei Time",
   "dataStale": false,
   "nextExpected": "2026-09-18T00:00:00Z",
   "staleAfter": "2026-09-18T06:00:00Z",
@@ -85,5 +85,7 @@
   },
   "schemaVersion": "1",
   "appVersion": "824c9c361deeef2378513f18fc9eb9db7ec8fb4c4fcf179e52778164461f6d23",
-  "releaseVersion": "e30fdd9d2cd4044b83358ce611e23728eb6e565032c17b7cb604bef451279c16"
+  "releaseVersion": "e30fdd9d2cd4044b83358ce611e23728eb6e565032c17b7cb604bef451279c16",
+  "generationRunId": "20260917T004003Z_3fc715ff",
+  "canonicalHeadSha": "89cd0747d6298e3400a9742cad4a5c97ef1a59b0"
 }
