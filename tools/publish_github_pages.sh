@@ -4,6 +4,8 @@
 # Second line of defense: abort if qualityGate.publishable != true
 # NO_CHANGES (exit 0) when public payload hash unchanged AND remote release matches
 # ROOT via AI_EPS_ROOT or script-relative project root (never hard-require /workspace/...)
+# Formal publisher never honors PUBLISH_ALLOW_LOCAL (refused/unset below).
+# Local fixture overlay: python3 tools/publish_release.py with the flag.
 # Durable git ops live in tools/publish_release.py (no `git commit || true`,
 # no swallowed rematerialize, no force-push). This wrapper keeps the lock +
 # publish-only contract. Implementation still mentions:
@@ -41,6 +43,15 @@ if [[ "${ALLOW_PUBLISH_EXPORT:-}" == "1" ]]; then
   echo "ERROR: ALLOW_PUBLISH_EXPORT is banned — publish must not recompute" >&2
   exit 2
 fi
+
+# Formal publisher never honors PUBLISH_ALLOW_LOCAL. Test-only local overlay
+# is python3 tools/publish_release.py with the flag set at that entrypoint.
+if [[ -n "${PUBLISH_ALLOW_LOCAL:-}" ]]; then
+  echo "ERROR: PUBLISH_ALLOW_LOCAL is test-only — formal publisher refuses" >&2
+  unset PUBLISH_ALLOW_LOCAL
+  exit 1
+fi
+unset PUBLISH_ALLOW_LOCAL
 
 # Optional gh credential helper (never required; never a success signal)
 gh auth setup-git >/dev/null 2>&1 || true

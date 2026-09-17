@@ -224,22 +224,88 @@ def _build_id_of(obj: dict) -> str:
     return _nonempty(obj.get("buildId") or obj.get("_buildId"))
 
 
+_TICKER_MAP_FILES = frozenset({"companies.json", "eps_history.json", "earnings.json"})
+_COLLECTION_FILES: dict[str, tuple[str, type]] = {
+    "valuation.json": ("rows", list),
+    "revisions.json": ("revisions", list),
+    "watchlist.json": ("tickers", list),
+    "alerts.json": ("activeAlerts", list),
+}
+_TICKER_RESERVED = frozenset({"_buildId", "buildId"})
+
+
+def _validate_ticker_map(name: str, obj: dict, *, label: str) -> None:
+    tickers = [k for k in obj.keys() if k not in _TICKER_RESERVED]
+    if not tickers:
+        raise PublishError(
+            f"{label} {name} schema invalid: empty object / missing required ticker collections"
+        )
+    for key in tickers:
+        if not isinstance(obj.get(key), dict):
+            raise PublishError(
+                f"{label} {name} schema invalid: ticker {key!r} must be an object"
+            )
+
+
+def _validate_web_json_file_schema(name: str, obj: dict, *, label: str) -> None:
+    """Per-file schema: required collections/fields, not merely 'is object'."""
+    if name == "meta.json":
+        qg = obj.get("qualityGate")
+        if not isinstance(qg, dict):
+            raise PublishError(f"{label} meta.json qualityGate missing or not an object")
+        for key in (
+            "schemaVersion",
+            "dataVersion",
+            "refreshVersion",
+            "lastSuccessfulCollection",
+            "generationRunId",
+            "buildId",
+        ):
+            if not _nonempty(obj.get(key)):
+                raise PublishError(f"{label} meta.json missing required field {key}")
+        return
+    if name in _TICKER_MAP_FILES:
+        _validate_ticker_map(name, obj, label=label)
+        return
+    if name in _COLLECTION_FILES:
+        field, typ = _COLLECTION_FILES[name]
+        val = obj.get(field)
+        if not isinstance(val, typ):
+            raise PublishError(
+                f"{label} {name} schema invalid: missing required collection {field} "
+                f"(empty object or wrong type)"
+            )
+        return
+    if name == "dashboard.json":
+        dash_meta = obj.get("meta")
+        if not isinstance(dash_meta, dict):
+            raise PublishError(f"{label} dashboard.json.meta missing or not an object")
+        companies = obj.get("companies")
+        if not isinstance(companies, dict):
+            raise PublishError(
+                f"{label} dashboard.json schema invalid: missing required collection companies"
+            )
+        return
+    raise PublishError(f"{label} {name} schema invalid: unknown required web json")
+
+
 def validate_required_web_json(data_dir: Path, *, label: str) -> dict:
-    """Parse every REQUIRED_WEB_JSON file; type/schema/build-identity + meta/dashboard."""
+    """Parse every REQUIRED_WEB_JSON file; per-file schema + consistent build identity.
+
+    Empty objects, wrong types, missing collections/fields, and missing/inconsistent
+    buildId fail closed before any remote mutation.
+    """
     loaded: dict[str, dict] = {}
     for name in REQUIRED_WEB_JSON:
         loaded[name] = _load_json_object(data_dir / name, label=f"{label} {name}")
+        _validate_web_json_file_schema(name, loaded[name], label=label)
     meta = loaded["meta.json"]
-    qg = meta.get("qualityGate")
-    if not isinstance(qg, dict):
-        raise PublishError(f"{label} meta.json qualityGate missing or not an object")
-    for key in ("schemaVersion", "dataVersion", "refreshVersion", "lastSuccessfulCollection"):
-        if not _nonempty(meta.get(key)):
-            raise PublishError(f"{label} meta.json missing required field {key}")
     run_id = _nonempty(meta.get("generationRunId") or meta.get("runId"))
     if not run_id:
         raise PublishError(f"{label} meta.json missing generationRunId")
-    meta_build = _nonempty(meta.get("buildId") or meta.get("dataVersion"))
+    meta_build = _nonempty(meta.get("buildId"))
+    if not meta_build:
+        raise PublishError(f"{label} meta.json missing required field buildId")
     dash = loaded["dashboard.json"]
     dash_meta = dash.get("meta")
     if not isinstance(dash_meta, dict):
@@ -267,20 +333,23 @@ def validate_required_web_json(data_dir: Path, *, label: str) -> dict:
         raise PublishError(
             f"{label} meta/dashboard generationRunId mismatch meta={run_id} dashboard={dash_run}"
         )
-    if meta_build:
-        dash_build = _build_id_of(dash) or _build_id_of(dash_meta)
-        if dash_build and dash_build != meta_build:
+    dash_build = _build_id_of(dash) or _build_id_of(dash_meta)
+    if not dash_build:
+        raise PublishError(f"{label} dashboard.json missing required field buildId")
+    if dash_build != meta_build:
+        raise PublishError(
+            f"{label} build-identity mismatch meta.buildId={meta_build} "
+            f"dashboard.buildId={dash_build}"
+        )
+    for name, obj in loaded.items():
+        file_build = _build_id_of(obj)
+        if not file_build:
+            raise PublishError(f"{label} {name} missing required field buildId")
+        if file_build != meta_build:
             raise PublishError(
-                f"{label} build-identity mismatch meta.buildId={meta_build} "
-                f"dashboard.buildId={dash_build}"
+                f"{label} {name} build-identity mismatch "
+                f"file={file_build} meta={meta_build}"
             )
-        for name, obj in loaded.items():
-            file_build = _build_id_of(obj)
-            if file_build and file_build != meta_build:
-                raise PublishError(
-                    f"{label} {name} build-identity mismatch "
-                    f"file={file_build} meta={meta_build}"
-                )
     return loaded
 
 
@@ -371,38 +440,59 @@ def require_current_generation(root: Path) -> tuple[dict, Path, dict, dict, str]
     return current, gen_dir, gmeta, gen_meta, collection_iso
 
 
-def rematerialize_current(root: Path, current: dict, gen_dir: Path) -> None:
-    """Sync live cache from CURRENT. Any failure is fatal for publish."""
+def rematerialize_into_staging(staging: Path, current: dict, gen_dir: Path) -> None:
+    """Sync CURRENT generation web payload into disposable staging. Never writes live."""
     if os.environ.get("FAULT_INJECT_PUBLISH_REMATERIALIZE") == "1":
         raise PublishError("rematerialization failure (FAULT_INJECT_PUBLISH_REMATERIALIZE)")
-    ing.rebind_paths(root)
-    try:
-        ing.materialize_generation(gen_dir)
-    except PublishError:
-        raise
-    except Exception as exc:
-        raise PublishError(f"rematerialization failure: {exc}") from exc
+    web_src = gen_dir / "web" / "data"
+    web_dst = staging / "web" / "data"
+    web_dst.mkdir(parents=True, exist_ok=True)
+    if not web_src.is_dir():
+        raise PublishError(f"rematerialization failure: generation web/data missing {web_src}")
+    for src in web_src.glob("*.json"):
+        if src.is_file():
+            shutil.copy2(src, web_dst / src.name)
+    for src in web_src.glob("*.json"):
+        dest = web_dst / src.name
+        if not dest.is_file():
+            raise PublishError(f"rematerialization failure: staging missing {src.name}")
+        try:
+            if dest.read_bytes() != src.read_bytes():
+                raise PublishError(
+                    f"rematerialization failure: staging {src.name} does not match generation"
+                )
+        except PublishError:
+            raise
+        except OSError as exc:
+            raise PublishError(f"rematerialization failure: {exc}") from exc
     rid = str(current.get("runId") or gen_dir.name)
-    if not ing.live_cache_matches_generation(gen_dir, rid):
-        raise PublishError(
-            "live/materialized data inconsistent with CURRENT generation after rematerialize"
-        )
-    live_meta_path = root / "web" / "data" / "meta.json"
-    live_meta = _load_json_object(live_meta_path, label="live web/data/meta.json")
-    ok, reason = _quality_gate_ok(live_meta)
+    marker = staging / "data" / ".materialized_run_id"
+    marker.parent.mkdir(parents=True, exist_ok=True)
+    atomic_write_text(marker, rid + "\n")
+    staging_meta = _load_json_object(
+        staging / "web" / "data" / "meta.json", label="staging web/data/meta.json"
+    )
+    ok, reason = _quality_gate_ok(staging_meta)
     if not ok:
-        raise PublishError(f"live meta failed quality gate: {reason}")
-    validate_required_web_json(root / "web" / "data", label="live")
+        raise PublishError(f"staging meta failed quality gate: {reason}")
+    validate_required_web_json(staging / "web" / "data", label="staging")
     gen_meta = _load_json_object(
         gen_dir / "web" / "data" / "meta.json", label="generation web/data/meta.json"
     )
     for key in ("dataVersion", "refreshVersion", "schemaVersion"):
         gv = str(gen_meta.get(key) or "")
-        lv = str(live_meta.get(key) or "")
+        lv = str(staging_meta.get(key) or "")
         if gv and lv and gv != lv:
             raise PublishError(
-                f"inconsistent {key}: generation={gv[:16]} live={lv[:16]}"
+                f"inconsistent {key}: generation={gv[:16]} staging={lv[:16]}"
             )
+
+
+def rematerialize_current(root: Path, current: dict, gen_dir: Path) -> None:
+    """Deprecated live rematerialize. Publish uses rematerialize_into_staging only."""
+    raise PublishError(
+        "live rematerialize_current is banned — rematerialize/build must happen in staging"
+    )
 
 
 def parse_collection_timestamp(value: Any, *, label: str) -> datetime:
@@ -972,6 +1062,9 @@ def _copy_staged_web_to_live(staging: Path, live_root: Path) -> None:
         live_root_data / ".last-publish-web",
         str((live_root / "web").resolve()) + "\n",
     )
+    mat_src = staging / "data" / ".materialized_run_id"
+    if mat_src.is_file():
+        shutil.copy2(mat_src, live_root_data / ".materialized_run_id")
     if marker_src.is_file():
         pass
 
@@ -1164,27 +1257,31 @@ def publish(root: Path) -> int:
     print("publish-only: no export / no history mutation (ingest_snapshot.py is sole writer)")
 
     current, gen_dir, _gmeta, gen_web_meta, collection_iso = require_current_generation(root)
-    rematerialize_current(root, current, gen_dir)
-
-    web = root / "web"
-    live_meta = _load_json_object(web / "data" / "meta.json", label="web/data/meta.json")
-    ok, reason = _quality_gate_ok(live_meta)
-    if not ok:
-        raise PublishError(f"{reason} — abort publish (no git push)")
-    print(f"qualityGate OK status={(live_meta.get('qualityGate') or {}).get('status')} publishable=true")
 
     site = _site_repo(root)
     git_base = resolve_git_base(root, site)
     has_remote = git_base is not None and _has_origin_remote(git_base)
 
-    if git_base is None or not has_remote:
-        if not _allow_local():
-            raise PublishError(
-                "no Git repository/remote — formal publisher refuses "
-                "(PUBLISH_ALLOW_LOCAL is test-only)"
-            )
-        staging = make_staging_tree(root)
-        try:
+    staging = make_staging_tree(root)
+    try:
+        rematerialize_into_staging(staging, current, gen_dir)
+        staging_meta = _load_json_object(
+            staging / "web" / "data" / "meta.json", label="staging web/data/meta.json"
+        )
+        ok, reason = _quality_gate_ok(staging_meta)
+        if not ok:
+            raise PublishError(f"{reason} — abort publish (no git push)")
+        print(
+            f"qualityGate OK status={(staging_meta.get('qualityGate') or {}).get('status')} "
+            "publishable=true"
+        )
+
+        if git_base is None or not has_remote:
+            if not _allow_local():
+                raise PublishError(
+                    "no Git repository/remote — formal publisher refuses "
+                    "(PUBLISH_ALLOW_LOCAL is test-only)"
+                )
             _meta, payload_hash, expected = prepare_staging_release(
                 staging,
                 generation_run_id=current["runId"],
@@ -1219,25 +1316,21 @@ def publish(root: Path) -> int:
             print("stamped sitePublished (meta.json + dashboard.json.meta synced)")
             publish_local(staging, root, site, payload_hash=payload_hash)
             return 0
-        finally:
-            shutil.rmtree(staging, ignore_errors=True)
 
-    fetch_origin(git_base)
-    require_canonical_git_ready(root, git_base, gen_dir)
-    remote_meta, _remote_ver = remote_published_meta(git_base)
-    pending_dt = parse_collection_timestamp(
-        collection_iso, label="pending lastSuccessfulCollection"
-    )
-    if remote_meta is not None:
-        compare_pending_vs_remote_timestamp(
-            pending_dt,
-            remote_meta.get("lastSuccessfulCollection"),
-            remote_present=True,
+        fetch_origin(git_base)
+        require_canonical_git_ready(root, git_base, gen_dir)
+        remote_meta, _remote_ver = remote_published_meta(git_base)
+        pending_dt = parse_collection_timestamp(
+            collection_iso, label="pending lastSuccessfulCollection"
         )
+        if remote_meta is not None:
+            compare_pending_vs_remote_timestamp(
+                pending_dt,
+                remote_meta.get("lastSuccessfulCollection"),
+                remote_present=True,
+            )
 
-    proven_sha = prove_canonical_head_sha(git_base, gen_dir)
-    staging = make_staging_tree(root)
-    try:
+        proven_sha = prove_canonical_head_sha(git_base, gen_dir)
         _meta, payload_hash, expected = prepare_staging_release(
             staging,
             generation_run_id=current["runId"],

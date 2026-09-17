@@ -333,10 +333,11 @@ def seed_publishable_current(
         if not isinstance(obj, dict):
             continue
         bid = str(meta.get("buildId") or meta.get("dataVersion") or "")
-        if "buildId" in obj:
-            obj["buildId"] = bid
-        if "_buildId" in obj:
+        ticker_maps = {"companies.json", "eps_history.json", "earnings.json"}
+        if name in ticker_maps:
             obj["_buildId"] = bid
+        else:
+            obj["buildId"] = bid
         dest.write_text(json.dumps(obj, indent=2) + "\n", encoding="utf-8")
     shutil.copy2(meta_path, live / "meta.json")
     for src in gen_web.glob("*.json"):
@@ -3857,7 +3858,7 @@ def test_parent_lock_ingest_publish(fixture: Path) -> None:
     env["AI_EPS_ROOT"] = str(fixture)
     with GlobalPipelineLock(lock_path, non_blocking=True):
         proc = subprocess.run(
-            ["bash", str(fixture / "tools" / "publish_github_pages.sh")],
+            [sys.executable, str(fixture / "tools" / "publish_release.py")],
             cwd=str(fixture),
             env=env,
             capture_output=True,
@@ -4253,7 +4254,7 @@ def test_clean_publish_contains_all_index_assets(fixture: Path) -> None:
     env["PUBLISH_PREBUILT"] = "1"
     env["PUBLISH_ALLOW_LOCAL"] = "1"
     proc = subprocess.run(
-        ["bash", str(fixture / "tools" / "publish_github_pages.sh")],
+        [sys.executable, str(fixture / "tools" / "publish_release.py")],
         cwd=str(fixture),
         env=env,
         capture_output=True,
@@ -4519,7 +4520,7 @@ def test_real_parent_lock_publish_integration(fixture: Path) -> None:
     env["AI_EPS_ROOT"] = str(fixture)
     with GlobalPipelineLock(lock_path, non_blocking=True):
         proc = subprocess.run(
-            ["bash", str(fixture / "tools" / "publish_github_pages.sh")],
+            [sys.executable, str(fixture / "tools" / "publish_release.py")],
             cwd=str(fixture),
             env=env,
             capture_output=True,

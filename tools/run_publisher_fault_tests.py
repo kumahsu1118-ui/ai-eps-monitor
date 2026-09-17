@@ -136,8 +136,15 @@ def _min_meta(snapshot_utc: str, *, publishable: bool = True, extra: dict | None
 
 
 def _align_web_json_identity(data: Path, meta: dict) -> None:
-    """Keep REQUIRED_WEB_JSON parseable objects with matching build-identity + dashboard.meta."""
+    """Keep REQUIRED_WEB_JSON schema-valid with matching build-identity + dashboard.meta."""
     build_id = str(meta.get("buildId") or meta.get("dataVersion") or "")
+    ticker_maps = {"companies.json", "eps_history.json", "earnings.json"}
+    collections = {
+        "valuation.json": "rows",
+        "revisions.json": "revisions",
+        "watchlist.json": "tickers",
+        "alerts.json": "activeAlerts",
+    }
     for name in REQUIRED_WEB_JSON:
         dest = data / name
         if not dest.is_file():
@@ -149,17 +156,19 @@ def _align_web_json_identity(data: Path, meta: dict) -> None:
         if not isinstance(obj, dict):
             dest.write_text("{}\n", encoding="utf-8")
             obj = {}
-        if "buildId" in obj:
-            obj["buildId"] = build_id
-        if "_buildId" in obj:
+        if name in ticker_maps:
             obj["_buildId"] = build_id
+        else:
+            obj["buildId"] = build_id
+        if name in collections and not isinstance(obj.get(collections[name]), list):
+            obj[collections[name]] = []
         if name == "dashboard.json":
             dm = dict(obj.get("meta") or {})
             dm.update(meta)
             obj["meta"] = dm
             obj["buildId"] = build_id
             if "companies" not in obj or not isinstance(obj.get("companies"), dict):
-                obj["companies"] = obj.get("companies") if isinstance(obj.get("companies"), dict) else {}
+                obj["companies"] = {}
         dest.write_text(json.dumps(obj, indent=2) + "\n", encoding="utf-8")
     (data / "meta.json").write_text(json.dumps(meta, indent=2) + "\n", encoding="utf-8")
 
@@ -288,6 +297,29 @@ def make_workspace(tmp: Path, clone: Path) -> Path:
     return ws
 
 
+def run_publisher_python(ws: Path, extra_env: dict | None = None, args: list[str] | None = None) -> subprocess.CompletedProcess:
+    """Explicit test entrypoint: call publish_release.py directly (local fixture overlay)."""
+    env = os.environ.copy()
+    env["AI_EPS_ROOT"] = str(ws)
+    env["PIPELINE_LOCK_HELD"] = "1"
+    env["SKIP_EXPORT"] = "1"
+    env["PUBLISH_PREBUILT"] = "1"
+    env["GIT_TERMINAL_PROMPT"] = "0"
+    env["PYTHONDONTWRITEBYTECODE"] = "1"
+    env["SKIP_CANONICAL_GIT_PERSIST"] = "1"
+    env["SKIP_CANONICAL_GIT_PUSH"] = "1"
+    if extra_env:
+        env.update(extra_env)
+    return subprocess.run(
+        [sys.executable, str(ws / "tools" / "publish_release.py"), *(args or [])],
+        cwd=str(ws),
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
+
+
 def run_publisher(ws: Path, extra_env: dict | None = None, args: list[str] | None = None) -> subprocess.CompletedProcess:
     env = os.environ.copy()
     env["AI_EPS_ROOT"] = str(ws)
@@ -324,6 +356,7 @@ def snapshot_live_artifacts(ws: Path) -> dict[str, bytes | None]:
         "web/data/meta.json",
         "web/data/dashboard.json",
         "data/.last-publish-web",
+        "data/.materialized_run_id",
         ".data-version",
         "site-repo/.data-version",
         "site-repo/data/meta.json",
@@ -752,6 +785,36 @@ def persist_canonical_history(repo: Path) -> str:
     return run_git(repo, ["rev-parse", "HEAD"]).stdout.strip()
 
 
+def persist_canonical_history_production(ws: Path) -> str:
+    """Drive canonical persist through the production ingest API (no test fetch/reset)."""
+    saved: dict[str, str | None] = {}
+    for key in ("SKIP_CANONICAL_GIT_PERSIST", "SKIP_CANONICAL_GIT_PUSH"):
+        saved[key] = os.environ.pop(key, None)
+    tools_dir = str(ROOT / "tools")
+    if tools_dir not in sys.path:
+        sys.path.insert(0, tools_dir)
+    import ingest_snapshot as ing  # noqa: WPS433
+
+    prev_root = Path(ing.ROOT)
+    try:
+        ing.rebind_paths(ws)
+        state = ing.persist_canonical_history_to_source_git(push=True)
+        status = str(state.get("status") or "")
+        if status not in {"ok", "clean"}:
+            raise RuntimeError(f"production persist failed: {state}")
+        return run_git(ws, ["rev-parse", "HEAD"]).stdout.strip()
+    finally:
+        try:
+            ing.rebind_paths(prev_root)
+        except Exception:
+            pass
+        for key, val in saved.items():
+            if val is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = val
+
+
 def make_source_git_workspace(tmp: Path, *, remote_collection: str = REMOTE_TS) -> tuple[Path, Path]:
     bare, clone = make_bare_and_clone(tmp, remote_collection=remote_collection)
     ws = tmp / "source-ws"
@@ -1014,12 +1077,17 @@ def test_no_git_repo_fails_closed(tmp: Path) -> None:
     ok = ok and "PUBLISH_LOCAL" not in (proc.stdout or "")
     ok = ok and snapshot_live_artifacts(ws) == live
     proc2 = run_publisher(ws, extra_env={"PUBLISH_ALLOW_LOCAL": "1"})
-    ok = ok and proc2.returncode == 0
-    ok = ok and "PUBLISH_LOCAL" in (proc2.stdout or "")
+    out2 = combined(proc2)
+    ok = ok and proc2.returncode != 0
+    ok = ok and "PUBLISH_ALLOW_LOCAL" in out2
+    ok = ok and "PUBLISH_LOCAL" not in (proc2.stdout or "")
+    proc3 = run_publisher_python(ws, extra_env={"PUBLISH_ALLOW_LOCAL": "1"})
+    ok = ok and proc3.returncode == 0
+    ok = ok and "PUBLISH_LOCAL" in (proc3.stdout or "")
     record(
         "publisher_no_git_repo_fails_closed_test",
         ok,
-        f"rc={proc.returncode} rc_local={proc2.returncode} out={out[-200:]}",
+        f"rc={proc.returncode} rc_wrapper_local={proc2.returncode} rc_python={proc3.returncode} out={out[-200:]}",
     )
 
 
@@ -1101,11 +1169,11 @@ def test_preflight_does_not_rewrite_live_cache(tmp: Path) -> None:
 
 
 def test_two_cycle_source_clone_lag_after_publish(tmp: Path) -> None:
-    """After publish, lagged source clone fast-forwards (no force) then second canonical+publish."""
+    """canonical#1 → publish#1 → canonical#2 → publish#2 via production APIs only (no test fetch/reset)."""
     bare, ws = make_source_git_workspace(tmp)
     seed_current(ws, run_id="run-c1", snapshot_utc=PENDING_TS)
     write_canonical_month(ws, "2026-09", [OBS_A], run_id="run-c1")
-    sha_c1_hist = persist_canonical_history(ws)
+    sha_c1_hist = persist_canonical_history_production(ws)
     proc1 = run_publisher(ws)
     out1 = combined(proc1)
     ok = proc1.returncode == 0 and "PUSHED" in (proc1.stdout or "")
@@ -1117,11 +1185,9 @@ def test_two_cycle_source_clone_lag_after_publish(tmp: Path) -> None:
     ancestor = git_bare(bare, ["merge-base", "--is-ancestor", sha_c1_hist, "refs/heads/main"], check=False)
     ok = ok and ancestor.returncode == 0
 
-    run_git(ws, ["fetch", "origin"])
-    run_git(ws, ["reset", "--hard", "origin/main"])
     seed_current(ws, run_id="run-c2", snapshot_utc=NEWER_TS)
     write_canonical_month(ws, "2026-09", [OBS_A, OBS_B], run_id="run-c2")
-    sha_c2_hist = persist_canonical_history(ws)
+    sha_c2_hist = persist_canonical_history_production(ws)
     proc2 = run_publisher(ws)
     out2 = combined(proc2)
     ok = ok and proc2.returncode == 0 and "PUSHED" in (proc2.stdout or "")
@@ -1145,7 +1211,7 @@ def test_two_cycle_publisher_clone_lag_after_canonical(tmp: Path) -> None:
     bare, ws = make_source_git_workspace(tmp)
     seed_current(ws, run_id="run-c1", snapshot_utc=PENDING_TS)
     write_canonical_month(ws, "2026-09", [OBS_A], run_id="run-c1")
-    persist_canonical_history(ws)
+    persist_canonical_history_production(ws)
     proc1 = run_publisher(ws)
     ok = proc1.returncode == 0 and "PUSHED" in (proc1.stdout or "")
     pub1 = remote_head(bare)
@@ -1158,7 +1224,7 @@ def test_two_cycle_publisher_clone_lag_after_canonical(tmp: Path) -> None:
     hist = canonical / "data" / "history" / "eps_daily"
     hist.mkdir(parents=True, exist_ok=True)
     (hist / "2026-09.jsonl").write_text(OBS_A + "\n" + OBS_B + "\n", encoding="utf-8")
-    sha_c2 = persist_canonical_history(canonical)
+    sha_c2 = persist_canonical_history_production(canonical)
 
     seed_current(ws, run_id="run-c2", snapshot_utc=NEWER_TS)
     write_canonical_month(ws, "2026-09", [OBS_A, OBS_B], run_id="run-c2")
@@ -1195,6 +1261,155 @@ def test_two_cycle_publisher_clone_lag_after_canonical(tmp: Path) -> None:
     )
 
 
+def test_required_web_json_schema_negatives(tmp: Path) -> None:
+    """Per-file empty object / wrong type / missing buildId fail before remote mutation."""
+    needles = ("schema invalid", "missing required", "buildid", "not a json object")
+    ok = True
+    details: list[str] = []
+
+    def _run_negative(mutator, label: str) -> None:
+        nonlocal ok
+        case_tmp = tmp / label
+        case_tmp.mkdir(parents=True, exist_ok=True)
+        bare, clone = make_bare_and_clone(case_tmp)
+        ws = make_workspace(case_tmp, clone)
+        gen = seed_current(ws)
+        mutator(gen)
+        head = remote_head(bare)
+        meta = remote_show(bare, "data/meta.json")
+        ver = site_version(ws)
+        live = snapshot_live_artifacts(ws)
+        proc = run_publisher(ws)
+        frozen, detail = assert_failure_frozen(
+            proc=proc,
+            bare=bare,
+            ws=ws,
+            head_before=head,
+            version_before=ver,
+            remote_meta_before=meta,
+            live_before=live,
+            needle="ERROR",
+        )
+        out = combined(proc).lower()
+        hit = any(n in out for n in needles) or "error:" in out
+        case_ok = frozen and hit
+        ok = ok and case_ok
+        details.append(f"{label}:{'ok' if case_ok else 'FAIL'} {detail[-120:]}")
+
+    for name in REQUIRED_WEB_JSON:
+        def _empty(gen: Path, fname: str = name) -> None:
+            (gen / "web" / "data" / fname).write_text("{}\n", encoding="utf-8")
+
+        _run_negative(_empty, f"empty-{name}")
+
+    def _wrong_type(gen: Path) -> None:
+        (gen / "web" / "data" / "companies.json").write_text("[]\n", encoding="utf-8")
+
+    _run_negative(_wrong_type, "wrong-type-companies")
+
+    def _missing_build(gen: Path) -> None:
+        path = gen / "web" / "data" / "companies.json"
+        obj = json.loads(path.read_text(encoding="utf-8"))
+        obj.pop("buildId", None)
+        obj.pop("_buildId", None)
+        path.write_text(json.dumps(obj, indent=2) + "\n", encoding="utf-8")
+
+    _run_negative(_missing_build, "missing-buildId-companies")
+
+    def _missing_meta_build(gen: Path) -> None:
+        path = gen / "web" / "data" / "meta.json"
+        obj = json.loads(path.read_text(encoding="utf-8"))
+        obj.pop("buildId", None)
+        path.write_text(json.dumps(obj, indent=2) + "\n", encoding="utf-8")
+
+    _run_negative(_missing_meta_build, "missing-buildId-meta")
+    record(
+        "publisher_required_web_json_schema_negatives_test",
+        ok,
+        " | ".join(details)[-500:],
+    )
+
+
+def test_live_differs_from_generation_push_refused_frozen(tmp: Path) -> None:
+    """live≠generation, refuse push, live meta/dashboard/markers/.data-version byte-identical."""
+    bare, clone = make_bare_and_clone(tmp)
+    ws = make_workspace(tmp, clone)
+    seed_current(ws)
+    live_meta = ws / "web" / "data" / "meta.json"
+    drifted = json.loads(live_meta.read_text(encoding="utf-8"))
+    drifted["dataVersion"] = "DRIFTED-LIVE-NOT-GENERATION"
+    drifted["buildId"] = "DRIFTED-LIVE-NOT-GENERATION"
+    live_meta.write_text(json.dumps(drifted, indent=2) + "\n", encoding="utf-8")
+    live_dash = ws / "web" / "data" / "dashboard.json"
+    dash = json.loads(live_dash.read_text(encoding="utf-8"))
+    dash["buildId"] = "DRIFTED-LIVE-NOT-GENERATION"
+    dm = dict(dash.get("meta") or {})
+    dm["dataVersion"] = "DRIFTED-LIVE-NOT-GENERATION"
+    dm["buildId"] = "DRIFTED-LIVE-NOT-GENERATION"
+    dash["meta"] = dm
+    live_dash.write_text(json.dumps(dash, indent=2) + "\n", encoding="utf-8")
+    write_hook(
+        bare / "hooks" / "pre-receive",
+        "#!/bin/sh\necho 'ERROR: git push refused (live-ne-generation fixture)' >&2\nexit 1\n",
+    )
+    paths = [
+        ws / "web" / "data" / "meta.json",
+        ws / "web" / "data" / "dashboard.json",
+        ws / "data" / ".materialized_run_id",
+        ws / "data" / ".last-publish-web",
+        ws / ".data-version",
+        ws / "site-repo" / ".data-version",
+    ]
+    before = {str(p): (p.read_bytes() if p.is_file() else None) for p in paths}
+    head = remote_head(bare)
+    meta = remote_show(bare, "data/meta.json")
+    ver = site_version(ws)
+    live = snapshot_live_artifacts(ws)
+    proc = run_publisher(ws)
+    ok, detail = assert_failure_frozen(
+        proc=proc,
+        bare=bare,
+        ws=ws,
+        head_before=head,
+        version_before=ver,
+        remote_meta_before=meta,
+        live_before=live,
+        needle="push",
+    )
+    after = {str(p): (p.read_bytes() if p.is_file() else None) for p in paths}
+    ok = ok and after == before
+    ok = ok and b"DRIFTED-LIVE-NOT-GENERATION" in (ws / "web" / "data" / "meta.json").read_bytes()
+    ok = ok and b"DRIFTED-LIVE-NOT-GENERATION" in (ws / "web" / "data" / "dashboard.json").read_bytes()
+    record(
+        "publisher_live_ne_generation_push_refused_frozen_test",
+        ok,
+        f"{detail} bytes_same={after==before}",
+    )
+
+
+def test_wrapper_refuses_publish_allow_local(tmp: Path) -> None:
+    """Formal publish_github_pages.sh with PUBLISH_ALLOW_LOCAL=1 inherited → fail closed."""
+    ws = tmp / "wrapper-local"
+    ws.mkdir()
+    copy_project_tools_and_web(ws)
+    seed_current(ws)
+    live = snapshot_live_artifacts(ws)
+    proc = run_publisher(ws, extra_env={"PUBLISH_ALLOW_LOCAL": "1"})
+    out = combined(proc)
+    ok = proc.returncode != 0
+    ok = ok and "PUBLISH_ALLOW_LOCAL" in out
+    ok = ok and "PUBLISH_LOCAL" not in (proc.stdout or "")
+    ok = ok and "PUSHED" not in (proc.stdout or "")
+    ok = ok and snapshot_live_artifacts(ws) == live
+    body = (ws / "tools" / "publish_github_pages.sh").read_text(encoding="utf-8")
+    ok = ok and "unset PUBLISH_ALLOW_LOCAL" in body
+    record(
+        "publisher_wrapper_refuses_publish_allow_local_test",
+        ok,
+        f"rc={proc.returncode} out={out[-220:]}",
+    )
+
+
 def main() -> int:
     os.environ.setdefault("SKIP_CANONICAL_GIT_PERSIST", "1")
     print("=== ai-eps-monitor publisher fail-closed fault tests ===")
@@ -1227,6 +1442,9 @@ def main() -> int:
         test_preflight_does_not_rewrite_live_cache,
         test_two_cycle_source_clone_lag_after_publish,
         test_two_cycle_publisher_clone_lag_after_canonical,
+        test_required_web_json_schema_negatives,
+        test_live_differs_from_generation_push_refused_frozen,
+        test_wrapper_refuses_publish_allow_local,
     ]
     for fn in tests:
         with tempfile.TemporaryDirectory(prefix=f"ai_eps_pub_{fn.__name__}_") as td:
