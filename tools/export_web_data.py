@@ -3055,6 +3055,16 @@ def _main_locked() -> int:
     meta["appVersion"] = app_version
     meta["releaseVersion"] = release_version
     meta["schemaVersion"] = SCHEMA_VERSION
+    # generationRunId is the ingest run identity when present; never invent a new id.
+    generation_run_id = str(
+        os.environ.get("INGEST_COLLECTION_RUN_ID")
+        or snap.get("collectionRunId")
+        or snap.get("runId")
+        or collection_run_id
+        or ""
+    ).strip()
+    if generation_run_id:
+        meta["generationRunId"] = generation_run_id
 
     WEB_DATA.mkdir(parents=True, exist_ok=True)
     # Stamp buildId on every public JSON so frontend can reject mixed generations

@@ -3058,6 +3058,37 @@ def test_dashboard_publish_metadata_sync(fixture: Path) -> None:
     record("dashboard_publish_metadata_sync_test", ok, f"meta={m.get('sitePublished')} dash={dm.get('sitePublished')}")
 
 
+def test_export_writes_generation_run_id(fixture: Path) -> None:
+    """Future export must stamp generationRunId into meta.json and dashboard.json.meta."""
+    run_id = "export-run-identity-1"
+    out = fixture / "tmp_export_generation_run_id"
+    env = os.environ.copy()
+    env["INGEST_COLLECTION_RUN_ID"] = run_id
+    env["PYTHONDONTWRITEBYTECODE"] = "1"
+    subprocess.check_call(
+        [
+            sys.executable,
+            str(fixture / "tools" / "export_web_data.py"),
+            "--no-persistent-mutation",
+            "--output-root",
+            str(out),
+        ],
+        cwd=str(fixture),
+        env=env,
+        timeout=60,
+    )
+    meta = json.loads((out / "data" / "meta.json").read_text(encoding="utf-8"))
+    dash = json.loads((out / "data" / "dashboard.json").read_text(encoding="utf-8"))
+    dm = dash.get("meta") if isinstance(dash.get("meta"), dict) else {}
+    ok = meta.get("generationRunId") == run_id
+    ok = ok and dm.get("generationRunId") == run_id
+    record(
+        "export_writes_generation_run_id_test",
+        ok,
+        f"meta={meta.get('generationRunId')} dash={dm.get('generationRunId')}",
+    )
+
+
 def test_screenshot_dom_build_identity(fixture: Path) -> None:
     """Review ZIP gate: all DOM sidecars must match final public build identity + route."""
     # Unit-level: simulate sidecar check logic
@@ -9298,6 +9329,7 @@ def _all_suite_tests():
         ("test_manifest_cannot_break_source_1m", test_manifest_cannot_break_source_1m),
         ("test_missing_fiscal_identity_rejected", test_missing_fiscal_identity_rejected),
         ("test_dashboard_publish_metadata_sync", test_dashboard_publish_metadata_sync),
+        ("test_export_writes_generation_run_id", test_export_writes_generation_run_id),
         ("test_screenshot_dom_build_identity", test_screenshot_dom_build_identity),
         # Transactional
         ("test_export_failure_does_not_commit_validated_snapshot", test_export_failure_does_not_commit_validated_snapshot),

@@ -173,6 +173,32 @@ def _align_web_json_identity(data: Path, meta: dict) -> None:
     (data / "meta.json").write_text(json.dumps(meta, indent=2) + "\n", encoding="utf-8")
 
 
+def snapshot_tree_bytes(root: Path) -> dict[str, bytes]:
+    out: dict[str, bytes] = {}
+    if not root.is_dir():
+        return out
+    for p in sorted(root.rglob("*")):
+        if p.is_file():
+            out[str(p.relative_to(root))] = p.read_bytes()
+    return out
+
+
+def strip_web_generation_run_id(data_dir: Path) -> None:
+    """Reproduce pre-PR17 generation web meta: no generationRunId/runId."""
+    meta_path = data_dir / "meta.json"
+    meta = json.loads(meta_path.read_text(encoding="utf-8"))
+    meta.pop("generationRunId", None)
+    meta.pop("runId", None)
+    meta_path.write_text(json.dumps(meta, indent=2) + "\n", encoding="utf-8")
+    dash_path = data_dir / "dashboard.json"
+    dash = json.loads(dash_path.read_text(encoding="utf-8"))
+    dm = dict(dash.get("meta") or {})
+    dm.pop("generationRunId", None)
+    dm.pop("runId", None)
+    dash["meta"] = dm
+    dash_path.write_text(json.dumps(dash, indent=2) + "\n", encoding="utf-8")
+
+
 def seed_web_payload(
     ws: Path,
     snapshot_utc: str = PENDING_TS,
@@ -1493,6 +1519,129 @@ def test_canonical_persist_preserves_sentinel_and_live_web(tmp: Path) -> None:
     )
 
 
+def test_missing_web_generation_run_id_staging_publish_ok(tmp: Path) -> None:
+    """CURRENT+generation_meta agree, web meta lacks generationRunId → staging publish.
+
+    Committed generation bytes stay identical; remote meta carries the proven runId.
+    """
+    bare, clone = make_bare_and_clone(tmp)
+    ws = make_workspace(tmp, clone)
+    run_id = "run-publish-1"
+    gen = seed_current(ws, run_id=run_id)
+    strip_web_generation_run_id(gen / "web" / "data")
+    strip_web_generation_run_id(ws / "web" / "data")
+    before = snapshot_tree_bytes(gen)
+    live_meta = json.loads((gen / "web" / "data" / "meta.json").read_text(encoding="utf-8"))
+    ok = "generationRunId" not in live_meta and "runId" not in live_meta
+
+    pre = run_publisher(ws, args=["--preflight"])
+    pre_out = combined(pre)
+    ok = ok and pre.returncode == 0 and "PREFLIGHT_OK" in (pre.stdout or "")
+    ok = ok and snapshot_tree_bytes(gen) == before
+
+    proc = run_publisher(ws)
+    out = combined(proc)
+    ok = ok and proc.returncode == 0 and "PUSHED" in (proc.stdout or "")
+    ok = ok and snapshot_tree_bytes(gen) == before
+    gen_meta_after = json.loads((gen / "web" / "data" / "meta.json").read_text(encoding="utf-8"))
+    ok = ok and "generationRunId" not in gen_meta_after and "runId" not in gen_meta_after
+    remote_raw = remote_show(bare, "data/meta.json") or "{}"
+    try:
+        remote_meta = json.loads(remote_raw)
+    except Exception:
+        remote_meta = {}
+    ok = ok and remote_meta.get("generationRunId") == run_id
+    dash_raw = remote_show(bare, "data/dashboard.json") or "{}"
+    try:
+        remote_dash = json.loads(dash_raw)
+    except Exception:
+        remote_dash = {}
+    dm = remote_dash.get("meta") if isinstance(remote_dash.get("meta"), dict) else {}
+    ok = ok and dm.get("generationRunId") == run_id
+    record(
+        "publisher_missing_web_generation_run_id_staging_publish_ok_test",
+        ok,
+        f"pre={pre.returncode} rc={proc.returncode} remote={remote_meta.get('generationRunId')} "
+        f"bytes_same={snapshot_tree_bytes(gen)==before} out={out[-180:]} pre_out={pre_out[-120:]}",
+    )
+
+
+def test_current_generation_meta_runid_mismatch_blocks(tmp: Path) -> None:
+    """CURRENT.runId != generation_meta.runId still fail-closed; no invented stamp."""
+    bare, clone = make_bare_and_clone(tmp)
+    ws = make_workspace(tmp, clone)
+    gen = seed_current(ws)
+    strip_web_generation_run_id(gen / "web" / "data")
+    strip_web_generation_run_id(ws / "web" / "data")
+    gmeta_path = gen / "generation_meta.json"
+    gmeta = json.loads(gmeta_path.read_text(encoding="utf-8"))
+    gmeta["runId"] = "other-run-id"
+    gmeta_path.write_text(json.dumps(gmeta, indent=2) + "\n", encoding="utf-8")
+    before = snapshot_tree_bytes(gen)
+    head = remote_head(bare)
+    meta = remote_show(bare, "data/meta.json")
+    ver = site_version(ws)
+    live = snapshot_live_artifacts(ws)
+    proc = run_publisher(ws)
+    ok, detail = assert_failure_frozen(
+        proc=proc,
+        bare=bare,
+        ws=ws,
+        head_before=head,
+        version_before=ver,
+        remote_meta_before=meta,
+        live_before=live,
+        needle="inconsistent generationRunId",
+    )
+    ok = ok and snapshot_tree_bytes(gen) == before
+    out = combined(proc).lower()
+    ok = ok and "inconsistent generationrunid" in out
+    record(
+        "publisher_current_generation_meta_runid_mismatch_blocks_test",
+        ok,
+        f"{detail} bytes_same={snapshot_tree_bytes(gen)==before}",
+    )
+
+
+def test_web_generation_run_id_mismatch_still_blocks(tmp: Path) -> None:
+    """Web generationRunId present but disagreeing with CURRENT still fail-closed."""
+    bare, clone = make_bare_and_clone(tmp)
+    ws = make_workspace(tmp, clone)
+    gen = seed_current(ws)
+    meta_path = gen / "web" / "data" / "meta.json"
+    meta = json.loads(meta_path.read_text(encoding="utf-8"))
+    meta["generationRunId"] = "not-the-current-run"
+    meta_path.write_text(json.dumps(meta, indent=2) + "\n", encoding="utf-8")
+    dash_path = gen / "web" / "data" / "dashboard.json"
+    dash = json.loads(dash_path.read_text(encoding="utf-8"))
+    dm = dict(dash.get("meta") or {})
+    dm["generationRunId"] = "not-the-current-run"
+    dash["meta"] = dm
+    dash_path.write_text(json.dumps(dash, indent=2) + "\n", encoding="utf-8")
+    before = snapshot_tree_bytes(gen)
+    head = remote_head(bare)
+    rmeta = remote_show(bare, "data/meta.json")
+    ver = site_version(ws)
+    live = snapshot_live_artifacts(ws)
+    proc = run_publisher(ws)
+    ok, detail = assert_failure_frozen(
+        proc=proc,
+        bare=bare,
+        ws=ws,
+        head_before=head,
+        version_before=ver,
+        remote_meta_before=rmeta,
+        live_before=live,
+        needle="inconsistent generationRunId",
+    )
+    ok = ok and snapshot_tree_bytes(gen) == before
+    record(
+        "publisher_web_generation_run_id_mismatch_still_blocks_test",
+        ok,
+        f"{detail} bytes_same={snapshot_tree_bytes(gen)==before}",
+    )
+
+
 def main() -> int:
     os.environ.setdefault("SKIP_CANONICAL_GIT_PERSIST", "1")
     print("=== ai-eps-monitor publisher fail-closed fault tests ===")
@@ -1529,6 +1678,9 @@ def main() -> int:
         test_live_differs_from_generation_push_refused_frozen,
         test_wrapper_refuses_publish_allow_local,
         test_canonical_persist_preserves_sentinel_and_live_web,
+        test_missing_web_generation_run_id_staging_publish_ok,
+        test_current_generation_meta_runid_mismatch_blocks,
+        test_web_generation_run_id_mismatch_still_blocks,
     ]
     for fn in tests:
         with tempfile.TemporaryDirectory(prefix=f"ai_eps_pub_{fn.__name__}_") as td:
