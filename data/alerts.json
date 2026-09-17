@@ -23,7 +23,7 @@
       "sourceWindow": "Seeking Alpha 1M",
       "windowLabel": "Source window: Seeking Alpha 1M",
       "neverInternal30D": true,
-      "ageDays": 1,
+      "ageDays": 2,
       "analystCount": 33,
       "consensusLow": 25.22,
       "consensusHigh": 34.25,
@@ -34,45 +34,8 @@
       "status": "Open",
       "lifecycleStatus": "Open",
       "lifecycleEvent": "Hold",
-      "updatedAt": "2026-09-16T01:02:34Z",
-      "lastObservedAt": "2026-09-16T01:02:34Z"
-    },
-    {
-      "id": "source_reported_1m_revision:KEYS:Oct_2028:2026-09-15:sa1m_2028E",
-      "rule": "source_reported_1m_revision",
-      "severity": "high",
-      "ticker": "KEYS",
-      "message": "KEYS Oct 2028: Seeking Alpha 1M revision upgrade +16.31% (≥5%) [Hold] — Source window: Seeking Alpha 1M · Coverage: High",
-      "title": "KEYS Oct 2028: Seeking Alpha 1M revision upgrade +16.31% (≥5%) [Hold] — Source window: Seeking Alpha 1M · Coverage: High",
-      "fiscalPeriod": "Oct 2028",
-      "eventPeriod": "Oct 2028",
-      "eventDate": "2026-09-15",
-      "eventKey": "sa1m_2028E",
-      "eventAt": "2026-09-15T01:36:00Z",
-      "createdAt": "2026-09-15T07:08:44Z",
-      "expiresAt": "2026-10-06T00:00:00Z",
-      "activeUntil": "2026-10-06T00:00:00Z",
-      "oneshot": false,
-      "revisionPct": 16.31,
-      "rev1M": 16.31,
-      "slot": "2028E",
-      "fiscal": "Oct 2028",
-      "sourceWindow": "Seeking Alpha 1M",
-      "windowLabel": "Source window: Seeking Alpha 1M",
-      "neverInternal30D": true,
-      "ageDays": 1,
-      "analystCount": 10,
-      "consensusLow": 14.04,
-      "consensusHigh": 19.51,
-      "consensus": 15.69,
-      "dispersion": 0.3486297004461442,
-      "confidence": "High",
-      "farForward": false,
-      "status": "Open",
-      "lifecycleStatus": "Open",
-      "lifecycleEvent": "Hold",
-      "updatedAt": "2026-09-16T01:02:34Z",
-      "lastObservedAt": "2026-09-16T01:02:34Z"
+      "updatedAt": "2026-09-17T00:40:03Z",
+      "lastObservedAt": "2026-09-17T00:40:03Z"
     },
     {
       "id": "gross_margin_pressure:AVGO:Q3_2026_(fiscal_2026):2026-09-02:gm_pressure_-210",
@@ -91,7 +54,7 @@
       "activeUntil": "2026-09-23T00:00:00Z",
       "oneshot": true,
       "bpsChange": -210.0,
-      "ageDays": 14
+      "ageDays": 15
     },
     {
       "id": "driver_status_change:AVGO:na:2026-09-02:gross_margin",
@@ -114,7 +77,7 @@
       "previousStatus": "unchanged",
       "currentStatus": "deteriorating",
       "sourceUrl": "https://investors.broadcom.com/news-releases/news-release-details/broadcom-inc-announces-third-quarter-fiscal-year-2026-financial",
-      "ageDays": 14
+      "ageDays": 15
     },
     {
       "id": "source_reported_1m_revision:NVDA:Jan_2030:2026-09-15:sa1m_2029E",
@@ -139,7 +102,7 @@
       "sourceWindow": "Seeking Alpha 1M",
       "windowLabel": "Source window: Seeking Alpha 1M",
       "neverInternal30D": true,
-      "ageDays": 1,
+      "ageDays": 2,
       "analystCount": 4,
       "consensusLow": 17.9,
       "consensusHigh": 30.37,
@@ -150,8 +113,8 @@
       "status": "Open",
       "lifecycleStatus": "Open",
       "lifecycleEvent": "Hold",
-      "updatedAt": "2026-09-16T01:02:34Z",
-      "lastObservedAt": "2026-09-16T01:02:34Z"
+      "updatedAt": "2026-09-17T00:40:03Z",
+      "lastObservedAt": "2026-09-17T00:40:03Z"
     },
     {
       "id": "source_reported_1m_revision:AVGO:Oct_2029:2026-09-15:sa1m_2029E",
@@ -176,7 +139,7 @@
       "sourceWindow": "Seeking Alpha 1M",
       "windowLabel": "Source window: Seeking Alpha 1M",
       "neverInternal30D": true,
-      "ageDays": 1,
+      "ageDays": 2,
       "analystCount": 4,
       "consensusLow": 30.54,
       "consensusHigh": 50.5,
@@ -187,8 +150,8 @@
       "status": "Open",
       "lifecycleStatus": "Open",
       "lifecycleEvent": "Hold",
-      "updatedAt": "2026-09-16T01:02:34Z",
-      "lastObservedAt": "2026-09-16T01:02:34Z"
+      "updatedAt": "2026-09-17T00:40:03Z",
+      "lastObservedAt": "2026-09-17T00:40:03Z"
     },
     {
       "id": "source_reported_1m_revision:KEYS:Oct_2029:2026-09-15:sa1m_2029E",
@@ -213,7 +176,7 @@
       "sourceWindow": "Seeking Alpha 1M",
       "windowLabel": "Source window: Seeking Alpha 1M",
       "neverInternal30D": true,
-      "ageDays": 1,
+      "ageDays": 2,
       "analystCount": 1,
       "consensusLow": 21.99,
       "consensusHigh": 21.99,
@@ -224,8 +187,8 @@
       "status": "Open",
       "lifecycleStatus": "Open",
       "lifecycleEvent": "Hold",
-      "updatedAt": "2026-09-16T01:02:34Z",
-      "lastObservedAt": "2026-09-16T01:02:34Z"
+      "updatedAt": "2026-09-17T00:40:03Z",
+      "lastObservedAt": "2026-09-17T00:40:03Z"
     },
     {
       "id": "results_vs_consensus:AVGO:Q3_2026_(fiscal_2026):2026-09-02:results_above",
@@ -249,7 +212,7 @@
       "sourceTier": 4,
       "actualsSourceUrl": "https://investors.broadcom.com/news-releases/news-release-details/broadcom-inc-announces-third-quarter-fiscal-year-2026-financial",
       "actualsSourceTier": 1,
-      "ageDays": 14
+      "ageDays": 15
     },
     {
       "id": "driver_status_change:AVGO:na:2026-09-02:AI_ASIC",
@@ -272,7 +235,7 @@
       "previousStatus": "unchanged",
       "currentStatus": "improving",
       "sourceUrl": "https://investors.broadcom.com/news-releases/news-release-details/broadcom-inc-announces-third-quarter-fiscal-year-2026-financial",
-      "ageDays": 14
+      "ageDays": 15
     },
     {
       "id": "driver_status_change:AVGO:na:2026-09-02:hyperscaler_customers",
@@ -295,7 +258,7 @@
       "previousStatus": "unchanged",
       "currentStatus": "improving",
       "sourceUrl": "https://investors.broadcom.com/news-releases/news-release-details/broadcom-inc-announces-third-quarter-fiscal-year-2026-financial",
-      "ageDays": 14
+      "ageDays": 15
     },
     {
       "id": "driver_status_change:AVGO:na:2026-09-02:AI_networking",
@@ -318,7 +281,7 @@
       "previousStatus": "unchanged",
       "currentStatus": "improving",
       "sourceUrl": "https://seekingalpha.com/article/4942557-broadcom-inc-avgo-q3-2026-earnings-call-transcript",
-      "ageDays": 14
+      "ageDays": 15
     },
     {
       "id": "driver_status_change:AVGO:na:2026-09-02:Tomahawk",
@@ -341,7 +304,7 @@
       "previousStatus": "unchanged",
       "currentStatus": "improving",
       "sourceUrl": "https://seekingalpha.com/article/4942557-broadcom-inc-avgo-q3-2026-earnings-call-transcript",
-      "ageDays": 14
+      "ageDays": 15
     },
     {
       "id": "driver_status_change:AVGO:na:2026-09-02:FCF",
@@ -364,7 +327,7 @@
       "previousStatus": "unchanged",
       "currentStatus": "improving",
       "sourceUrl": "https://investors.broadcom.com/news-releases/news-release-details/broadcom-inc-announces-third-quarter-fiscal-year-2026-financial",
-      "ageDays": 14
+      "ageDays": 15
     }
   ],
   "alertHistory": [
@@ -422,7 +385,7 @@
       "sourceTier": 4,
       "actualsSourceUrl": "https://investor.nvidia.com/news/press-release-details/2026/NVIDIA-Announces-Financial-Results-for-Second-Quarter-Fiscal-2027/default.aspx",
       "actualsSourceTier": 1,
-      "ageDays": 21
+      "ageDays": 22
     },
     {
       "id": "results_vs_consensus:AVGO:Q3_2026_(fiscal_2026):2026-09-02:results_above",
@@ -446,7 +409,7 @@
       "sourceTier": 4,
       "actualsSourceUrl": "https://investors.broadcom.com/news-releases/news-release-details/broadcom-inc-announces-third-quarter-fiscal-year-2026-financial",
       "actualsSourceTier": 1,
-      "ageDays": 14
+      "ageDays": 15
     },
     {
       "id": "gross_margin_pressure:AVGO:Q3_2026_(fiscal_2026):2026-09-02:gm_pressure_-210",
@@ -465,7 +428,7 @@
       "activeUntil": "2026-09-23T00:00:00Z",
       "oneshot": true,
       "bpsChange": -210.0,
-      "ageDays": 14
+      "ageDays": 15
     },
     {
       "id": "driver_status_change:NVDA:na:2026-08-26:GPU_shipment",
@@ -488,7 +451,7 @@
       "previousStatus": "unchanged",
       "currentStatus": "improving",
       "sourceUrl": "https://investor.nvidia.com/news/press-release-details/2026/NVIDIA-Announces-Financial-Results-for-Second-Quarter-Fiscal-2027/default.aspx",
-      "ageDays": 21
+      "ageDays": 22
     },
     {
       "id": "driver_status_change:NVDA:na:2026-08-26:Rubin_-_Rubin_Ultra",
@@ -511,7 +474,7 @@
       "previousStatus": "unchanged",
       "currentStatus": "improving",
       "sourceUrl": "https://seekingalpha.com/article/4940563-nvidia-corporation-nvda-q2-2027-earnings-call-transcript",
-      "ageDays": 21
+      "ageDays": 22
     },
     {
       "id": "driver_status_change:NVDA:na:2026-08-26:inference_demand",
@@ -534,7 +497,7 @@
       "previousStatus": "unchanged",
       "currentStatus": "improving",
       "sourceUrl": "https://investor.nvidia.com/news/press-release-details/2026/NVIDIA-Announces-Financial-Results-for-Second-Quarter-Fiscal-2027/default.aspx",
-      "ageDays": 21
+      "ageDays": 22
     },
     {
       "id": "driver_status_change:NVDA:na:2026-08-26:HBM_supply",
@@ -557,7 +520,7 @@
       "previousStatus": "unchanged",
       "currentStatus": "deteriorating",
       "sourceUrl": "https://investor.nvidia.com/news/press-release-details/2026/NVIDIA-Announces-Financial-Results-for-Second-Quarter-Fiscal-2027/default.aspx",
-      "ageDays": 21
+      "ageDays": 22
     },
     {
       "id": "driver_status_change:NVDA:na:2026-08-26:networking",
@@ -580,7 +543,7 @@
       "previousStatus": "unchanged",
       "currentStatus": "improving",
       "sourceUrl": "https://seekingalpha.com/article/4940563-nvidia-corporation-nvda-q2-2027-earnings-call-transcript",
-      "ageDays": 21
+      "ageDays": 22
     },
     {
       "id": "driver_status_change:NVDA:na:2026-08-26:gross_margin",
@@ -603,7 +566,7 @@
       "previousStatus": "unchanged",
       "currentStatus": "deteriorating",
       "sourceUrl": "https://investor.nvidia.com/news/press-release-details/2026/NVIDIA-Announces-Financial-Results-for-Second-Quarter-Fiscal-2027/default.aspx",
-      "ageDays": 21
+      "ageDays": 22
     },
     {
       "id": "driver_status_change:AVGO:na:2026-09-02:AI_ASIC",
@@ -626,7 +589,7 @@
       "previousStatus": "unchanged",
       "currentStatus": "improving",
       "sourceUrl": "https://investors.broadcom.com/news-releases/news-release-details/broadcom-inc-announces-third-quarter-fiscal-year-2026-financial",
-      "ageDays": 14
+      "ageDays": 15
     },
     {
       "id": "driver_status_change:AVGO:na:2026-09-02:hyperscaler_customers",
@@ -649,7 +612,7 @@
       "previousStatus": "unchanged",
       "currentStatus": "improving",
       "sourceUrl": "https://investors.broadcom.com/news-releases/news-release-details/broadcom-inc-announces-third-quarter-fiscal-year-2026-financial",
-      "ageDays": 14
+      "ageDays": 15
     },
     {
       "id": "driver_status_change:AVGO:na:2026-09-02:AI_networking",
@@ -672,7 +635,7 @@
       "previousStatus": "unchanged",
       "currentStatus": "improving",
       "sourceUrl": "https://seekingalpha.com/article/4942557-broadcom-inc-avgo-q3-2026-earnings-call-transcript",
-      "ageDays": 14
+      "ageDays": 15
     },
     {
       "id": "driver_status_change:AVGO:na:2026-09-02:Tomahawk",
@@ -695,7 +658,7 @@
       "previousStatus": "unchanged",
       "currentStatus": "improving",
       "sourceUrl": "https://seekingalpha.com/article/4942557-broadcom-inc-avgo-q3-2026-earnings-call-transcript",
-      "ageDays": 14
+      "ageDays": 15
     },
     {
       "id": "driver_status_change:AVGO:na:2026-09-02:gross_margin",
@@ -718,7 +681,7 @@
       "previousStatus": "unchanged",
       "currentStatus": "deteriorating",
       "sourceUrl": "https://investors.broadcom.com/news-releases/news-release-details/broadcom-inc-announces-third-quarter-fiscal-year-2026-financial",
-      "ageDays": 14
+      "ageDays": 15
     },
     {
       "id": "driver_status_change:AVGO:na:2026-09-02:FCF",
@@ -741,7 +704,7 @@
       "previousStatus": "unchanged",
       "currentStatus": "improving",
       "sourceUrl": "https://investors.broadcom.com/news-releases/news-release-details/broadcom-inc-announces-third-quarter-fiscal-year-2026-financial",
-      "ageDays": 14
+      "ageDays": 15
     },
     {
       "id": "source_reported_1m_revision:NVDA:Jan_2030:2026-09-15:sa1m_2029E",
@@ -766,7 +729,7 @@
       "sourceWindow": "Seeking Alpha 1M",
       "windowLabel": "Source window: Seeking Alpha 1M",
       "neverInternal30D": true,
-      "ageDays": 1,
+      "ageDays": 2,
       "analystCount": 4,
       "consensusLow": 17.9,
       "consensusHigh": 30.37,
@@ -777,8 +740,8 @@
       "status": "Open",
       "lifecycleStatus": "Open",
       "lifecycleEvent": "Hold",
-      "updatedAt": "2026-09-16T01:02:34Z",
-      "lastObservedAt": "2026-09-16T01:02:34Z"
+      "updatedAt": "2026-09-17T00:40:03Z",
+      "lastObservedAt": "2026-09-17T00:40:03Z"
     },
     {
       "id": "source_reported_1m_revision:AVGO:Oct_2028:2026-09-15:sa1m_2028E",
@@ -803,7 +766,7 @@
       "sourceWindow": "Seeking Alpha 1M",
       "windowLabel": "Source window: Seeking Alpha 1M",
       "neverInternal30D": true,
-      "ageDays": 1,
+      "ageDays": 2,
       "analystCount": 33,
       "consensusLow": 25.22,
       "consensusHigh": 34.25,
@@ -814,8 +777,8 @@
       "status": "Open",
       "lifecycleStatus": "Open",
       "lifecycleEvent": "Hold",
-      "updatedAt": "2026-09-16T01:02:34Z",
-      "lastObservedAt": "2026-09-16T01:02:34Z"
+      "updatedAt": "2026-09-17T00:40:03Z",
+      "lastObservedAt": "2026-09-17T00:40:03Z"
     },
     {
       "id": "source_reported_1m_revision:AVGO:Oct_2029:2026-09-15:sa1m_2029E",
@@ -840,7 +803,7 @@
       "sourceWindow": "Seeking Alpha 1M",
       "windowLabel": "Source window: Seeking Alpha 1M",
       "neverInternal30D": true,
-      "ageDays": 1,
+      "ageDays": 2,
       "analystCount": 4,
       "consensusLow": 30.54,
       "consensusHigh": 50.5,
@@ -851,33 +814,33 @@
       "status": "Open",
       "lifecycleStatus": "Open",
       "lifecycleEvent": "Hold",
-      "updatedAt": "2026-09-16T01:02:34Z",
-      "lastObservedAt": "2026-09-16T01:02:34Z"
+      "updatedAt": "2026-09-17T00:40:03Z",
+      "lastObservedAt": "2026-09-17T00:40:03Z"
     },
     {
       "id": "source_reported_1m_revision:KEYS:Oct_2028:2026-09-15:sa1m_2028E",
       "rule": "source_reported_1m_revision",
       "severity": "high",
       "ticker": "KEYS",
-      "message": "KEYS Oct 2028: Seeking Alpha 1M revision upgrade +16.31% (≥5%) [Hold] — Source window: Seeking Alpha 1M · Coverage: High",
-      "title": "KEYS Oct 2028: Seeking Alpha 1M revision upgrade +16.31% (≥5%) [Hold] — Source window: Seeking Alpha 1M · Coverage: High",
+      "message": "KEYS Oct 2028: Seeking Alpha 1M revision resolved (|1M|=+0.00% <4%) — Source window: Seeking Alpha 1M",
+      "title": "KEYS Oct 2028: Seeking Alpha 1M revision resolved (|1M|=+0.00% <4%) — Source window: Seeking Alpha 1M",
       "fiscalPeriod": "Oct 2028",
       "eventPeriod": "Oct 2028",
       "eventDate": "2026-09-15",
       "eventKey": "sa1m_2028E",
       "eventAt": "2026-09-15T01:36:00Z",
       "createdAt": "2026-09-15T07:08:44Z",
-      "expiresAt": "2026-10-06T00:00:00Z",
-      "activeUntil": "2026-10-06T00:00:00Z",
+      "expiresAt": "2026-09-17T00:40:03Z",
+      "activeUntil": "2026-09-17T00:40:03Z",
       "oneshot": false,
-      "revisionPct": 16.31,
-      "rev1M": 16.31,
+      "revisionPct": 0.0,
+      "rev1M": 0.0,
       "slot": "2028E",
       "fiscal": "Oct 2028",
       "sourceWindow": "Seeking Alpha 1M",
       "windowLabel": "Source window: Seeking Alpha 1M",
       "neverInternal30D": true,
-      "ageDays": 1,
+      "ageDays": 2,
       "analystCount": 10,
       "consensusLow": 14.04,
       "consensusHigh": 19.51,
@@ -885,11 +848,12 @@
       "dispersion": 0.3486297004461442,
       "confidence": "High",
       "farForward": false,
-      "status": "Open",
-      "lifecycleStatus": "Open",
-      "lifecycleEvent": "Hold",
+      "status": "Resolved",
+      "lifecycleStatus": "Resolved",
+      "lifecycleEvent": "Resolved",
       "updatedAt": "2026-09-16T01:02:34Z",
-      "lastObservedAt": "2026-09-16T01:02:34Z"
+      "lastObservedAt": "2026-09-16T01:02:34Z",
+      "resolvedAt": "2026-09-17T00:40:03Z"
     },
     {
       "id": "source_reported_1m_revision:KEYS:Oct_2029:2026-09-15:sa1m_2029E",
@@ -914,7 +878,7 @@
       "sourceWindow": "Seeking Alpha 1M",
       "windowLabel": "Source window: Seeking Alpha 1M",
       "neverInternal30D": true,
-      "ageDays": 1,
+      "ageDays": 2,
       "analystCount": 1,
       "consensusLow": 21.99,
       "consensusHigh": 21.99,
@@ -925,8 +889,8 @@
       "status": "Open",
       "lifecycleStatus": "Open",
       "lifecycleEvent": "Hold",
-      "updatedAt": "2026-09-16T01:02:34Z",
-      "lastObservedAt": "2026-09-16T01:02:34Z"
+      "updatedAt": "2026-09-17T00:40:03Z",
+      "lastObservedAt": "2026-09-17T00:40:03Z"
     }
   ],
   "alertDiagnostics": [
@@ -937,9 +901,9 @@
       "period": "Jan 2027",
       "message": "NVDA Jan 2027: insufficient history for 30D cumulative (no valid observation at/before window start)",
       "lookbackDays": 30,
-      "windowPointCount": 1,
+      "windowPointCount": 2,
       "status": "insufficient history",
-      "eventAt": "2026-09-16T01:02:34Z",
+      "eventAt": "2026-09-17T00:40:03Z",
       "diagnostic": true
     },
     {
@@ -949,9 +913,9 @@
       "period": "Jan 2028",
       "message": "NVDA Jan 2028: insufficient history for 30D cumulative (no valid observation at/before window start)",
       "lookbackDays": 30,
-      "windowPointCount": 1,
+      "windowPointCount": 2,
       "status": "insufficient history",
-      "eventAt": "2026-09-16T01:02:34Z",
+      "eventAt": "2026-09-17T00:40:03Z",
       "diagnostic": true
     },
     {
@@ -961,9 +925,9 @@
       "period": "Jan 2029",
       "message": "NVDA Jan 2029: insufficient history for 30D cumulative (no valid observation at/before window start)",
       "lookbackDays": 30,
-      "windowPointCount": 1,
+      "windowPointCount": 2,
       "status": "insufficient history",
-      "eventAt": "2026-09-16T01:02:34Z",
+      "eventAt": "2026-09-17T00:40:03Z",
       "diagnostic": true
     },
     {
@@ -973,9 +937,9 @@
       "period": "Oct 2026",
       "message": "AVGO Oct 2026: insufficient history for 30D cumulative (no valid observation at/before window start)",
       "lookbackDays": 30,
-      "windowPointCount": 1,
+      "windowPointCount": 2,
       "status": "insufficient history",
-      "eventAt": "2026-09-16T01:02:34Z",
+      "eventAt": "2026-09-17T00:40:03Z",
       "diagnostic": true
     },
     {
@@ -985,9 +949,9 @@
       "period": "Oct 2027",
       "message": "AVGO Oct 2027: insufficient history for 30D cumulative (no valid observation at/before window start)",
       "lookbackDays": 30,
-      "windowPointCount": 1,
+      "windowPointCount": 2,
       "status": "insufficient history",
-      "eventAt": "2026-09-16T01:02:34Z",
+      "eventAt": "2026-09-17T00:40:03Z",
       "diagnostic": true
     },
     {
@@ -997,9 +961,9 @@
       "period": "Oct 2028",
       "message": "AVGO Oct 2028: insufficient history for 30D cumulative (no valid observation at/before window start)",
       "lookbackDays": 30,
-      "windowPointCount": 1,
+      "windowPointCount": 2,
       "status": "insufficient history",
-      "eventAt": "2026-09-16T01:02:34Z",
+      "eventAt": "2026-09-17T00:40:03Z",
       "diagnostic": true
     },
     {
@@ -1009,9 +973,9 @@
       "period": "Dec 2026",
       "message": "TSM Dec 2026: insufficient history for 30D cumulative (no valid observation at/before window start)",
       "lookbackDays": 30,
-      "windowPointCount": 1,
+      "windowPointCount": 2,
       "status": "insufficient history",
-      "eventAt": "2026-09-16T01:02:34Z",
+      "eventAt": "2026-09-17T00:40:03Z",
       "diagnostic": true
     },
     {
@@ -1021,9 +985,9 @@
       "period": "Dec 2027",
       "message": "TSM Dec 2027: insufficient history for 30D cumulative (no valid observation at/before window start)",
       "lookbackDays": 30,
-      "windowPointCount": 1,
+      "windowPointCount": 2,
       "status": "insufficient history",
-      "eventAt": "2026-09-16T01:02:34Z",
+      "eventAt": "2026-09-17T00:40:03Z",
       "diagnostic": true
     },
     {
@@ -1033,9 +997,9 @@
       "period": "Dec 2028",
       "message": "TSM Dec 2028: insufficient history for 30D cumulative (no valid observation at/before window start)",
       "lookbackDays": 30,
-      "windowPointCount": 1,
+      "windowPointCount": 2,
       "status": "insufficient history",
-      "eventAt": "2026-09-16T01:02:34Z",
+      "eventAt": "2026-09-17T00:40:03Z",
       "diagnostic": true
     },
     {
@@ -1045,9 +1009,9 @@
       "period": "Jun 2027",
       "message": "MSFT Jun 2027: insufficient history for 30D cumulative (no valid observation at/before window start)",
       "lookbackDays": 30,
-      "windowPointCount": 1,
+      "windowPointCount": 2,
       "status": "insufficient history",
-      "eventAt": "2026-09-16T01:02:34Z",
+      "eventAt": "2026-09-17T00:40:03Z",
       "diagnostic": true
     },
     {
@@ -1057,9 +1021,9 @@
       "period": "Jun 2028",
       "message": "MSFT Jun 2028: insufficient history for 30D cumulative (no valid observation at/before window start)",
       "lookbackDays": 30,
-      "windowPointCount": 1,
+      "windowPointCount": 2,
       "status": "insufficient history",
-      "eventAt": "2026-09-16T01:02:34Z",
+      "eventAt": "2026-09-17T00:40:03Z",
       "diagnostic": true
     },
     {
@@ -1069,9 +1033,9 @@
       "period": "Dec 2026",
       "message": "BE Dec 2026: insufficient history for 30D cumulative (no valid observation at/before window start)",
       "lookbackDays": 30,
-      "windowPointCount": 1,
+      "windowPointCount": 2,
       "status": "insufficient history",
-      "eventAt": "2026-09-16T01:02:34Z",
+      "eventAt": "2026-09-17T00:40:03Z",
       "diagnostic": true
     },
     {
@@ -1081,9 +1045,9 @@
       "period": "Dec 2027",
       "message": "BE Dec 2027: insufficient history for 30D cumulative (no valid observation at/before window start)",
       "lookbackDays": 30,
-      "windowPointCount": 1,
+      "windowPointCount": 2,
       "status": "insufficient history",
-      "eventAt": "2026-09-16T01:02:34Z",
+      "eventAt": "2026-09-17T00:40:03Z",
       "diagnostic": true
     },
     {
@@ -1093,9 +1057,9 @@
       "period": "Dec 2028",
       "message": "BE Dec 2028: insufficient history for 30D cumulative (no valid observation at/before window start)",
       "lookbackDays": 30,
-      "windowPointCount": 1,
+      "windowPointCount": 2,
       "status": "insufficient history",
-      "eventAt": "2026-09-16T01:02:34Z",
+      "eventAt": "2026-09-17T00:40:03Z",
       "diagnostic": true
     },
     {
@@ -1105,9 +1069,9 @@
       "period": "Oct 2026",
       "message": "KEYS Oct 2026: insufficient history for 30D cumulative (no valid observation at/before window start)",
       "lookbackDays": 30,
-      "windowPointCount": 1,
+      "windowPointCount": 2,
       "status": "insufficient history",
-      "eventAt": "2026-09-16T01:02:34Z",
+      "eventAt": "2026-09-17T00:40:03Z",
       "diagnostic": true
     },
     {
@@ -1117,9 +1081,9 @@
       "period": "Oct 2027",
       "message": "KEYS Oct 2027: insufficient history for 30D cumulative (no valid observation at/before window start)",
       "lookbackDays": 30,
-      "windowPointCount": 1,
+      "windowPointCount": 2,
       "status": "insufficient history",
-      "eventAt": "2026-09-16T01:02:34Z",
+      "eventAt": "2026-09-17T00:40:03Z",
       "diagnostic": true
     },
     {
@@ -1129,9 +1093,9 @@
       "period": "Oct 2028",
       "message": "KEYS Oct 2028: insufficient history for 30D cumulative (no valid observation at/before window start)",
       "lookbackDays": 30,
-      "windowPointCount": 1,
+      "windowPointCount": 2,
       "status": "insufficient history",
-      "eventAt": "2026-09-16T01:02:34Z",
+      "eventAt": "2026-09-17T00:40:03Z",
       "diagnostic": true
     },
     {
@@ -1141,9 +1105,9 @@
       "period": "Jan 2030",
       "message": "NVDA Jan 2030: insufficient history for 30D cumulative (no valid observation at/before window start)",
       "lookbackDays": 30,
-      "windowPointCount": 1,
+      "windowPointCount": 2,
       "status": "insufficient history",
-      "eventAt": "2026-09-16T01:02:34Z",
+      "eventAt": "2026-09-17T00:40:03Z",
       "diagnostic": true
     },
     {
@@ -1153,9 +1117,9 @@
       "period": "Oct 2029",
       "message": "AVGO Oct 2029: insufficient history for 30D cumulative (no valid observation at/before window start)",
       "lookbackDays": 30,
-      "windowPointCount": 1,
+      "windowPointCount": 2,
       "status": "insufficient history",
-      "eventAt": "2026-09-16T01:02:34Z",
+      "eventAt": "2026-09-17T00:40:03Z",
       "diagnostic": true
     },
     {
@@ -1165,9 +1129,9 @@
       "period": "Jun 2029",
       "message": "MSFT Jun 2029: insufficient history for 30D cumulative (no valid observation at/before window start)",
       "lookbackDays": 30,
-      "windowPointCount": 1,
+      "windowPointCount": 2,
       "status": "insufficient history",
-      "eventAt": "2026-09-16T01:02:34Z",
+      "eventAt": "2026-09-17T00:40:03Z",
       "diagnostic": true
     },
     {
@@ -1177,9 +1141,9 @@
       "period": "Dec 2029",
       "message": "BE Dec 2029: insufficient history for 30D cumulative (no valid observation at/before window start)",
       "lookbackDays": 30,
-      "windowPointCount": 1,
+      "windowPointCount": 2,
       "status": "insufficient history",
-      "eventAt": "2026-09-16T01:02:34Z",
+      "eventAt": "2026-09-17T00:40:03Z",
       "diagnostic": true
     },
     {
@@ -1189,9 +1153,9 @@
       "period": "Oct 2029",
       "message": "KEYS Oct 2029: insufficient history for 30D cumulative (no valid observation at/before window start)",
       "lookbackDays": 30,
-      "windowPointCount": 1,
+      "windowPointCount": 2,
       "status": "insufficient history",
-      "eventAt": "2026-09-16T01:02:34Z",
+      "eventAt": "2026-09-17T00:40:03Z",
       "diagnostic": true
     }
   ],
@@ -1217,7 +1181,7 @@
       "previousStatus": "unchanged",
       "currentStatus": "deteriorating",
       "sourceUrl": "https://investors.broadcom.com/news-releases/news-release-details/broadcom-inc-announces-third-quarter-fiscal-year-2026-financial",
-      "ageDays": 14
+      "ageDays": 15
     },
     {
       "id": "gross_margin_pressure:AVGO:Q3_2026_(fiscal_2026):2026-09-02:gm_pressure_-210",
@@ -1236,44 +1200,7 @@
       "activeUntil": "2026-09-23T00:00:00Z",
       "oneshot": true,
       "bpsChange": -210.0,
-      "ageDays": 14
-    },
-    {
-      "id": "source_reported_1m_revision:KEYS:Oct_2028:2026-09-15:sa1m_2028E",
-      "rule": "source_reported_1m_revision",
-      "severity": "high",
-      "ticker": "KEYS",
-      "message": "KEYS Oct 2028: Seeking Alpha 1M revision upgrade +16.31% (≥5%) [Hold] — Source window: Seeking Alpha 1M · Coverage: High",
-      "title": "KEYS Oct 2028: Seeking Alpha 1M revision upgrade +16.31% (≥5%) [Hold] — Source window: Seeking Alpha 1M · Coverage: High",
-      "fiscalPeriod": "Oct 2028",
-      "eventPeriod": "Oct 2028",
-      "eventDate": "2026-09-15",
-      "eventKey": "sa1m_2028E",
-      "eventAt": "2026-09-15T01:36:00Z",
-      "createdAt": "2026-09-15T07:08:44Z",
-      "expiresAt": "2026-10-06T00:00:00Z",
-      "activeUntil": "2026-10-06T00:00:00Z",
-      "oneshot": false,
-      "revisionPct": 16.31,
-      "rev1M": 16.31,
-      "slot": "2028E",
-      "fiscal": "Oct 2028",
-      "sourceWindow": "Seeking Alpha 1M",
-      "windowLabel": "Source window: Seeking Alpha 1M",
-      "neverInternal30D": true,
-      "ageDays": 1,
-      "analystCount": 10,
-      "consensusLow": 14.04,
-      "consensusHigh": 19.51,
-      "consensus": 15.69,
-      "dispersion": 0.3486297004461442,
-      "confidence": "High",
-      "farForward": false,
-      "status": "Open",
-      "lifecycleStatus": "Open",
-      "lifecycleEvent": "Hold",
-      "updatedAt": "2026-09-16T01:02:34Z",
-      "lastObservedAt": "2026-09-16T01:02:34Z"
+      "ageDays": 15
     },
     {
       "id": "source_reported_1m_revision:NVDA:Jan_2030:2026-09-15:sa1m_2029E",
@@ -1298,7 +1225,7 @@
       "sourceWindow": "Seeking Alpha 1M",
       "windowLabel": "Source window: Seeking Alpha 1M",
       "neverInternal30D": true,
-      "ageDays": 1,
+      "ageDays": 2,
       "analystCount": 4,
       "consensusLow": 17.9,
       "consensusHigh": 30.37,
@@ -1309,8 +1236,8 @@
       "status": "Open",
       "lifecycleStatus": "Open",
       "lifecycleEvent": "Hold",
-      "updatedAt": "2026-09-16T01:02:34Z",
-      "lastObservedAt": "2026-09-16T01:02:34Z"
+      "updatedAt": "2026-09-17T00:40:03Z",
+      "lastObservedAt": "2026-09-17T00:40:03Z"
     },
     {
       "id": "source_reported_1m_revision:KEYS:Oct_2029:2026-09-15:sa1m_2029E",
@@ -1335,7 +1262,7 @@
       "sourceWindow": "Seeking Alpha 1M",
       "windowLabel": "Source window: Seeking Alpha 1M",
       "neverInternal30D": true,
-      "ageDays": 1,
+      "ageDays": 2,
       "analystCount": 1,
       "consensusLow": 21.99,
       "consensusHigh": 21.99,
@@ -1346,8 +1273,8 @@
       "status": "Open",
       "lifecycleStatus": "Open",
       "lifecycleEvent": "Hold",
-      "updatedAt": "2026-09-16T01:02:34Z",
-      "lastObservedAt": "2026-09-16T01:02:34Z"
+      "updatedAt": "2026-09-17T00:40:03Z",
+      "lastObservedAt": "2026-09-17T00:40:03Z"
     }
   ],
   "changedSinceLastCollection": [],
@@ -1375,7 +1302,7 @@
       "sourceWindow": "Seeking Alpha 1M",
       "windowLabel": "Source window: Seeking Alpha 1M",
       "neverInternal30D": true,
-      "ageDays": 1,
+      "ageDays": 2,
       "analystCount": 33,
       "consensusLow": 25.22,
       "consensusHigh": 34.25,
@@ -1386,45 +1313,8 @@
       "status": "Open",
       "lifecycleStatus": "Open",
       "lifecycleEvent": "Hold",
-      "updatedAt": "2026-09-16T01:02:34Z",
-      "lastObservedAt": "2026-09-16T01:02:34Z"
-    },
-    {
-      "id": "source_reported_1m_revision:KEYS:Oct_2028:2026-09-15:sa1m_2028E",
-      "rule": "source_reported_1m_revision",
-      "severity": "high",
-      "ticker": "KEYS",
-      "message": "KEYS Oct 2028: Seeking Alpha 1M revision upgrade +16.31% (≥5%) [Hold] — Source window: Seeking Alpha 1M · Coverage: High",
-      "title": "KEYS Oct 2028: Seeking Alpha 1M revision upgrade +16.31% (≥5%) [Hold] — Source window: Seeking Alpha 1M · Coverage: High",
-      "fiscalPeriod": "Oct 2028",
-      "eventPeriod": "Oct 2028",
-      "eventDate": "2026-09-15",
-      "eventKey": "sa1m_2028E",
-      "eventAt": "2026-09-15T01:36:00Z",
-      "createdAt": "2026-09-15T07:08:44Z",
-      "expiresAt": "2026-10-06T00:00:00Z",
-      "activeUntil": "2026-10-06T00:00:00Z",
-      "oneshot": false,
-      "revisionPct": 16.31,
-      "rev1M": 16.31,
-      "slot": "2028E",
-      "fiscal": "Oct 2028",
-      "sourceWindow": "Seeking Alpha 1M",
-      "windowLabel": "Source window: Seeking Alpha 1M",
-      "neverInternal30D": true,
-      "ageDays": 1,
-      "analystCount": 10,
-      "consensusLow": 14.04,
-      "consensusHigh": 19.51,
-      "consensus": 15.69,
-      "dispersion": 0.3486297004461442,
-      "confidence": "High",
-      "farForward": false,
-      "status": "Open",
-      "lifecycleStatus": "Open",
-      "lifecycleEvent": "Hold",
-      "updatedAt": "2026-09-16T01:02:34Z",
-      "lastObservedAt": "2026-09-16T01:02:34Z"
+      "updatedAt": "2026-09-17T00:40:03Z",
+      "lastObservedAt": "2026-09-17T00:40:03Z"
     },
     {
       "id": "gross_margin_pressure:AVGO:Q3_2026_(fiscal_2026):2026-09-02:gm_pressure_-210",
@@ -1443,7 +1333,7 @@
       "activeUntil": "2026-09-23T00:00:00Z",
       "oneshot": true,
       "bpsChange": -210.0,
-      "ageDays": 14
+      "ageDays": 15
     },
     {
       "id": "driver_status_change:AVGO:na:2026-09-02:gross_margin",
@@ -1466,7 +1356,7 @@
       "previousStatus": "unchanged",
       "currentStatus": "deteriorating",
       "sourceUrl": "https://investors.broadcom.com/news-releases/news-release-details/broadcom-inc-announces-third-quarter-fiscal-year-2026-financial",
-      "ageDays": 14
+      "ageDays": 15
     },
     {
       "id": "source_reported_1m_revision:NVDA:Jan_2030:2026-09-15:sa1m_2029E",
@@ -1491,7 +1381,7 @@
       "sourceWindow": "Seeking Alpha 1M",
       "windowLabel": "Source window: Seeking Alpha 1M",
       "neverInternal30D": true,
-      "ageDays": 1,
+      "ageDays": 2,
       "analystCount": 4,
       "consensusLow": 17.9,
       "consensusHigh": 30.37,
@@ -1502,8 +1392,8 @@
       "status": "Open",
       "lifecycleStatus": "Open",
       "lifecycleEvent": "Hold",
-      "updatedAt": "2026-09-16T01:02:34Z",
-      "lastObservedAt": "2026-09-16T01:02:34Z"
+      "updatedAt": "2026-09-17T00:40:03Z",
+      "lastObservedAt": "2026-09-17T00:40:03Z"
     },
     {
       "id": "source_reported_1m_revision:AVGO:Oct_2029:2026-09-15:sa1m_2029E",
@@ -1528,7 +1418,7 @@
       "sourceWindow": "Seeking Alpha 1M",
       "windowLabel": "Source window: Seeking Alpha 1M",
       "neverInternal30D": true,
-      "ageDays": 1,
+      "ageDays": 2,
       "analystCount": 4,
       "consensusLow": 30.54,
       "consensusHigh": 50.5,
@@ -1539,8 +1429,8 @@
       "status": "Open",
       "lifecycleStatus": "Open",
       "lifecycleEvent": "Hold",
-      "updatedAt": "2026-09-16T01:02:34Z",
-      "lastObservedAt": "2026-09-16T01:02:34Z"
+      "updatedAt": "2026-09-17T00:40:03Z",
+      "lastObservedAt": "2026-09-17T00:40:03Z"
     },
     {
       "id": "source_reported_1m_revision:KEYS:Oct_2029:2026-09-15:sa1m_2029E",
@@ -1565,7 +1455,7 @@
       "sourceWindow": "Seeking Alpha 1M",
       "windowLabel": "Source window: Seeking Alpha 1M",
       "neverInternal30D": true,
-      "ageDays": 1,
+      "ageDays": 2,
       "analystCount": 1,
       "consensusLow": 21.99,
       "consensusHigh": 21.99,
@@ -1576,8 +1466,8 @@
       "status": "Open",
       "lifecycleStatus": "Open",
       "lifecycleEvent": "Hold",
-      "updatedAt": "2026-09-16T01:02:34Z",
-      "lastObservedAt": "2026-09-16T01:02:34Z"
+      "updatedAt": "2026-09-17T00:40:03Z",
+      "lastObservedAt": "2026-09-17T00:40:03Z"
     },
     {
       "id": "results_vs_consensus:AVGO:Q3_2026_(fiscal_2026):2026-09-02:results_above",
@@ -1601,7 +1491,7 @@
       "sourceTier": 4,
       "actualsSourceUrl": "https://investors.broadcom.com/news-releases/news-release-details/broadcom-inc-announces-third-quarter-fiscal-year-2026-financial",
       "actualsSourceTier": 1,
-      "ageDays": 14
+      "ageDays": 15
     },
     {
       "id": "driver_status_change:AVGO:na:2026-09-02:AI_ASIC",
@@ -1624,7 +1514,7 @@
       "previousStatus": "unchanged",
       "currentStatus": "improving",
       "sourceUrl": "https://investors.broadcom.com/news-releases/news-release-details/broadcom-inc-announces-third-quarter-fiscal-year-2026-financial",
-      "ageDays": 14
+      "ageDays": 15
     },
     {
       "id": "driver_status_change:AVGO:na:2026-09-02:hyperscaler_customers",
@@ -1647,7 +1537,7 @@
       "previousStatus": "unchanged",
       "currentStatus": "improving",
       "sourceUrl": "https://investors.broadcom.com/news-releases/news-release-details/broadcom-inc-announces-third-quarter-fiscal-year-2026-financial",
-      "ageDays": 14
+      "ageDays": 15
     },
     {
       "id": "driver_status_change:AVGO:na:2026-09-02:AI_networking",
@@ -1670,7 +1560,7 @@
       "previousStatus": "unchanged",
       "currentStatus": "improving",
       "sourceUrl": "https://seekingalpha.com/article/4942557-broadcom-inc-avgo-q3-2026-earnings-call-transcript",
-      "ageDays": 14
+      "ageDays": 15
     },
     {
       "id": "driver_status_change:AVGO:na:2026-09-02:Tomahawk",
@@ -1693,7 +1583,7 @@
       "previousStatus": "unchanged",
       "currentStatus": "improving",
       "sourceUrl": "https://seekingalpha.com/article/4942557-broadcom-inc-avgo-q3-2026-earnings-call-transcript",
-      "ageDays": 14
+      "ageDays": 15
     },
     {
       "id": "driver_status_change:AVGO:na:2026-09-02:FCF",
@@ -1716,14 +1606,14 @@
       "previousStatus": "unchanged",
       "currentStatus": "improving",
       "sourceUrl": "https://investors.broadcom.com/news-releases/news-release-details/broadcom-inc-announces-third-quarter-fiscal-year-2026-financial",
-      "ageDays": 14
+      "ageDays": 15
     }
   ],
-  "alertEngineLastEvaluated": "2026-09-16T01:02:34Z",
-  "alertEngineLastAttempt": "2026-09-16T01:02:34Z",
-  "alertEngineLastSuccessfulEvaluation": "2026-09-16T01:02:34Z",
+  "alertEngineLastEvaluated": "2026-09-17T00:40:03Z",
+  "alertEngineLastAttempt": "2026-09-17T00:40:03Z",
+  "alertEngineLastSuccessfulEvaluation": "2026-09-17T00:40:03Z",
   "alertEngineStatus": "ok",
   "alertEngineError": null,
   "oneShotActiveDays": 21,
-  "buildId": "081b02a0f84869e8f425bb5eb11508ca5a807e6269f3d221f2a289fa1cb87227"
+  "buildId": "dc26876b3f56824fe299e5af34e810b879c9a265c5ac42586f0c64f8924ecb1e"
 }

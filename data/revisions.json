@@ -351,7 +351,55 @@
       "reason": "Baseline snapshot established",
       "source": "Seeking Alpha",
       "updateTime": "2026-09-15T01:36:00Z"
+    },
+    {
+      "date": "2026-09-16",
+      "ticker": "MSFT",
+      "fiscalYear": "Jun 2027",
+      "reportedFiscalLabel": "Jun 2027",
+      "fiscalKey": "Jun 2027",
+      "mappedYear": "2027E",
+      "calendarAlignment": "CY2027",
+      "previousEps": 19.75,
+      "currentEps": 19.76,
+      "absoluteChange": 0.01,
+      "revisionPct": 0.0506,
+      "reason": "Consensus EPS upgrade vs last-known-good",
+      "source": "Seeking Alpha",
+      "updateTime": "2026-09-16T01:02:34Z"
+    },
+    {
+      "date": "2026-09-16",
+      "ticker": "MSFT",
+      "fiscalYear": "Jun 2028",
+      "reportedFiscalLabel": "Jun 2028",
+      "fiscalKey": "Jun 2028",
+      "mappedYear": "2028E",
+      "calendarAlignment": "CY2028",
+      "previousEps": 23.57,
+      "currentEps": 23.59,
+      "absoluteChange": 0.02,
+      "revisionPct": 0.0849,
+      "reason": "Consensus EPS upgrade vs last-known-good",
+      "source": "Seeking Alpha",
+      "updateTime": "2026-09-16T01:02:34Z"
+    },
+    {
+      "date": "2026-09-16",
+      "ticker": "MSFT",
+      "fiscalYear": "Jun 2029",
+      "reportedFiscalLabel": "Jun 2029",
+      "fiscalKey": "Jun 2029",
+      "mappedYear": "2029E",
+      "calendarAlignment": "CY2029",
+      "previousEps": 28.73,
+      "currentEps": 28.85,
+      "absoluteChange": 0.12,
+      "revisionPct": 0.4177,
+      "reason": "Consensus EPS upgrade vs last-known-good",
+      "source": "Seeking Alpha",
+      "updateTime": "2026-09-16T01:02:34Z"
     }
   ],
-  "buildId": "081b02a0f84869e8f425bb5eb11508ca5a807e6269f3d221f2a289fa1cb87227"
+  "buildId": "dc26876b3f56824fe299e5af34e810b879c9a265c5ac42586f0c64f8924ecb1e"
 }
