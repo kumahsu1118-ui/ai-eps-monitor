@@ -863,6 +863,68 @@ def _copy_live_canonical_history_into(dest_hist: Path) -> None:
             shutil.copy2(src, dest_hist / src.name)
 
 
+def _live_canonical_observation_lines() -> dict[str, list[str]]:
+    out: dict[str, list[str]] = {}
+    if not HISTORY_DIR.is_dir():
+        return out
+    for src in sorted(HISTORY_DIR.glob("*.jsonl")):
+        if not src.is_file():
+            continue
+        out[src.name] = [
+            ln.strip()
+            for ln in src.read_text(encoding="utf-8").splitlines()
+            if ln.strip()
+        ]
+    return out
+
+
+def _verify_origin_contains_live_canonical(origin_ref: str) -> str:
+    """Return origin SHA after proving remote files contain live canonical observations.
+
+    Does not modify HEAD, index, or the source working tree.
+    """
+    sha_p = _canonical_git(["rev-parse", origin_ref])
+    sha = str(sha_p.stdout or "").strip()
+    if sha_p.returncode != 0 or not sha:
+        raise RuntimeError(f"origin SHA missing after persist ({origin_ref})")
+    for name, lines in _live_canonical_observation_lines().items():
+        rel = f"{CANONICAL_HISTORY_REL}/{name}"
+        shown = _canonical_git(["show", f"{sha}:{rel}"])
+        if shown.returncode != 0:
+            raise RuntimeError(f"remote missing {rel} at {sha[:12]}")
+        remote_text = shown.stdout or ""
+        for line in lines:
+            if line not in remote_text:
+                raise RuntimeError(f"remote missing CURRENT canonical observation in {rel} at {sha[:12]}")
+    return sha
+
+
+def _source_worktree_and_index_clean() -> bool:
+    porc = _canonical_git(["status", "--porcelain"])
+    return porc.returncode == 0 and not str(porc.stdout or "").strip()
+
+
+def _maybe_fast_forward_source_clone(origin_ref: str) -> None:
+    """Pure fast-forward of local HEAD onto origin only when worktree+index are fully clean.
+
+    Never runs while live/generated modifications exist. Prefer leaving HEAD behind;
+    subsequent persist/publish use disposable worktrees of latest origin/main.
+    Never ``git reset --hard`` / ``git clean``.
+    """
+    if not _source_worktree_and_index_clean():
+        return
+    behind = _canonical_git(["rev-list", "--count", f"HEAD..{origin_ref}"])
+    ahead = _canonical_git(["rev-list", "--count", f"{origin_ref}..HEAD"])
+    try:
+        n_behind = int((behind.stdout or "0").strip() or 0) if behind.returncode == 0 else 0
+        n_ahead = int((ahead.stdout or "0").strip() or 0) if ahead.returncode == 0 else 1
+    except ValueError:
+        return
+    if n_ahead != 0 or n_behind == 0:
+        return
+    _canonical_git(["merge", "--ff-only", origin_ref])
+
+
 def _cleanup_canonical_worktree(wt: Path) -> None:
     if wt.exists():
         _canonical_git(["worktree", "remove", "--force", str(wt)])
@@ -954,11 +1016,12 @@ def _persist_history_via_origin_worktree(
                     )
             if not do_push:
                 return {"status": "clean", "error": None, "ahead": "push_disabled"}
+            sha = str((_canonical_git_at(wt, ["rev-parse", "HEAD"]).stdout or "")).strip()
             if not staged:
-                return {"status": "ok", "error": None, "ahead": "in_sync"}
+                return {"status": "ok", "error": None, "ahead": "in_sync", "remoteSha": sha}
             push_p = _canonical_git_at(wt, ["push", "origin", f"HEAD:{branch}"])
             if push_p.returncode == 0:
-                return {"status": "ok", "error": None, "ahead": "in_sync"}
+                return {"status": "ok", "error": None, "ahead": "in_sync", "remoteSha": sha}
             last_err = push_p.stderr or push_p.stdout or f"git push rc={push_p.returncode}"
             nff = _canonical_is_non_fast_forward(push_p.stderr or "", push_p.stdout or "")
             if nff and attempt < retry_max:
@@ -985,6 +1048,10 @@ def persist_canonical_history_to_source_git(*, push: bool = True) -> dict:
     After a publisher commit has moved origin/main, persist uses a disposable
     worktree of latest origin/main, copies live history, commits if needed, and
     pushes without force so both publisher and canonical histories are preserved.
+    On success it only fetches and verifies remote observations — it must not
+    ``git reset --hard`` / ``git clean`` the source clone (that would wipe live
+    ``web/data`` and other tracked modifications). Source HEAD is left behind
+    unless the worktree+index are fully clean and a pure fast-forward is possible.
 
     Failure → status pending/failed for retry; observation already in canonical files.
 
@@ -1020,16 +1087,20 @@ def persist_canonical_history_to_source_git(*, push: bool = True) -> dict:
                 origin_ref, do_push=do_push, now=now
             )
             if wt_result.get("status") in {"ok", "clean"}:
-                _canonical_git(["fetch", "origin", "--prune"])
+                fetch2 = _canonical_git(["fetch", "origin", "--prune"])
+                if fetch2.returncode != 0:
+                    raise RuntimeError(
+                        fetch2.stderr or fetch2.stdout or f"git fetch rc={fetch2.returncode}"
+                    )
                 live_ref = _canonical_origin_ref() or origin_ref
-                # Fetch-and-rebuild the local clone onto origin (no force-push).
-                # Live history was already copied into the origin worktree and pushed,
-                # so hard reset restores those bytes and clears lagged/untracked dirt.
-                _canonical_git(["reset", "--hard", live_ref])
-                _canonical_git(["clean", "-fd", "--", CANONICAL_HISTORY_REL])
+                remote_sha = _verify_origin_contains_live_canonical(live_ref)
+                # Never reset --hard / clean the source clone. Optional FF only
+                # when the entire worktree+index is clean (no live/generated dirt).
+                _maybe_fast_forward_source_clone(live_ref)
                 state["status"] = str(wt_result.get("status") or "ok")
                 state["error"] = None
                 state["ahead"] = wt_result.get("ahead") or "in_sync"
+                state["remoteSha"] = remote_sha
                 if state["status"] == "ok":
                     state["lastSuccessful"] = now
                 write_canonical_git_state(state)

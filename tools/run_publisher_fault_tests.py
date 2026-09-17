@@ -802,6 +802,12 @@ def persist_canonical_history_production(ws: Path) -> str:
         status = str(state.get("status") or "")
         if status not in {"ok", "clean"}:
             raise RuntimeError(f"production persist failed: {state}")
+        remote_sha = str(state.get("remoteSha") or "").strip()
+        if len(remote_sha) >= 7:
+            return remote_sha
+        origin = run_git(ws, ["rev-parse", "origin/main"], check=False)
+        if origin.returncode == 0 and (origin.stdout or "").strip():
+            return origin.stdout.strip()
         return run_git(ws, ["rev-parse", "HEAD"]).stdout.strip()
     finally:
         try:
@@ -1410,6 +1416,83 @@ def test_wrapper_refuses_publish_allow_local(tmp: Path) -> None:
     )
 
 
+def test_canonical_persist_preserves_sentinel_and_live_web(tmp: Path) -> None:
+    """Unrelated tracked sentinel + live web/data survive production persist; two-cycle still publishes."""
+    bare, ws = make_source_git_workspace(tmp)
+    sentinel = ws / "SENTINEL.txt"
+    sentinel.write_text("sentinel-v1\n", encoding="utf-8")
+    run_git(ws, ["add", "SENTINEL.txt"])
+    run_git(ws, ["commit", "-m", "add sentinel"])
+    run_git(ws, ["push", "origin", "HEAD:main"])
+    sentinel.write_text("sentinel-LIVE-UNCOMMITTED\n", encoding="utf-8")
+    sentinel_bytes = sentinel.read_bytes()
+
+    seed_current(ws, run_id="run-c1", snapshot_utc=PENDING_TS)
+    meta_path = ws / "web" / "data" / "meta.json"
+    drifted = json.loads(meta_path.read_text(encoding="utf-8"))
+    drifted["dataVersion"] = "LIVE-NOT-REMOTE"
+    drifted["buildId"] = "LIVE-NOT-REMOTE"
+    meta_path.write_text(json.dumps(drifted, indent=2) + "\n", encoding="utf-8")
+    dash_path = ws / "web" / "data" / "dashboard.json"
+    dash = json.loads(dash_path.read_text(encoding="utf-8"))
+    dash["buildId"] = "LIVE-NOT-REMOTE"
+    dm = dict(dash.get("meta") or {})
+    dm["dataVersion"] = "LIVE-NOT-REMOTE"
+    dm["buildId"] = "LIVE-NOT-REMOTE"
+    dash["meta"] = dm
+    dash_path.write_text(json.dumps(dash, indent=2) + "\n", encoding="utf-8")
+    write_canonical_month(ws, "2026-09", [OBS_A], run_id="run-c1")
+
+    live_meta = meta_path.read_bytes()
+    live_dash = dash_path.read_bytes()
+    current_bytes = (ws / "data" / "CURRENT.json").read_bytes()
+    marker_bytes = (ws / "data" / ".materialized_run_id").read_bytes()
+    head_before = run_git(ws, ["rev-parse", "HEAD"]).stdout.strip()
+    index_before = run_git(ws, ["ls-files", "-s"]).stdout
+    remote_meta_before = remote_show(bare, "data/meta.json") or ""
+
+    sha_c1 = persist_canonical_history_production(ws)
+    remote_month = remote_show(bare, "data/history/eps_daily/2026-09.jsonl") or ""
+    ok = OBS_A in remote_month
+    ok = ok and sentinel.read_bytes() == sentinel_bytes
+    ok = ok and meta_path.read_bytes() == live_meta
+    ok = ok and dash_path.read_bytes() == live_dash
+    ok = ok and (ws / "data" / "CURRENT.json").read_bytes() == current_bytes
+    ok = ok and (ws / "data" / ".materialized_run_id").read_bytes() == marker_bytes
+    ok = ok and run_git(ws, ["rev-parse", "HEAD"]).stdout.strip() == head_before
+    ok = ok and run_git(ws, ["ls-files", "-s"]).stdout == index_before
+    ok = ok and b"LIVE-NOT-REMOTE" in meta_path.read_bytes()
+    ok = ok and (remote_show(bare, "data/meta.json") or "") == remote_meta_before
+    ok = ok and git_bare(bare, ["merge-base", "--is-ancestor", sha_c1, "refs/heads/main"], check=False).returncode == 0
+
+    proc1 = run_publisher(ws)
+    ok = ok and proc1.returncode == 0 and "PUSHED" in (proc1.stdout or "")
+    pub1 = remote_head(bare)
+    ok = ok and sentinel.read_bytes() == sentinel_bytes
+    ok = ok and run_git(ws, ["rev-parse", "HEAD"]).stdout.strip() == head_before
+
+    seed_current(ws, run_id="run-c2", snapshot_utc=NEWER_TS)
+    write_canonical_month(ws, "2026-09", [OBS_A, OBS_B], run_id="run-c2")
+    sentinel.write_text("sentinel-LIVE-UNCOMMITTED\n", encoding="utf-8")
+    sha_c2 = persist_canonical_history_production(ws)
+    ok = ok and sentinel.read_bytes() == sentinel_bytes
+    ok = ok and run_git(ws, ["rev-parse", "HEAD"]).stdout.strip() == head_before
+    proc2 = run_publisher(ws)
+    ok = ok and proc2.returncode == 0 and "PUSHED" in (proc2.stdout or "")
+    pub2 = remote_head(bare)
+    remote_month2 = remote_show(bare, "data/history/eps_daily/2026-09.jsonl") or ""
+    ok = ok and OBS_A in remote_month2 and OBS_B in remote_month2
+    ok = ok and pub2 != pub1
+    ok = ok and git_bare(bare, ["merge-base", "--is-ancestor", pub1, "refs/heads/main"], check=False).returncode == 0
+    ok = ok and git_bare(bare, ["merge-base", "--is-ancestor", sha_c2, "refs/heads/main"], check=False).returncode == 0
+    ok = ok and sentinel.read_bytes() == sentinel_bytes
+    record(
+        "publisher_canonical_persist_preserves_sentinel_and_live_web_test",
+        ok,
+        f"rc1={proc1.returncode} rc2={proc2.returncode} head_same={run_git(ws, ['rev-parse', 'HEAD']).stdout.strip()==head_before}",
+    )
+
+
 def main() -> int:
     os.environ.setdefault("SKIP_CANONICAL_GIT_PERSIST", "1")
     print("=== ai-eps-monitor publisher fail-closed fault tests ===")
@@ -1445,6 +1528,7 @@ def main() -> int:
         test_required_web_json_schema_negatives,
         test_live_differs_from_generation_push_refused_frozen,
         test_wrapper_refuses_publish_allow_local,
+        test_canonical_persist_preserves_sentinel_and_live_web,
     ]
     for fn in tests:
         with tempfile.TemporaryDirectory(prefix=f"ai_eps_pub_{fn.__name__}_") as td:

@@ -868,6 +868,45 @@ def read_canonical_git_state(root: Path) -> dict:
         raise PublishError(f"canonical_git_state.json corrupt: {exc}") from exc
 
 
+def _canonical_history_matches_origin(git_base: Path, branch: str) -> None:
+    """Refuse dirty live history that is not already on origin.
+
+    Persist leaves source HEAD behind on purpose. A fully clean history path
+    (even if HEAD lags origin) is allowed — publisher rebuilds from origin.
+    Untracked or modified jsonl files are OK only when their bytes match origin.
+    """
+    porcelain = _git(git_base, ["status", "--porcelain", "--", CANONICAL_HISTORY_REL])
+    if not _nonempty(porcelain.stdout):
+        return
+    origin_ref = f"origin/{branch}"
+    ls = _git(git_base, ["ls-tree", "-r", "--full-name", origin_ref, "--", CANONICAL_HISTORY_REL])
+    origin_blobs: dict[str, str] = {}
+    for line in (ls.stdout or "").splitlines():
+        if "\t" not in line:
+            continue
+        meta, path = line.split("\t", 1)
+        parts = meta.split()
+        if len(parts) >= 3 and path.endswith(".jsonl"):
+            origin_blobs[str(Path(path).name)] = parts[2]
+    live_dir = git_base / CANONICAL_HISTORY_REL
+    live_blobs: dict[str, str] = {}
+    if live_dir.is_dir():
+        for src in sorted(live_dir.glob("*.jsonl")):
+            if not src.is_file():
+                continue
+            hashed = _git(git_base, ["hash-object", str(src)])
+            sha = (hashed.stdout or "").strip()
+            if hashed.returncode != 0 or not sha:
+                raise PublishError(
+                    f"canonical working-tree hash failed for {src.name} — refusing publish"
+                )
+            live_blobs[src.name] = sha
+    if live_blobs != origin_blobs:
+        raise PublishError(
+            "canonical working-tree has a diff under data/history/eps_daily — refusing publish"
+        )
+
+
 def require_canonical_git_ready(root: Path, git_base: Path | None, gen_dir: Path) -> str:
     """Refuse pending/failed canonical git, unpushed commits, dirty tree, missing remote obs."""
     state = read_canonical_git_state(root)
@@ -879,19 +918,6 @@ def require_canonical_git_ready(root: Path, git_base: Path | None, gen_dir: Path
     if git_base is None:
         return ""
     branch = _publish_branch()
-    porcelain = _git(git_base, ["status", "--porcelain", "--", CANONICAL_HISTORY_REL])
-    porc = porcelain.stdout or ""
-    if _nonempty(porc):
-        untracked = any(ln.startswith("??") or ln.startswith("A ") for ln in porc.splitlines())
-        diff_origin = _git(
-            git_base, ["diff", f"origin/{branch}", "--", CANONICAL_HISTORY_REL]
-        )
-        # Lagged clone whose working tree already matches origin/main is safe.
-        # Untracked files or a diff vs origin/main are not.
-        if untracked or _nonempty(diff_origin.stdout):
-            raise PublishError(
-                "canonical working-tree has a diff under data/history/eps_daily — refusing publish"
-            )
     ahead = _git(git_base, ["rev-list", "--count", f"origin/{branch}..HEAD"])
     try:
         n_ahead = int((ahead.stdout or "0").strip() or 0) if ahead.returncode == 0 else 0
@@ -913,6 +939,7 @@ def require_canonical_git_ready(root: Path, git_base: Path | None, gen_dir: Path
             raise PublishError(
                 "unpushed canonical commit under data/history/eps_daily — refusing publish"
             )
+    _canonical_history_matches_origin(git_base, branch)
     return prove_canonical_head_sha(git_base, gen_dir)
 
 
