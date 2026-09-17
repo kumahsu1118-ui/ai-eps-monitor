@@ -419,15 +419,14 @@ def restore_base_snapshot(fixture: Path) -> None:
 
 
 def spa_js_text(fixture: Path) -> str:
-    """Published SPA may live at repo-root app.js; source copy under web/app.js."""
-    parts = []
+    """SPA source of truth is web/app.js. Repo-root app.js is the Pages overlay and may lag."""
     for p in (fixture / "web" / "app.js", ROOT / "web" / "app.js", ROOT / "app.js"):
         if p.exists():
             try:
-                parts.append(p.read_text(encoding="utf-8"))
+                return p.read_text(encoding="utf-8")
             except Exception:
                 continue
-    return "\n".join(parts)
+    return ""
 
 
 def run_export(fixture: Path, *, legacy_mutate: bool = True, timeout: int = 60) -> None:
