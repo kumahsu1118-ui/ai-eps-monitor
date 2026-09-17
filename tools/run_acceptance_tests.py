@@ -148,6 +148,7 @@ def build_fixture(dest: Path) -> Path:
         "collection_freshness.py",
         "health_check.py",
         "publish_github_pages.sh",
+        "publish_release.py",
         "build_review_zip.sh",
     ):
         src = ROOT / "tools" / name
@@ -246,6 +247,135 @@ def build_fixture(dest: Path) -> Path:
     return dest
 
 
+REQUIRED_PUBLISH_WEB_JSON = (
+    "meta.json",
+    "companies.json",
+    "valuation.json",
+    "revisions.json",
+    "eps_history.json",
+    "earnings.json",
+    "watchlist.json",
+    "alerts.json",
+    "dashboard.json",
+)
+
+
+def seed_publishable_current(
+    fixture: Path,
+    run_id: str = "fixture-current-1",
+    snapshot_utc: str = "2026-09-15T01:36:00Z",
+) -> Path:
+    """Copy live web/data into a synthetic CURRENT generation (acceptance fixtures)."""
+    gen = fixture / "data" / "generations" / run_id
+    gen_web = gen / "web" / "data"
+    gen_web.mkdir(parents=True, exist_ok=True)
+    live = fixture / "web" / "data"
+    live.mkdir(parents=True, exist_ok=True)
+    for name in REQUIRED_PUBLISH_WEB_JSON:
+        src = live / name
+        dest = gen_web / name
+        if src.is_file():
+            shutil.copy2(src, dest)
+        elif name == "meta.json":
+            dest.write_text(
+                json.dumps(
+                    {
+                        "qualityGate": {"status": "ok", "publishable": True},
+                        "lastSuccessfulCollection": snapshot_utc,
+                        "schemaVersion": "1",
+                        "dataVersion": "fixture-dv",
+                        "refreshVersion": "fixture-rv",
+                    },
+                    indent=2,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+        elif name == "dashboard.json":
+            dest.write_text(json.dumps({"meta": {}, "companies": {}}, indent=2) + "\n", encoding="utf-8")
+        else:
+            dest.write_text("{}\n", encoding="utf-8")
+    meta_path = gen_web / "meta.json"
+    meta = json.loads(meta_path.read_text(encoding="utf-8"))
+    meta.setdefault("qualityGate", {})["publishable"] = True
+    meta["qualityGate"]["status"] = "ok"
+    meta["lastSuccessfulCollection"] = snapshot_utc
+    meta["schemaVersion"] = meta.get("schemaVersion") or "1"
+    meta["generationRunId"] = run_id
+    if not meta.get("dataVersion"):
+        meta["dataVersion"] = "fixture-dv"
+    if not meta.get("refreshVersion"):
+        meta["refreshVersion"] = "fixture-rv"
+    if not meta.get("buildId"):
+        meta["buildId"] = meta.get("dataVersion")
+    meta_path.write_text(json.dumps(meta, indent=2) + "\n", encoding="utf-8")
+    dash_path = gen_web / "dashboard.json"
+    try:
+        dash = json.loads(dash_path.read_text(encoding="utf-8")) if dash_path.is_file() else {}
+    except Exception:
+        dash = {}
+    if not isinstance(dash, dict):
+        dash = {}
+    dm = dict(dash.get("meta") or {})
+    dm.update(meta)
+    dash["meta"] = dm
+    if meta.get("buildId"):
+        dash["buildId"] = meta["buildId"]
+    dash_path.write_text(json.dumps(dash, indent=2) + "\n", encoding="utf-8")
+    for name in REQUIRED_PUBLISH_WEB_JSON:
+        dest = gen_web / name
+        if not dest.is_file():
+            continue
+        try:
+            obj = json.loads(dest.read_text(encoding="utf-8"))
+        except Exception:
+            continue
+        if not isinstance(obj, dict):
+            continue
+        bid = str(meta.get("buildId") or meta.get("dataVersion") or "")
+        ticker_maps = {"companies.json", "eps_history.json", "earnings.json"}
+        if name in ticker_maps:
+            obj["_buildId"] = bid
+        else:
+            obj["buildId"] = bid
+        dest.write_text(json.dumps(obj, indent=2) + "\n", encoding="utf-8")
+    shutil.copy2(meta_path, live / "meta.json")
+    for src in gen_web.glob("*.json"):
+        shutil.copy2(src, live / src.name)
+    (gen / "generation_meta.json").write_text(
+        json.dumps(
+            {
+                "runId": run_id,
+                "snapshot_utc": snapshot_utc,
+                "lastSuccessfulCollection": snapshot_utc,
+                "schemaVersion": "1",
+                "runStatus": "committed",
+                "materializationStatus": "success",
+            },
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    (fixture / "data" / "CURRENT.json").write_text(
+        json.dumps(
+            {
+                "runId": run_id,
+                "generation": f"data/generations/{run_id}",
+                "snapshot_utc": snapshot_utc,
+                "committedAt": snapshot_utc,
+                "schemaVersion": "1",
+                "crashAtomic": True,
+            },
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    (fixture / "data" / ".materialized_run_id").write_text(run_id + "\n", encoding="utf-8")
+    return gen
+
+
 def restore_base_snapshot(fixture: Path) -> None:
     """Restore canonical non-future publishable snapshot (after destructive tests).
 
@@ -289,15 +419,14 @@ def restore_base_snapshot(fixture: Path) -> None:
 
 
 def spa_js_text(fixture: Path) -> str:
-    """Published SPA may live at repo-root app.js; source copy under web/app.js."""
-    parts = []
+    """SPA source of truth is web/app.js. Repo-root app.js is the Pages overlay and may lag."""
     for p in (fixture / "web" / "app.js", ROOT / "web" / "app.js", ROOT / "app.js"):
         if p.exists():
             try:
-                parts.append(p.read_text(encoding="utf-8"))
+                return p.read_text(encoding="utf-8")
             except Exception:
                 continue
-    return "\n".join(parts)
+    return ""
 
 
 def run_export(fixture: Path, *, legacy_mutate: bool = True, timeout: int = 60) -> None:
@@ -1879,21 +2008,31 @@ def test_alert_engine_failure_preserves_history(fixture: Path) -> None:
 
 
 def test_refresh_only_publish(fixture: Path) -> None:
-    """publish hash considers dataVersion + refreshVersion; dataVersion stays substantive-only."""
+    """Publish payload hash feeds dataVersion + refreshVersion, not sitePublished."""
+    import importlib.util
+
     exp = import_mod(fixture, "export_web_data")
     run_export(fixture)
-    meta = json.loads((fixture / "web" / "data" / "meta.json").read_text(encoding="utf-8"))
+    spec = importlib.util.spec_from_file_location(
+        "publish_release_refresh", fixture / "tools" / "publish_release.py"
+    )
+    pub = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(pub)
+    web = fixture / "web"
+    meta_path = web / "data" / "meta.json"
+    meta = json.loads(meta_path.read_text(encoding="utf-8"))
     dv = meta.get("dataVersion")
     rv = meta.get("refreshVersion")
     ok = bool(dv) and bool(rv)
-    # Publish script feeds both
-    body = (fixture / "tools" / "publish_github_pages.sh").read_text(encoding="utf-8")
-    ok = ok and "refreshVersion" in body and "dataVersion" in body
-    # Simulate hash: dv|rv changes when rv changes even if dv same
-    h1 = hashlib.sha256((str(dv) + "|" + str(rv)).encode()).hexdigest()
-    h2 = hashlib.sha256((str(dv) + "|" + "OTHER_REFRESH").encode()).hexdigest()
+    h1 = pub.compute_payload_hash(web)
+    meta["refreshVersion"] = "OTHER_REFRESH"
+    meta_path.write_text(json.dumps(meta, indent=2) + "\n", encoding="utf-8")
+    h2 = pub.compute_payload_hash(web)
     ok = ok and h1 != h2
-    # dataVersion ignores operational fields
+    meta["sitePublished"] = "2099-01-01T00:00:00Z"
+    meta_path.write_text(json.dumps(meta, indent=2) + "\n", encoding="utf-8")
+    h3 = pub.compute_payload_hash(web)
+    ok = ok and h2 == h3
     parts = {
         "companies": {"NVDA": {"eps": {}}},
         "alerts": {"activeAlerts": [], "alertEngineStatus": "ok"},
@@ -1903,19 +2042,17 @@ def test_refresh_only_publish(fixture: Path) -> None:
         "companies": {"NVDA": {"eps": {}, "lastSuccessfulCollection": "2099-01-01T00:00:00Z"}},
         "alerts": {"activeAlerts": [], "alertEngineStatus": "ok"},
     }
-    # Without strip, would differ — exporter strip is used in main; here verify strip helper
     stripped = {
         "companies": exp.strip_operational_fields(parts2["companies"]),
         "alerts": parts2["alerts"],
     }
     b = exp.compute_data_version(stripped)
-    # stripped companies should equal parts companies for dataVersion purposes
     c = exp.compute_data_version({
         "companies": exp.strip_operational_fields(parts["companies"]),
         "alerts": parts["alerts"],
     })
-    ok = ok and b == c
-    record("refresh_only_publish_test", ok, f"dv={str(dv)[:10]} rv_diff={h1!=h2}")
+    ok = ok and b == c and bool(a)
+    record("refresh_only_publish_test", ok, f"dv={str(dv)[:10]} rv_diff={h1!=h2} site_pub_stable={h2==h3}")
 
 
 def test_source_1m_no_daily_spam(fixture: Path) -> None:
@@ -2876,6 +3013,8 @@ def test_missing_fiscal_identity_rejected(fixture: Path) -> None:
 
 def test_dashboard_publish_metadata_sync(fixture: Path) -> None:
     """Publish stamping must atomically sync meta.json AND dashboard.json.meta."""
+    import importlib.util
+
     from atomic_io import atomic_write_json
     web = fixture / "web" / "data"
     web.mkdir(parents=True, exist_ok=True)
@@ -2883,39 +3022,39 @@ def test_dashboard_publish_metadata_sync(fixture: Path) -> None:
         "dataVersion": "abc123",
         "refreshVersion": "def456",
         "buildId": "abc123",
-        "sitePublished": "2026-09-15T02:41:00Z",
-        "sitePublishedDisplay": "old",
+        "schemaVersion": "1",
+        "generationRunId": "fixture-current-1",
         "lastSuccessfulCollection": "2026-09-15T01:36:00Z",
+        "appVersion": "app-a",
+        "releaseVersion": "rel-a",
     }
     dash = {"meta": dict(meta), "companies": {}, "buildId": "abc123"}
     atomic_write_json(web / "meta.json", meta)
     atomic_write_json(web / "dashboard.json", dash)
-
-    # Simulate publish stamp sync logic
-    import sys as _sys
-    _sys.path.insert(0, str(fixture / "tools"))
-    now_utc = "2026-09-15T03:06:00Z"
-    display = "Sep 15, 2026 16:06 Taipei Time"
-    meta2 = json.loads((web / "meta.json").read_text(encoding="utf-8"))
-    meta2["sitePublished"] = now_utc
-    meta2["sitePublishedDisplay"] = display
-    atomic_write_json(web / "meta.json", meta2)
-    dash2 = json.loads((web / "dashboard.json").read_text(encoding="utf-8"))
-    dash_meta = dict(dash2.get("meta") or {})
-    for k in ("sitePublished", "sitePublishedDisplay", "dataVersion", "refreshVersion", "buildId"):
-        dash_meta[k] = meta2[k]
-    dash2["meta"] = dash_meta
-    atomic_write_json(web / "dashboard.json", dash2)
-
+    spec = importlib.util.spec_from_file_location(
+        "publish_release_stamp", fixture / "tools" / "publish_release.py"
+    )
+    pub = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(pub)
+    stamped = pub.stamp_release_metadata(
+        fixture,
+        generation_run_id="fixture-current-1",
+        canonical_head_sha="deadbeef",
+        collection_iso="2026-09-15T01:36:00Z",
+        payload_hash="abc123",
+        stamp_published=True,
+        write_marker=False,
+    )
     m = json.loads((web / "meta.json").read_text(encoding="utf-8"))
     d = json.loads((web / "dashboard.json").read_text(encoding="utf-8"))
     dm = d.get("meta") or {}
-    ok = m.get("sitePublished") == dm.get("sitePublished") == now_utc
-    ok = ok and m.get("sitePublishedDisplay") == dm.get("sitePublishedDisplay") == display
-    ok = ok and m.get("dataVersion") == dm.get("dataVersion")
-    # Verify publish script contains sync logic
-    pub = (fixture / "tools" / "publish_github_pages.sh").read_text(encoding="utf-8")
-    ok = ok and "dashboard.json" in pub and "meta.json + dashboard.json.meta" in pub
+    ok = bool(stamped.get("sitePublished"))
+    ok = ok and m.get("sitePublished") == dm.get("sitePublished") == stamped.get("sitePublished")
+    ok = ok and m.get("sitePublishedDisplay") == dm.get("sitePublishedDisplay")
+    ok = ok and m.get("dataVersion") == dm.get("dataVersion") == "abc123"
+    ok = ok and m.get("generationRunId") == dm.get("generationRunId") == "fixture-current-1"
+    ok = ok and m.get("canonicalHeadSha") == dm.get("canonicalHeadSha") == "deadbeef"
+    ok = ok and m.get("schemaVersion") == dm.get("schemaVersion") == "1"
     record("dashboard_publish_metadata_sync_test", ok, f"meta={m.get('sitePublished')} dash={dm.get('sitePublished')}")
 
 
@@ -3352,24 +3491,95 @@ def test_site_published_does_not_change_refresh_version(fixture: Path) -> None:
 
 
 def test_push_failure_retry_still_pushes(fixture: Path) -> None:
-    """.data-version must be written only after successful push."""
-    body = (ROOT / "tools" / "publish_github_pages.sh").read_text(encoding="utf-8")
-    # VERSION_FILE write must appear AFTER git push
-    push_idx = body.find("git push origin main")
-    # find echo HASH to VERSION_FILE
-    import re as _re
-    writes = [m.start() for m in _re.finditer(r'echo "\$HASH" > "\$VERSION_FILE"', body)]
-    ok = push_idx > 0 and len(writes) >= 1
-    ok = ok and all(w > push_idx for w in writes)
-    ok = ok and "data-version NOT updated" in body or ".data-version NOT updated" in body
-    ok = ok and "AHEAD" in body  # recovery path
-    # Simulate logic: PREV not updated on failed push
-    version_file = fixture / "site-repo" / ".data-version"
-    version_file.parent.mkdir(parents=True, exist_ok=True)
-    version_file.write_text("oldhash\n", encoding="utf-8")
-    # failed push would leave oldhash; new hash differs → retry proceeds
-    ok = ok and version_file.read_text().strip() == "oldhash"
-    record("push_failure_retry_still_pushes_test", ok, f"writes_after_push={writes} push_idx={push_idx}")
+    """.data-version and live stamps must stay unchanged when push is rejected; retry still attempts push."""
+    import stat
+
+    tmp = Path(tempfile.mkdtemp(prefix="ai_eps_acc_pushfail_"))
+    try:
+        # Keep this test self-contained: local bare remote + pre-receive reject.
+        def _git(cwd: Path, args: list[str], check: bool = True) -> subprocess.CompletedProcess:
+            env = os.environ.copy()
+            env["GIT_TERMINAL_PROMPT"] = "0"
+            env["GIT_AUTHOR_NAME"] = "Publisher Test"
+            env["GIT_AUTHOR_EMAIL"] = "publisher-test@example.invalid"
+            env["GIT_COMMITTER_NAME"] = env["GIT_AUTHOR_NAME"]
+            env["GIT_COMMITTER_EMAIL"] = env["GIT_AUTHOR_EMAIL"]
+            proc = subprocess.run(
+                ["git", *args], cwd=str(cwd), capture_output=True, text=True, check=False, env=env
+            )
+            if check and proc.returncode != 0:
+                raise RuntimeError(f"git {args} rc={proc.returncode} {(proc.stderr or '')[:400]}")
+            return proc
+
+        bare = tmp / "remote.git"
+        _git(tmp, ["init", "--bare", "-b", "main", str(bare)])
+        _git(bare, ["--git-dir", str(bare), "config", "receive.denyNonFastForwards", "true"])
+        seed = tmp / "seed"
+        _git(tmp, ["clone", str(bare), str(seed)])
+        _git(seed, ["config", "user.email", "publisher-test@example.invalid"])
+        _git(seed, ["config", "user.name", "Publisher Test"])
+        _git(seed, ["config", "commit.gpgsign", "false"])
+        (seed / "data").mkdir(parents=True)
+        (seed / "index.html").write_text("<html></html>\n", encoding="utf-8")
+        (seed / "data" / "meta.json").write_text(
+            json.dumps({"lastSuccessfulCollection": "2026-09-14T01:00:00Z", "schemaVersion": "1"}, indent=2) + "\n",
+            encoding="utf-8",
+        )
+        (seed / ".data-version").write_text("oldhash\n", encoding="utf-8")
+        _git(seed, ["add", "-A"])
+        _git(seed, ["commit", "-m", "seed"])
+        _git(seed, ["push", "-u", "origin", "main"])
+        ws = tmp / "ws"
+        shutil.copytree(fixture, ws, ignore=shutil.ignore_patterns(".git", "site-repo"))
+        site = ws / "site-repo"
+        _git(tmp, ["clone", str(bare), str(site)])
+        _git(site, ["config", "user.email", "publisher-test@example.invalid"])
+        _git(site, ["config", "user.name", "Publisher Test"])
+        seed_publishable_current(ws)
+        hook = bare / "hooks" / "pre-receive"
+        hook.write_text("#!/bin/sh\necho 'ERROR: git push rejected by pre-receive' >&2\nexit 1\n", encoding="utf-8")
+        hook.chmod(hook.stat().st_mode | stat.S_IEXEC | stat.S_IXGRP | stat.S_IXOTH)
+        version_before = (site / ".data-version").read_text(encoding="utf-8")
+        live_meta_before = (ws / "web" / "data" / "meta.json").read_bytes()
+        live_dash_before = (ws / "web" / "data" / "dashboard.json").read_bytes()
+        env = os.environ.copy()
+        env["AI_EPS_ROOT"] = str(ws)
+        env["PIPELINE_LOCK_HELD"] = "1"
+        env["SKIP_EXPORT"] = "1"
+        env["PUBLISH_PREBUILT"] = "1"
+        env["GIT_TERMINAL_PROMPT"] = "0"
+        proc = subprocess.run(
+            ["bash", str(ws / "tools" / "publish_github_pages.sh")],
+            cwd=str(ws),
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=120,
+        )
+        version_after = (site / ".data-version").read_text(encoding="utf-8") if (site / ".data-version").is_file() else ""
+        ok = proc.returncode != 0
+        ok = ok and "push" in ((proc.stdout or "") + (proc.stderr or "")).lower()
+        ok = ok and version_after == version_before == "oldhash\n"
+        ok = ok and (ws / "web" / "data" / "meta.json").read_bytes() == live_meta_before
+        ok = ok and (ws / "web" / "data" / "dashboard.json").read_bytes() == live_dash_before
+        ok = ok and "PUSHED" not in (proc.stdout or "")
+        proc2 = subprocess.run(
+            ["bash", str(ws / "tools" / "publish_github_pages.sh")],
+            cwd=str(ws),
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=120,
+        )
+        ok = ok and proc2.returncode != 0
+        ok = ok and (site / ".data-version").read_text(encoding="utf-8") == "oldhash\n"
+        record(
+            "push_failure_retry_still_pushes_test",
+            ok,
+            f"rc={proc.returncode} rc2={proc2.returncode} ver={version_after!r}",
+        )
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
 
 
 def test_unknown_analyst_not_high_severity(fixture: Path) -> None:
@@ -3636,16 +3846,18 @@ def test_parent_lock_ingest_publish(fixture: Path) -> None:
     meta.setdefault("refreshVersion", "def")
     meta_path.parent.mkdir(parents=True, exist_ok=True)
     meta_path.write_text(json.dumps(meta, indent=2) + "\n", encoding="utf-8")
+    seed_publishable_current(fixture)
 
     lock_path = fixture / "data" / ".pipeline.lock"
     env = os.environ.copy()
     env["PIPELINE_LOCK_HELD"] = "1"
     env["SKIP_EXPORT"] = "1"
     env["PUBLISH_PREBUILT"] = "1"
+    env["PUBLISH_ALLOW_LOCAL"] = "1"
     env["AI_EPS_ROOT"] = str(fixture)
     with GlobalPipelineLock(lock_path, non_blocking=True):
         proc = subprocess.run(
-            ["bash", str(fixture / "tools" / "publish_github_pages.sh")],
+            [sys.executable, str(fixture / "tools" / "publish_release.py")],
             cwd=str(fixture),
             env=env,
             capture_output=True,
@@ -4030,6 +4242,7 @@ def test_clean_publish_contains_all_index_assets(fixture: Path) -> None:
     meta.setdefault("refreshVersion", "cleanpub1r")
     meta_path.parent.mkdir(parents=True, exist_ok=True)
     meta_path.write_text(json.dumps(meta, indent=2) + "\n", encoding="utf-8")
+    seed_publishable_current(fixture)
     # Ensure vendor present in fixture web
     vendor = fixture / "web" / "vendor" / "chart.umd.min.js"
     ok = vendor.exists()
@@ -4038,8 +4251,9 @@ def test_clean_publish_contains_all_index_assets(fixture: Path) -> None:
     env["PIPELINE_LOCK_HELD"] = "1"
     env["SKIP_EXPORT"] = "1"
     env["PUBLISH_PREBUILT"] = "1"
+    env["PUBLISH_ALLOW_LOCAL"] = "1"
     proc = subprocess.run(
-        ["bash", str(fixture / "tools" / "publish_github_pages.sh")],
+        [sys.executable, str(fixture / "tools" / "publish_release.py")],
         cwd=str(fixture),
         env=env,
         capture_output=True,
@@ -4294,16 +4508,18 @@ def test_real_parent_lock_publish_integration(fixture: Path) -> None:
     meta.setdefault("refreshVersion", "parentlock1r")
     meta_path.parent.mkdir(parents=True, exist_ok=True)
     meta_path.write_text(json.dumps(meta, indent=2) + "\n", encoding="utf-8")
+    seed_publishable_current(fixture)
 
     lock_path = fixture / "data" / ".pipeline.lock"
     env = os.environ.copy()
     env["PIPELINE_LOCK_HELD"] = "1"
     env["SKIP_EXPORT"] = "1"
     env["PUBLISH_PREBUILT"] = "1"
+    env["PUBLISH_ALLOW_LOCAL"] = "1"
     env["AI_EPS_ROOT"] = str(fixture)
     with GlobalPipelineLock(lock_path, non_blocking=True):
         proc = subprocess.run(
-            ["bash", str(fixture / "tools" / "publish_github_pages.sh")],
+            [sys.executable, str(fixture / "tools" / "publish_release.py")],
             cwd=str(fixture),
             env=env,
             capture_output=True,
@@ -4369,9 +4585,14 @@ def test_pending_publish_retry(fixture: Path) -> None:
     meta.setdefault("dataVersion", "pend1")
     meta.setdefault("refreshVersion", "pend1r")
     meta_path.write_text(json.dumps(meta, indent=2) + "\n", encoding="utf-8")
+    seed_publishable_current(fixture)
     os.environ["PIPELINE_LOCK_HELD"] = "1"
     os.environ["AI_EPS_ROOT"] = str(fixture)
-    rc = ing.retry_pending_publish_if_needed()
+    os.environ["PUBLISH_ALLOW_LOCAL"] = "1"
+    try:
+        rc = ing.retry_pending_publish_if_needed()
+    finally:
+        os.environ.pop("PUBLISH_ALLOW_LOCAL", None)
     state = ing.read_publish_state()
     ok = rc == 0
     ok = ok and state.get("publishStatus") == "published"
@@ -4583,12 +4804,14 @@ def test_standalone_publish_cannot_mutate_persistent_state(fixture: Path) -> Non
     meta.setdefault("dataVersion", "pubonly1")
     meta.setdefault("refreshVersion", "pubonly1r")
     meta_path.write_text(json.dumps(meta, indent=2) + "\n", encoding="utf-8")
+    seed_publishable_current(fixture)
     env = os.environ.copy()
     env["PIPELINE_LOCK_HELD"] = "1"
     env["AI_EPS_ROOT"] = str(fixture)
     # Do NOT set SKIP_EXPORT — script must still not export
     env.pop("SKIP_EXPORT", None)
     env.pop("PUBLISH_PREBUILT", None)
+    env.pop("PUBLISH_ALLOW_LOCAL", None)
     proc = subprocess.run(
         ["bash", str(fixture / "tools" / "publish_github_pages.sh")],
         cwd=str(fixture),
@@ -4695,11 +4918,15 @@ def test_pending_publish_uses_current_generation(fixture: Path) -> None:
         "pendingReleaseVersion": meta.get("releaseVersion") or "x",
     })
     os.environ["AI_EPS_ROOT"] = str(fixture)
+    os.environ["PUBLISH_ALLOW_LOCAL"] = "1"
     # Source must call ensure_live before publish
     src = (fixture / "tools" / "ingest_snapshot.py").read_text(encoding="utf-8")
     ok = ok and "ensure_live_matches_current" in src
     # retry must reconcile
-    rc = ing.retry_pending_publish_if_needed()
+    try:
+        rc = ing.retry_pending_publish_if_needed()
+    finally:
+        os.environ.pop("PUBLISH_ALLOW_LOCAL", None)
     meta2 = json.loads(meta_path.read_text(encoding="utf-8"))
     ok = ok and meta2.get("dataVersion") != stale_dv
     ok = ok and marker.exists() and marker.read_text(encoding="utf-8").strip() == r1.get("runId")

@@ -47,6 +47,7 @@ python3 tools/migrate_eps_history.py --apply
 python3 tools/run_acceptance_tests.py              # all
 python3 tools/run_unit_tests.py                    # unit (in-process)
 python3 tools/run_integration_tests.py             # integration (subprocess timeouts)
+python3 tools/run_publisher_fault_tests.py         # publisher fail-closed + bare-remote faults
 python3 tools/health_check.py                      # read-only pipeline / canonical history health
 ```
 
@@ -67,6 +68,7 @@ Reproduce the gate locally (same commands, real exit codes):
 python3 tools/run_unit_tests.py
 python3 tools/run_integration_tests.py
 python3 tools/run_acceptance_tests.py
+python3 tools/run_publisher_fault_tests.py
 python3 tools/canonical_eps_history.py --materialize   # or: python3 tools/rebuild_daily_history.py
 python3 tools/migrate_eps_history.py --audit
 python3 tools/health_check.py --allow-degraded         # read-only; FAIL only on FAILED

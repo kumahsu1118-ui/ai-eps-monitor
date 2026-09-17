@@ -23,8 +23,10 @@ import hashlib
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
+import tempfile
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -52,6 +54,8 @@ WEB_DATA = ROOT / "web" / "data"
 REV_PATH = ROOT / "data" / "revisions" / "history.jsonl"
 UNIVERSE_PATH = ROOT / "data" / "universe.json"
 CANONICAL_GIT_STATE_NAME = "canonical_git_state.json"
+CANONICAL_HISTORY_REL = "data/history/eps_daily"
+DEFAULT_CANONICAL_RETRY_MAX = 3
 
 
 
@@ -768,13 +772,26 @@ def write_canonical_git_state(state: dict) -> None:
 
 
 def _canonical_git(args: list[str]) -> subprocess.CompletedProcess:
+    return _canonical_git_at(ROOT, args)
+
+
+def _canonical_git_at(cwd: Path, args: list[str]) -> subprocess.CompletedProcess:
     return subprocess.run(
         ["git", *args],
-        cwd=str(ROOT),
+        cwd=str(cwd),
         capture_output=True,
         text=True,
         check=False,
     )
+
+
+def _canonical_retry_max() -> int:
+    raw = str(os.environ.get("PUBLISH_RETRY_MAX") or DEFAULT_CANONICAL_RETRY_MAX).strip()
+    try:
+        n = int(raw)
+    except ValueError:
+        n = DEFAULT_CANONICAL_RETRY_MAX
+    return max(1, n)
 
 
 def _canonical_git_unpushed() -> tuple[bool, str]:
@@ -812,10 +829,230 @@ def _canonical_git_push() -> subprocess.CompletedProcess:
     return pushed
 
 
+def _canonical_is_non_fast_forward(stderr: str, stdout: str) -> bool:
+    blob = f"{stderr}\n{stdout}".lower()
+    return (
+        "non-fast-forward" in blob
+        or "fetch first" in blob
+        or "updates were rejected because the remote contains work" in blob
+        or ("[rejected]" in blob and "fetch first" in blob)
+    )
+
+
+def _canonical_origin_ref() -> str | None:
+    for ref in ("origin/main", "refs/remotes/origin/main", "origin/HEAD"):
+        proc = _canonical_git(["rev-parse", "--verify", ref])
+        if proc.returncode == 0 and str(proc.stdout or "").strip():
+            return ref
+    return None
+
+
+def _canonical_publish_branch(origin_ref: str) -> str:
+    name = origin_ref.split("/")[-1]
+    if name in {"HEAD", ""}:
+        return "main"
+    return name
+
+
+def _copy_live_canonical_history_into(dest_hist: Path) -> None:
+    dest_hist.mkdir(parents=True, exist_ok=True)
+    if not HISTORY_DIR.is_dir():
+        return
+    for src in sorted(HISTORY_DIR.glob("*.jsonl")):
+        if src.is_file():
+            shutil.copy2(src, dest_hist / src.name)
+
+
+def _live_canonical_observation_lines() -> dict[str, list[str]]:
+    out: dict[str, list[str]] = {}
+    if not HISTORY_DIR.is_dir():
+        return out
+    for src in sorted(HISTORY_DIR.glob("*.jsonl")):
+        if not src.is_file():
+            continue
+        out[src.name] = [
+            ln.strip()
+            for ln in src.read_text(encoding="utf-8").splitlines()
+            if ln.strip()
+        ]
+    return out
+
+
+def _verify_origin_contains_live_canonical(origin_ref: str) -> str:
+    """Return origin SHA after proving remote files contain live canonical observations.
+
+    Does not modify HEAD, index, or the source working tree.
+    """
+    sha_p = _canonical_git(["rev-parse", origin_ref])
+    sha = str(sha_p.stdout or "").strip()
+    if sha_p.returncode != 0 or not sha:
+        raise RuntimeError(f"origin SHA missing after persist ({origin_ref})")
+    for name, lines in _live_canonical_observation_lines().items():
+        rel = f"{CANONICAL_HISTORY_REL}/{name}"
+        shown = _canonical_git(["show", f"{sha}:{rel}"])
+        if shown.returncode != 0:
+            raise RuntimeError(f"remote missing {rel} at {sha[:12]}")
+        remote_text = shown.stdout or ""
+        for line in lines:
+            if line not in remote_text:
+                raise RuntimeError(f"remote missing CURRENT canonical observation in {rel} at {sha[:12]}")
+    return sha
+
+
+def _source_worktree_and_index_clean() -> bool:
+    porc = _canonical_git(["status", "--porcelain"])
+    return porc.returncode == 0 and not str(porc.stdout or "").strip()
+
+
+def _maybe_fast_forward_source_clone(origin_ref: str) -> None:
+    """Pure fast-forward of local HEAD onto origin only when worktree+index are fully clean.
+
+    Never runs while live/generated modifications exist. Prefer leaving HEAD behind;
+    subsequent persist/publish use disposable worktrees of latest origin/main.
+    Never ``git reset --hard`` / ``git clean``.
+    """
+    if not _source_worktree_and_index_clean():
+        return
+    behind = _canonical_git(["rev-list", "--count", f"HEAD..{origin_ref}"])
+    ahead = _canonical_git(["rev-list", "--count", f"{origin_ref}..HEAD"])
+    try:
+        n_behind = int((behind.stdout or "0").strip() or 0) if behind.returncode == 0 else 0
+        n_ahead = int((ahead.stdout or "0").strip() or 0) if ahead.returncode == 0 else 1
+    except ValueError:
+        return
+    if n_ahead != 0 or n_behind == 0:
+        return
+    _canonical_git(["merge", "--ff-only", origin_ref])
+
+
+def _cleanup_canonical_worktree(wt: Path) -> None:
+    if wt.exists():
+        _canonical_git(["worktree", "remove", "--force", str(wt)])
+        shutil.rmtree(wt, ignore_errors=True)
+    _canonical_git(["worktree", "prune"])
+
+
+def _commit_local_canonical_history(now: str) -> bool:
+    """Stage/commit live history on local HEAD. Returns True if a new commit was made."""
+    rel = CANONICAL_HISTORY_REL
+    add = _canonical_git(["add", "--", rel])
+    if add.returncode != 0:
+        raise RuntimeError(add.stderr or add.stdout or f"git add rc={add.returncode}")
+    diff = _canonical_git(["diff", "--cached", "--quiet", "--", rel])
+    if diff.returncode == 0:
+        return False
+    commit = _canonical_git(
+        [
+            "-c",
+            "user.email=kumahsu1118-ui@users.noreply.github.com",
+            "-c",
+            "user.name=AI EPS Monitor",
+            "-c",
+            "commit.gpgsign=false",
+            "commit",
+            "-m",
+            f"canonical eps history {now}",
+            "--",
+            rel,
+        ]
+    )
+    if commit.returncode != 0:
+        raise RuntimeError(commit.stderr or commit.stdout or f"git commit rc={commit.returncode}")
+    return True
+
+
+def _persist_history_via_origin_worktree(
+    origin_ref: str,
+    *,
+    do_push: bool,
+    now: str,
+) -> dict:
+    """Commit live history onto latest origin in a disposable worktree (no force-push)."""
+    rel = CANONICAL_HISTORY_REL
+    branch = _canonical_publish_branch(origin_ref)
+    last_err = ""
+    retry_max = _canonical_retry_max()
+    for attempt in range(1, retry_max + 1):
+        fetch = _canonical_git(["fetch", "origin", "--prune"])
+        if fetch.returncode != 0:
+            last_err = fetch.stderr or fetch.stdout or f"git fetch rc={fetch.returncode}"
+            break
+        live_ref = _canonical_origin_ref() or origin_ref
+        branch = _canonical_publish_branch(live_ref)
+        wt = Path(tempfile.mkdtemp(prefix="ai-eps-canonical-wt-"))
+        shutil.rmtree(wt, ignore_errors=True)
+        add_wt = _canonical_git(["worktree", "add", "--detach", str(wt), live_ref])
+        if add_wt.returncode != 0:
+            last_err = add_wt.stderr or add_wt.stdout or f"worktree add rc={add_wt.returncode}"
+            shutil.rmtree(wt, ignore_errors=True)
+            continue
+        try:
+            _copy_live_canonical_history_into(wt / rel)
+            addf = _canonical_git_at(wt, ["add", "--", rel])
+            if addf.returncode != 0:
+                raise RuntimeError(addf.stderr or addf.stdout or f"git add rc={addf.returncode}")
+            diff = _canonical_git_at(wt, ["diff", "--cached", "--quiet", "--", rel])
+            staged = diff.returncode != 0
+            if staged:
+                commit = _canonical_git_at(
+                    wt,
+                    [
+                        "-c",
+                        "user.email=kumahsu1118-ui@users.noreply.github.com",
+                        "-c",
+                        "user.name=AI EPS Monitor",
+                        "-c",
+                        "commit.gpgsign=false",
+                        "commit",
+                        "-m",
+                        f"canonical eps history {now}",
+                        "--",
+                        rel,
+                    ],
+                )
+                if commit.returncode != 0:
+                    raise RuntimeError(
+                        commit.stderr or commit.stdout or f"git commit rc={commit.returncode}"
+                    )
+            if not do_push:
+                return {"status": "clean", "error": None, "ahead": "push_disabled"}
+            sha = str((_canonical_git_at(wt, ["rev-parse", "HEAD"]).stdout or "")).strip()
+            if not staged:
+                return {"status": "ok", "error": None, "ahead": "in_sync", "remoteSha": sha}
+            push_p = _canonical_git_at(wt, ["push", "origin", f"HEAD:{branch}"])
+            if push_p.returncode == 0:
+                return {"status": "ok", "error": None, "ahead": "in_sync", "remoteSha": sha}
+            last_err = push_p.stderr or push_p.stdout or f"git push rc={push_p.returncode}"
+            nff = _canonical_is_non_fast_forward(push_p.stderr or "", push_p.stdout or "")
+            if nff and attempt < retry_max:
+                print(
+                    f"canonical persist non-fast-forward on attempt {attempt}/{retry_max} — "
+                    "fetch-and-rebuild from newest remote HEAD (no force-push)",
+                    file=sys.stderr,
+                )
+                continue
+            return {"status": "pending", "error": str(last_err)[-500:], "ahead": "push_failed"}
+        finally:
+            _cleanup_canonical_worktree(wt)
+    return {
+        "status": "pending",
+        "error": (str(last_err)[-500:] if last_err else "canonical worktree persist exhausted"),
+        "ahead": "push_failed",
+    }
+
+
 def persist_canonical_history_to_source_git(*, push: bool = True) -> dict:
     """Commit/push data/history/eps_daily/ only. Never rolls back financial COMMIT.
 
     Source-repo git persist is separate from Pages publish (site-repo public assets).
+    After a publisher commit has moved origin/main, persist uses a disposable
+    worktree of latest origin/main, copies live history, commits if needed, and
+    pushes without force so both publisher and canonical histories are preserved.
+    On success it only fetches and verifies remote observations — it must not
+    ``git reset --hard`` / ``git clean`` the source clone (that would wipe live
+    ``web/data`` and other tracked modifications). Source HEAD is left behind
+    unless the worktree+index are fully clean and a pure fast-forward is possible.
+
     Failure → status pending/failed for retry; observation already in canonical files.
 
     A local commit with a failed push leaves state=pending. Retry MUST push that
@@ -835,42 +1072,61 @@ def persist_canonical_history_to_source_git(*, push: bool = True) -> dict:
         write_canonical_git_state(state)
         return state
     HISTORY_DIR.mkdir(parents=True, exist_ok=True)
-    rel = "data/history/eps_daily"
     try:
-        add = _canonical_git(["add", "--", rel])
-        if add.returncode != 0:
-            raise RuntimeError(add.stderr or add.stdout or f"git add rc={add.returncode}")
-        diff = _canonical_git(["diff", "--cached", "--quiet", "--", rel])
-        staged_changes = diff.returncode != 0
-        if staged_changes:
-            msg = f"canonical eps history {now}"
-            commit = _canonical_git(
-                [
-                    "-c",
-                    "user.email=kumahsu1118-ui@users.noreply.github.com",
-                    "-c",
-                    "user.name=AI EPS Monitor",
-                    "-c",
-                    "commit.gpgsign=false",
-                    "commit",
-                    "-m",
-                    msg,
-                    "--",
-                    rel,
-                ]
-            )
-            if commit.returncode != 0:
-                raise RuntimeError(commit.stderr or commit.stdout or f"git commit rc={commit.returncode}")
-
         do_push = bool(push) and os.environ.get("SKIP_CANONICAL_GIT_PUSH") != "1"
+        rem = _canonical_git(["remote"])
+        remotes = [r.strip() for r in (rem.stdout or "").splitlines() if r.strip()]
+        fetched = False
+        if remotes:
+            fetch = _canonical_git(["fetch", "origin", "--prune"])
+            fetched = fetch.returncode == 0
+        origin_ref = _canonical_origin_ref() if fetched else None
+
+        if origin_ref is not None and do_push:
+            wt_result = _persist_history_via_origin_worktree(
+                origin_ref, do_push=do_push, now=now
+            )
+            if wt_result.get("status") in {"ok", "clean"}:
+                fetch2 = _canonical_git(["fetch", "origin", "--prune"])
+                if fetch2.returncode != 0:
+                    raise RuntimeError(
+                        fetch2.stderr or fetch2.stdout or f"git fetch rc={fetch2.returncode}"
+                    )
+                live_ref = _canonical_origin_ref() or origin_ref
+                remote_sha = _verify_origin_contains_live_canonical(live_ref)
+                # Never reset --hard / clean the source clone. Optional FF only
+                # when the entire worktree+index is clean (no live/generated dirt).
+                _maybe_fast_forward_source_clone(live_ref)
+                state["status"] = str(wt_result.get("status") or "ok")
+                state["error"] = None
+                state["ahead"] = wt_result.get("ahead") or "in_sync"
+                state["remoteSha"] = remote_sha
+                if state["status"] == "ok":
+                    state["lastSuccessful"] = now
+                write_canonical_git_state(state)
+                return state
+            # Worktree push failed: keep a local commit so retry can see pending work.
+            try:
+                _commit_local_canonical_history(now)
+            except Exception:
+                pass
+            state["status"] = str(wt_result.get("status") or "pending")
+            state["error"] = wt_result.get("error")
+            state["ahead"] = wt_result.get("ahead")
+            write_canonical_git_state(state)
+            print(
+                "WARNING: canonical source-git push failed — financial commit intact; "
+                "retry will rebuild from newest origin/main (no duplicate observations)",
+                file=sys.stderr,
+            )
+            return state
+
+        staged_changes = _commit_local_canonical_history(now)
         unpushed, ahead_reason = _canonical_git_unpushed()
-        # Pending/failed retry or a fresh local commit must still push.
         must_push = do_push and (
             unpushed or prior_status in {"pending", "failed"} or staged_changes
         )
         if not must_push:
-            # In sync with remote (or push disabled). Never treat "nothing staged"
-            # as durable while commits remain unpushed.
             state["status"] = "ok" if do_push else "clean"
             state["error"] = None
             state["ahead"] = ahead_reason
@@ -933,6 +1189,8 @@ def resolve_current_generation() -> Path | None:
     if not cur:
         return None
     g = Path(str(cur.get("generation") or ""))
+    if g and not g.is_absolute():
+        g = ROOT / g
     if g.is_dir():
         return g
     rid = cur.get("runId")
@@ -1254,11 +1512,49 @@ def commit_staged_run(
         if not (gen_dir / "web" / "data").exists() and WEB_DATA.exists():
             shutil.copytree(WEB_DATA, gen_dir / "web" / "data")
 
+        meta_path = gen_dir / "web" / "data" / "meta.json"
+        if meta_path.is_file():
+            try:
+                gweb_meta = json.loads(meta_path.read_text(encoding="utf-8")) or {}
+            except Exception:
+                gweb_meta = {}
+            if isinstance(gweb_meta, dict):
+                gweb_meta["generationRunId"] = rid
+                gweb_meta["schemaVersion"] = str(gweb_meta.get("schemaVersion") or SCHEMA_VERSION)
+                if not str(gweb_meta.get("lastSuccessfulCollection") or "").strip():
+                    gweb_meta["lastSuccessfulCollection"] = snap_utc
+                atomic_write_json(meta_path, gweb_meta)
+                dash_path = gen_dir / "web" / "data" / "dashboard.json"
+                if dash_path.is_file():
+                    try:
+                        dash = json.loads(dash_path.read_text(encoding="utf-8")) or {}
+                    except Exception:
+                        dash = None
+                    if isinstance(dash, dict):
+                        dm = dict(dash.get("meta") or {})
+                        for k in (
+                            "generationRunId",
+                            "schemaVersion",
+                            "lastSuccessfulCollection",
+                            "dataVersion",
+                            "refreshVersion",
+                            "buildId",
+                            "appVersion",
+                            "releaseVersion",
+                        ):
+                            if k in gweb_meta:
+                                dm[k] = gweb_meta[k]
+                        dash["meta"] = dm
+                        if gweb_meta.get("buildId"):
+                            dash["buildId"] = gweb_meta["buildId"]
+                        atomic_write_json(dash_path, dash)
+
         atomic_write_json(
             gen_dir / "generation_meta.json",
             {
                 "runId": rid,
                 "snapshot_utc": snap_utc,
+                "lastSuccessfulCollection": snap_utc,
                 "validatedName": validated_path.name,
                 "revisionEventsAppended": n_rev,
                 "schemaVersion": SCHEMA_VERSION,
@@ -1274,7 +1570,7 @@ def commit_staged_run(
         # Sole commit point: atomic CURRENT.json pointer
         current_payload = {
             "runId": rid,
-            "generation": str(gen_dir),
+            "generation": f"data/generations/{rid}",
             "validatedPath": str(validated_path),
             "validatedName": validated_path.name,
             "snapshot_utc": snap_utc,
@@ -1388,11 +1684,20 @@ def publish_prebuilt_site(*, release_version: str | None = None) -> int:
     if gen is not None:
         gen_web = gen / "web" / "data"
         if gen_web.is_dir():
-            # Prefer publish from committed generation package web/
+            # Prefer publish from committed generation package web/.
+            # Rematerialize errors must propagate (publisher is fail-closed).
             try:
                 materialize_generation(gen)
             except Exception as mex:
-                print(f"WARNING: rematerialize before publish: {mex}", file=sys.stderr)
+                print(f"ERROR: rematerialization failure before publish: {mex}", file=sys.stderr)
+                now_fail = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+                state = read_publish_state()
+                state["publishStatus"] = "failed"
+                state["lastPublishAttempt"] = now_fail
+                if release_version:
+                    state["pendingReleaseVersion"] = release_version
+                write_publish_state(state)
+                return 1
     # Stamp then finalize release identity so meta matches final asset tree
     finalize_release_identity(ROOT / "web")
     now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -1415,7 +1720,7 @@ def publish_prebuilt_site(*, release_version: str | None = None) -> int:
     env["PUBLISH_PREBUILT"] = "1"
     env["AI_EPS_ROOT"] = str(ROOT)
     rc = subprocess.call(
-        ["bash", str(_here / "publish_github_pages.sh")],
+        [sys.executable, str(_here / "publish_release.py")],
         cwd=str(ROOT),
         env=env,
     )
