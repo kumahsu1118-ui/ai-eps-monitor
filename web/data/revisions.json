@@ -401,5 +401,1963 @@
       "updateTime": "2026-09-16T01:02:34Z"
     }
   ],
-  "buildId": "dc26876b3f56824fe299e5af34e810b879c9a265c5ac42586f0c64f8924ecb1e"
+  "revisionMomentum": [
+    {
+      "ticker": "AVGO",
+      "reportedFiscalPeriodEnding": "Oct 2026",
+      "reportedFiscalLabel": "Oct 2026",
+      "mappedYear": "2026E",
+      "calendarAlignment": "CY2026",
+      "asOf": "2026-09-23",
+      "currentEps": 11.66,
+      "analysts": 46.0,
+      "identity": {
+        "ticker": "AVGO",
+        "reportedFiscalPeriodEnding": "Oct 2026"
+      },
+      "internal": {
+        "30D": {
+          "windowDays": 30,
+          "windowLabel": "Internal 30D",
+          "status": "unavailable",
+          "reason": "insufficient_history",
+          "revisionPct": null,
+          "startEps": null,
+          "endEps": 11.66,
+          "startDate": null,
+          "endDate": "2026-09-23",
+          "anchorDate": "2026-09-23",
+          "targetDate": "2026-08-24"
+        },
+        "60D": {
+          "windowDays": 60,
+          "windowLabel": "Internal 60D",
+          "status": "unavailable",
+          "reason": "insufficient_history",
+          "revisionPct": null,
+          "startEps": null,
+          "endEps": 11.66,
+          "startDate": null,
+          "endDate": "2026-09-23",
+          "anchorDate": "2026-09-23",
+          "targetDate": "2026-07-25"
+        },
+        "90D": {
+          "windowDays": 90,
+          "windowLabel": "Internal 90D",
+          "status": "unavailable",
+          "reason": "insufficient_history",
+          "revisionPct": null,
+          "startEps": null,
+          "endEps": 11.66,
+          "startDate": null,
+          "endDate": "2026-09-23",
+          "anchorDate": "2026-09-23",
+          "targetDate": "2026-06-25"
+        }
+      },
+      "sourceReported": {
+        "1M": {
+          "windowLabel": "Source-reported · Seeking Alpha 1M",
+          "sourceWindow": "Seeking Alpha 1M",
+          "revisionPct": 0.23,
+          "neverInternal30D": true,
+          "neverInternal60D": true,
+          "neverInternal90D": true
+        },
+        "3M": {
+          "windowLabel": "Source-reported · Seeking Alpha 3M",
+          "sourceWindow": "Seeking Alpha 3M",
+          "revisionPct": 0.29,
+          "neverInternal30D": true,
+          "neverInternal60D": true,
+          "neverInternal90D": true
+        },
+        "6M": {
+          "windowLabel": "Source-reported · Seeking Alpha 6M",
+          "sourceWindow": "Seeking Alpha 6M",
+          "revisionPct": 2.48,
+          "neverInternal30D": true,
+          "neverInternal60D": true,
+          "neverInternal90D": true
+        }
+      },
+      "upAnalysts": null,
+      "downAnalysts": null,
+      "analystDirectionStatus": "unavailable",
+      "analystDirectionReason": "not_in_source"
+    },
+    {
+      "ticker": "AVGO",
+      "reportedFiscalPeriodEnding": "Oct 2027",
+      "reportedFiscalLabel": "Oct 2027",
+      "mappedYear": "2027E",
+      "calendarAlignment": "CY2027",
+      "asOf": "2026-09-23",
+      "currentEps": 19.38,
+      "analysts": 47.0,
+      "identity": {
+        "ticker": "AVGO",
+        "reportedFiscalPeriodEnding": "Oct 2027"
+      },
+      "internal": {
+        "30D": {
+          "windowDays": 30,
+          "windowLabel": "Internal 30D",
+          "status": "unavailable",
+          "reason": "insufficient_history",
+          "revisionPct": null,
+          "startEps": null,
+          "endEps": 19.38,
+          "startDate": null,
+          "endDate": "2026-09-23",
+          "anchorDate": "2026-09-23",
+          "targetDate": "2026-08-24"
+        },
+        "60D": {
+          "windowDays": 60,
+          "windowLabel": "Internal 60D",
+          "status": "unavailable",
+          "reason": "insufficient_history",
+          "revisionPct": null,
+          "startEps": null,
+          "endEps": 19.38,
+          "startDate": null,
+          "endDate": "2026-09-23",
+          "anchorDate": "2026-09-23",
+          "targetDate": "2026-07-25"
+        },
+        "90D": {
+          "windowDays": 90,
+          "windowLabel": "Internal 90D",
+          "status": "unavailable",
+          "reason": "insufficient_history",
+          "revisionPct": null,
+          "startEps": null,
+          "endEps": 19.38,
+          "startDate": null,
+          "endDate": "2026-09-23",
+          "anchorDate": "2026-09-23",
+          "targetDate": "2026-06-25"
+        }
+      },
+      "sourceReported": {
+        "1M": {
+          "windowLabel": "Source-reported · Seeking Alpha 1M",
+          "sourceWindow": "Seeking Alpha 1M",
+          "revisionPct": -0.97,
+          "neverInternal30D": true,
+          "neverInternal60D": true,
+          "neverInternal90D": true
+        },
+        "3M": {
+          "windowLabel": "Source-reported · Seeking Alpha 3M",
+          "sourceWindow": "Seeking Alpha 3M",
+          "revisionPct": -0.4,
+          "neverInternal30D": true,
+          "neverInternal60D": true,
+          "neverInternal90D": true
+        },
+        "6M": {
+          "windowLabel": "Source-reported · Seeking Alpha 6M",
+          "sourceWindow": "Seeking Alpha 6M",
+          "revisionPct": 8.66,
+          "neverInternal30D": true,
+          "neverInternal60D": true,
+          "neverInternal90D": true
+        }
+      },
+      "upAnalysts": null,
+      "downAnalysts": null,
+      "analystDirectionStatus": "unavailable",
+      "analystDirectionReason": "not_in_source"
+    },
+    {
+      "ticker": "AVGO",
+      "reportedFiscalPeriodEnding": "Oct 2028",
+      "reportedFiscalLabel": "Oct 2028",
+      "mappedYear": "2028E",
+      "calendarAlignment": "CY2028",
+      "asOf": "2026-09-23",
+      "currentEps": 30.56,
+      "analysts": 33.0,
+      "identity": {
+        "ticker": "AVGO",
+        "reportedFiscalPeriodEnding": "Oct 2028"
+      },
+      "internal": {
+        "30D": {
+          "windowDays": 30,
+          "windowLabel": "Internal 30D",
+          "status": "unavailable",
+          "reason": "insufficient_history",
+          "revisionPct": null,
+          "startEps": null,
+          "endEps": 30.56,
+          "startDate": null,
+          "endDate": "2026-09-23",
+          "anchorDate": "2026-09-23",
+          "targetDate": "2026-08-24"
+        },
+        "60D": {
+          "windowDays": 60,
+          "windowLabel": "Internal 60D",
+          "status": "unavailable",
+          "reason": "insufficient_history",
+          "revisionPct": null,
+          "startEps": null,
+          "endEps": 30.56,
+          "startDate": null,
+          "endDate": "2026-09-23",
+          "anchorDate": "2026-09-23",
+          "targetDate": "2026-07-25"
+        },
+        "90D": {
+          "windowDays": 90,
+          "windowLabel": "Internal 90D",
+          "status": "unavailable",
+          "reason": "insufficient_history",
+          "revisionPct": null,
+          "startEps": null,
+          "endEps": 30.56,
+          "startDate": null,
+          "endDate": "2026-09-23",
+          "anchorDate": "2026-09-23",
+          "targetDate": "2026-06-25"
+        }
+      },
+      "sourceReported": {
+        "1M": {
+          "windowLabel": "Source-reported · Seeking Alpha 1M",
+          "sourceWindow": "Seeking Alpha 1M",
+          "revisionPct": 15.7,
+          "neverInternal30D": true,
+          "neverInternal60D": true,
+          "neverInternal90D": true
+        },
+        "3M": {
+          "windowLabel": "Source-reported · Seeking Alpha 3M",
+          "sourceWindow": "Seeking Alpha 3M",
+          "revisionPct": 18.76,
+          "neverInternal30D": true,
+          "neverInternal60D": true,
+          "neverInternal90D": true
+        },
+        "6M": {
+          "windowLabel": "Source-reported · Seeking Alpha 6M",
+          "sourceWindow": "Seeking Alpha 6M",
+          "revisionPct": 37.83,
+          "neverInternal30D": true,
+          "neverInternal60D": true,
+          "neverInternal90D": true
+        }
+      },
+      "upAnalysts": null,
+      "downAnalysts": null,
+      "analystDirectionStatus": "unavailable",
+      "analystDirectionReason": "not_in_source"
+    },
+    {
+      "ticker": "AVGO",
+      "reportedFiscalPeriodEnding": "Oct 2029",
+      "reportedFiscalLabel": "Oct 2029",
+      "mappedYear": "2029E",
+      "calendarAlignment": "CY2029",
+      "asOf": "2026-09-23",
+      "currentEps": 40.66,
+      "analysts": 4.0,
+      "identity": {
+        "ticker": "AVGO",
+        "reportedFiscalPeriodEnding": "Oct 2029"
+      },
+      "internal": {
+        "30D": {
+          "windowDays": 30,
+          "windowLabel": "Internal 30D",
+          "status": "unavailable",
+          "reason": "insufficient_history",
+          "revisionPct": null,
+          "startEps": null,
+          "endEps": 40.66,
+          "startDate": null,
+          "endDate": "2026-09-23",
+          "anchorDate": "2026-09-23",
+          "targetDate": "2026-08-24"
+        },
+        "60D": {
+          "windowDays": 60,
+          "windowLabel": "Internal 60D",
+          "status": "unavailable",
+          "reason": "insufficient_history",
+          "revisionPct": null,
+          "startEps": null,
+          "endEps": 40.66,
+          "startDate": null,
+          "endDate": "2026-09-23",
+          "anchorDate": "2026-09-23",
+          "targetDate": "2026-07-25"
+        },
+        "90D": {
+          "windowDays": 90,
+          "windowLabel": "Internal 90D",
+          "status": "unavailable",
+          "reason": "insufficient_history",
+          "revisionPct": null,
+          "startEps": null,
+          "endEps": 40.66,
+          "startDate": null,
+          "endDate": "2026-09-23",
+          "anchorDate": "2026-09-23",
+          "targetDate": "2026-06-25"
+        }
+      },
+      "sourceReported": {
+        "1M": {
+          "windowLabel": "Source-reported · Seeking Alpha 1M",
+          "sourceWindow": "Seeking Alpha 1M",
+          "revisionPct": 26.48,
+          "neverInternal30D": true,
+          "neverInternal60D": true,
+          "neverInternal90D": true
+        },
+        "3M": {
+          "windowLabel": "Source-reported · Seeking Alpha 3M",
+          "sourceWindow": "Seeking Alpha 3M",
+          "revisionPct": 30.45,
+          "neverInternal30D": true,
+          "neverInternal60D": true,
+          "neverInternal90D": true
+        },
+        "6M": {
+          "windowLabel": "Source-reported · Seeking Alpha 6M",
+          "sourceWindow": "Seeking Alpha 6M",
+          "revisionPct": 53.56,
+          "neverInternal30D": true,
+          "neverInternal60D": true,
+          "neverInternal90D": true
+        }
+      },
+      "upAnalysts": null,
+      "downAnalysts": null,
+      "analystDirectionStatus": "unavailable",
+      "analystDirectionReason": "not_in_source"
+    },
+    {
+      "ticker": "BE",
+      "reportedFiscalPeriodEnding": "Dec 2026",
+      "reportedFiscalLabel": "Dec 2026",
+      "mappedYear": "2026E",
+      "calendarAlignment": "CY2026",
+      "asOf": "2026-09-23",
+      "currentEps": 2.71,
+      "analysts": 26.0,
+      "identity": {
+        "ticker": "BE",
+        "reportedFiscalPeriodEnding": "Dec 2026"
+      },
+      "internal": {
+        "30D": {
+          "windowDays": 30,
+          "windowLabel": "Internal 30D",
+          "status": "unavailable",
+          "reason": "insufficient_history",
+          "revisionPct": null,
+          "startEps": null,
+          "endEps": 2.71,
+          "startDate": null,
+          "endDate": "2026-09-23",
+          "anchorDate": "2026-09-23",
+          "targetDate": "2026-08-24"
+        },
+        "60D": {
+          "windowDays": 60,
+          "windowLabel": "Internal 60D",
+          "status": "unavailable",
+          "reason": "insufficient_history",
+          "revisionPct": null,
+          "startEps": null,
+          "endEps": 2.71,
+          "startDate": null,
+          "endDate": "2026-09-23",
+          "anchorDate": "2026-09-23",
+          "targetDate": "2026-07-25"
+        },
+        "90D": {
+          "windowDays": 90,
+          "windowLabel": "Internal 90D",
+          "status": "unavailable",
+          "reason": "insufficient_history",
+          "revisionPct": null,
+          "startEps": null,
+          "endEps": 2.71,
+          "startDate": null,
+          "endDate": "2026-09-23",
+          "anchorDate": "2026-09-23",
+          "targetDate": "2026-06-25"
+        }
+      },
+      "sourceReported": {
+        "1M": {
+          "windowLabel": "Source-reported · Seeking Alpha 1M",
+          "sourceWindow": "Seeking Alpha 1M",
+          "revisionPct": -0.01,
+          "neverInternal30D": true,
+          "neverInternal60D": true,
+          "neverInternal90D": true
+        },
+        "3M": {
+          "windowLabel": "Source-reported · Seeking Alpha 3M",
+          "sourceWindow": "Seeking Alpha 3M",
+          "revisionPct": 26.52,
+          "neverInternal30D": true,
+          "neverInternal60D": true,
+          "neverInternal90D": true
+        },
+        "6M": {
+          "windowLabel": "Source-reported · Seeking Alpha 6M",
+          "sourceWindow": "Seeking Alpha 6M",
+          "revisionPct": 94.08,
+          "neverInternal30D": true,
+          "neverInternal60D": true,
+          "neverInternal90D": true
+        }
+      },
+      "upAnalysts": null,
+      "downAnalysts": null,
+      "analystDirectionStatus": "unavailable",
+      "analystDirectionReason": "not_in_source"
+    },
+    {
+      "ticker": "BE",
+      "reportedFiscalPeriodEnding": "Dec 2027",
+      "reportedFiscalLabel": "Dec 2027",
+      "mappedYear": "2027E",
+      "calendarAlignment": "CY2027",
+      "asOf": "2026-09-23",
+      "currentEps": 4.93,
+      "analysts": 28.0,
+      "identity": {
+        "ticker": "BE",
+        "reportedFiscalPeriodEnding": "Dec 2027"
+      },
+      "internal": {
+        "30D": {
+          "windowDays": 30,
+          "windowLabel": "Internal 30D",
+          "status": "unavailable",
+          "reason": "insufficient_history",
+          "revisionPct": null,
+          "startEps": null,
+          "endEps": 4.93,
+          "startDate": null,
+          "endDate": "2026-09-23",
+          "anchorDate": "2026-09-23",
+          "targetDate": "2026-08-24"
+        },
+        "60D": {
+          "windowDays": 60,
+          "windowLabel": "Internal 60D",
+          "status": "unavailable",
+          "reason": "insufficient_history",
+          "revisionPct": null,
+          "startEps": null,
+          "endEps": 4.93,
+          "startDate": null,
+          "endDate": "2026-09-23",
+          "anchorDate": "2026-09-23",
+          "targetDate": "2026-07-25"
+        },
+        "90D": {
+          "windowDays": 90,
+          "windowLabel": "Internal 90D",
+          "status": "unavailable",
+          "reason": "insufficient_history",
+          "revisionPct": null,
+          "startEps": null,
+          "endEps": 4.93,
+          "startDate": null,
+          "endDate": "2026-09-23",
+          "anchorDate": "2026-09-23",
+          "targetDate": "2026-06-25"
+        }
+      },
+      "sourceReported": {
+        "1M": {
+          "windowLabel": "Source-reported · Seeking Alpha 1M",
+          "sourceWindow": "Seeking Alpha 1M",
+          "revisionPct": 0.17,
+          "neverInternal30D": true,
+          "neverInternal60D": true,
+          "neverInternal90D": true
+        },
+        "3M": {
+          "windowLabel": "Source-reported · Seeking Alpha 3M",
+          "sourceWindow": "Seeking Alpha 3M",
+          "revisionPct": 12.95,
+          "neverInternal30D": true,
+          "neverInternal60D": true,
+          "neverInternal90D": true
+        },
+        "6M": {
+          "windowLabel": "Source-reported · Seeking Alpha 6M",
+          "sourceWindow": "Seeking Alpha 6M",
+          "revisionPct": 67.59,
+          "neverInternal30D": true,
+          "neverInternal60D": true,
+          "neverInternal90D": true
+        }
+      },
+      "upAnalysts": null,
+      "downAnalysts": null,
+      "analystDirectionStatus": "unavailable",
+      "analystDirectionReason": "not_in_source"
+    },
+    {
+      "ticker": "BE",
+      "reportedFiscalPeriodEnding": "Dec 2028",
+      "reportedFiscalLabel": "Dec 2028",
+      "mappedYear": "2028E",
+      "calendarAlignment": "CY2028",
+      "asOf": "2026-09-23",
+      "currentEps": 7.79,
+      "analysts": 23.0,
+      "identity": {
+        "ticker": "BE",
+        "reportedFiscalPeriodEnding": "Dec 2028"
+      },
+      "internal": {
+        "30D": {
+          "windowDays": 30,
+          "windowLabel": "Internal 30D",
+          "status": "unavailable",
+          "reason": "insufficient_history",
+          "revisionPct": null,
+          "startEps": null,
+          "endEps": 7.79,
+          "startDate": null,
+          "endDate": "2026-09-23",
+          "anchorDate": "2026-09-23",
+          "targetDate": "2026-08-24"
+        },
+        "60D": {
+          "windowDays": 60,
+          "windowLabel": "Internal 60D",
+          "status": "unavailable",
+          "reason": "insufficient_history",
+          "revisionPct": null,
+          "startEps": null,
+          "endEps": 7.79,
+          "startDate": null,
+          "endDate": "2026-09-23",
+          "anchorDate": "2026-09-23",
+          "targetDate": "2026-07-25"
+        },
+        "90D": {
+          "windowDays": 90,
+          "windowLabel": "Internal 90D",
+          "status": "unavailable",
+          "reason": "insufficient_history",
+          "revisionPct": null,
+          "startEps": null,
+          "endEps": 7.79,
+          "startDate": null,
+          "endDate": "2026-09-23",
+          "anchorDate": "2026-09-23",
+          "targetDate": "2026-06-25"
+        }
+      },
+      "sourceReported": {
+        "1M": {
+          "windowLabel": "Source-reported · Seeking Alpha 1M",
+          "sourceWindow": "Seeking Alpha 1M",
+          "revisionPct": 0.65,
+          "neverInternal30D": true,
+          "neverInternal60D": true,
+          "neverInternal90D": true
+        },
+        "3M": {
+          "windowLabel": "Source-reported · Seeking Alpha 3M",
+          "sourceWindow": "Seeking Alpha 3M",
+          "revisionPct": 9.3,
+          "neverInternal30D": true,
+          "neverInternal60D": true,
+          "neverInternal90D": true
+        },
+        "6M": {
+          "windowLabel": "Source-reported · Seeking Alpha 6M",
+          "sourceWindow": "Seeking Alpha 6M",
+          "revisionPct": 65.19,
+          "neverInternal30D": true,
+          "neverInternal60D": true,
+          "neverInternal90D": true
+        }
+      },
+      "upAnalysts": null,
+      "downAnalysts": null,
+      "analystDirectionStatus": "unavailable",
+      "analystDirectionReason": "not_in_source"
+    },
+    {
+      "ticker": "BE",
+      "reportedFiscalPeriodEnding": "Dec 2029",
+      "reportedFiscalLabel": "Dec 2029",
+      "mappedYear": "2029E",
+      "calendarAlignment": "CY2029",
+      "asOf": "2026-09-23",
+      "currentEps": 10.36,
+      "analysts": 7.0,
+      "identity": {
+        "ticker": "BE",
+        "reportedFiscalPeriodEnding": "Dec 2029"
+      },
+      "internal": {
+        "30D": {
+          "windowDays": 30,
+          "windowLabel": "Internal 30D",
+          "status": "unavailable",
+          "reason": "insufficient_history",
+          "revisionPct": null,
+          "startEps": null,
+          "endEps": 10.36,
+          "startDate": null,
+          "endDate": "2026-09-23",
+          "anchorDate": "2026-09-23",
+          "targetDate": "2026-08-24"
+        },
+        "60D": {
+          "windowDays": 60,
+          "windowLabel": "Internal 60D",
+          "status": "unavailable",
+          "reason": "insufficient_history",
+          "revisionPct": null,
+          "startEps": null,
+          "endEps": 10.36,
+          "startDate": null,
+          "endDate": "2026-09-23",
+          "anchorDate": "2026-09-23",
+          "targetDate": "2026-07-25"
+        },
+        "90D": {
+          "windowDays": 90,
+          "windowLabel": "Internal 90D",
+          "status": "unavailable",
+          "reason": "insufficient_history",
+          "revisionPct": null,
+          "startEps": null,
+          "endEps": 10.36,
+          "startDate": null,
+          "endDate": "2026-09-23",
+          "anchorDate": "2026-09-23",
+          "targetDate": "2026-06-25"
+        }
+      },
+      "sourceReported": {
+        "1M": {
+          "windowLabel": "Source-reported · Seeking Alpha 1M",
+          "sourceWindow": "Seeking Alpha 1M",
+          "revisionPct": -2.28,
+          "neverInternal30D": true,
+          "neverInternal60D": true,
+          "neverInternal90D": true
+        },
+        "3M": {
+          "windowLabel": "Source-reported · Seeking Alpha 3M",
+          "sourceWindow": "Seeking Alpha 3M",
+          "revisionPct": 9.51,
+          "neverInternal30D": true,
+          "neverInternal60D": true,
+          "neverInternal90D": true
+        },
+        "6M": {
+          "windowLabel": "Source-reported · Seeking Alpha 6M",
+          "sourceWindow": "Seeking Alpha 6M",
+          "revisionPct": 99.93,
+          "neverInternal30D": true,
+          "neverInternal60D": true,
+          "neverInternal90D": true
+        }
+      },
+      "upAnalysts": null,
+      "downAnalysts": null,
+      "analystDirectionStatus": "unavailable",
+      "analystDirectionReason": "not_in_source"
+    },
+    {
+      "ticker": "KEYS",
+      "reportedFiscalPeriodEnding": "Oct 2026",
+      "reportedFiscalLabel": "Oct 2026",
+      "mappedYear": "2026E",
+      "calendarAlignment": "CY2026",
+      "asOf": "2026-09-23",
+      "currentEps": 11.47,
+      "analysts": 12.0,
+      "identity": {
+        "ticker": "KEYS",
+        "reportedFiscalPeriodEnding": "Oct 2026"
+      },
+      "internal": {
+        "30D": {
+          "windowDays": 30,
+          "windowLabel": "Internal 30D",
+          "status": "unavailable",
+          "reason": "insufficient_history",
+          "revisionPct": null,
+          "startEps": null,
+          "endEps": 11.47,
+          "startDate": null,
+          "endDate": "2026-09-23",
+          "anchorDate": "2026-09-23",
+          "targetDate": "2026-08-24"
+        },
+        "60D": {
+          "windowDays": 60,
+          "windowLabel": "Internal 60D",
+          "status": "unavailable",
+          "reason": "insufficient_history",
+          "revisionPct": null,
+          "startEps": null,
+          "endEps": 11.47,
+          "startDate": null,
+          "endDate": "2026-09-23",
+          "anchorDate": "2026-09-23",
+          "targetDate": "2026-07-25"
+        },
+        "90D": {
+          "windowDays": 90,
+          "windowLabel": "Internal 90D",
+          "status": "unavailable",
+          "reason": "insufficient_history",
+          "revisionPct": null,
+          "startEps": null,
+          "endEps": 11.47,
+          "startDate": null,
+          "endDate": "2026-09-23",
+          "anchorDate": "2026-09-23",
+          "targetDate": "2026-06-25"
+        }
+      },
+      "sourceReported": {
+        "1M": {
+          "windowLabel": "Source-reported · Seeking Alpha 1M",
+          "sourceWindow": "Seeking Alpha 1M",
+          "revisionPct": -0.22,
+          "neverInternal30D": true,
+          "neverInternal60D": true,
+          "neverInternal90D": true
+        },
+        "3M": {
+          "windowLabel": "Source-reported · Seeking Alpha 3M",
+          "sourceWindow": "Seeking Alpha 3M",
+          "revisionPct": 12.07,
+          "neverInternal30D": true,
+          "neverInternal60D": true,
+          "neverInternal90D": true
+        },
+        "6M": {
+          "windowLabel": "Source-reported · Seeking Alpha 6M",
+          "sourceWindow": "Seeking Alpha 6M",
+          "revisionPct": 29.28,
+          "neverInternal30D": true,
+          "neverInternal60D": true,
+          "neverInternal90D": true
+        }
+      },
+      "upAnalysts": null,
+      "downAnalysts": null,
+      "analystDirectionStatus": "unavailable",
+      "analystDirectionReason": "not_in_source"
+    },
+    {
+      "ticker": "KEYS",
+      "reportedFiscalPeriodEnding": "Oct 2027",
+      "reportedFiscalLabel": "Oct 2027",
+      "mappedYear": "2027E",
+      "calendarAlignment": "CY2027",
+      "asOf": "2026-09-23",
+      "currentEps": 13.87,
+      "analysts": 12.0,
+      "identity": {
+        "ticker": "KEYS",
+        "reportedFiscalPeriodEnding": "Oct 2027"
+      },
+      "internal": {
+        "30D": {
+          "windowDays": 30,
+          "windowLabel": "Internal 30D",
+          "status": "unavailable",
+          "reason": "insufficient_history",
+          "revisionPct": null,
+          "startEps": null,
+          "endEps": 13.87,
+          "startDate": null,
+          "endDate": "2026-09-23",
+          "anchorDate": "2026-09-23",
+          "targetDate": "2026-08-24"
+        },
+        "60D": {
+          "windowDays": 60,
+          "windowLabel": "Internal 60D",
+          "status": "unavailable",
+          "reason": "insufficient_history",
+          "revisionPct": null,
+          "startEps": null,
+          "endEps": 13.87,
+          "startDate": null,
+          "endDate": "2026-09-23",
+          "anchorDate": "2026-09-23",
+          "targetDate": "2026-07-25"
+        },
+        "90D": {
+          "windowDays": 90,
+          "windowLabel": "Internal 90D",
+          "status": "unavailable",
+          "reason": "insufficient_history",
+          "revisionPct": null,
+          "startEps": null,
+          "endEps": 13.87,
+          "startDate": null,
+          "endDate": "2026-09-23",
+          "anchorDate": "2026-09-23",
+          "targetDate": "2026-06-25"
+        }
+      },
+      "sourceReported": {
+        "1M": {
+          "windowLabel": "Source-reported · Seeking Alpha 1M",
+          "sourceWindow": "Seeking Alpha 1M",
+          "revisionPct": 1.62,
+          "neverInternal30D": true,
+          "neverInternal60D": true,
+          "neverInternal90D": true
+        },
+        "3M": {
+          "windowLabel": "Source-reported · Seeking Alpha 3M",
+          "sourceWindow": "Seeking Alpha 3M",
+          "revisionPct": 17.0,
+          "neverInternal30D": true,
+          "neverInternal60D": true,
+          "neverInternal90D": true
+        },
+        "6M": {
+          "windowLabel": "Source-reported · Seeking Alpha 6M",
+          "sourceWindow": "Seeking Alpha 6M",
+          "revisionPct": 35.14,
+          "neverInternal30D": true,
+          "neverInternal60D": true,
+          "neverInternal90D": true
+        }
+      },
+      "upAnalysts": null,
+      "downAnalysts": null,
+      "analystDirectionStatus": "unavailable",
+      "analystDirectionReason": "not_in_source"
+    },
+    {
+      "ticker": "KEYS",
+      "reportedFiscalPeriodEnding": "Oct 2028",
+      "reportedFiscalLabel": "Oct 2028",
+      "mappedYear": "2028E",
+      "calendarAlignment": "CY2028",
+      "asOf": "2026-09-23",
+      "currentEps": 15.69,
+      "analysts": 10.0,
+      "identity": {
+        "ticker": "KEYS",
+        "reportedFiscalPeriodEnding": "Oct 2028"
+      },
+      "internal": {
+        "30D": {
+          "windowDays": 30,
+          "windowLabel": "Internal 30D",
+          "status": "unavailable",
+          "reason": "insufficient_history",
+          "revisionPct": null,
+          "startEps": null,
+          "endEps": 15.69,
+          "startDate": null,
+          "endDate": "2026-09-23",
+          "anchorDate": "2026-09-23",
+          "targetDate": "2026-08-24"
+        },
+        "60D": {
+          "windowDays": 60,
+          "windowLabel": "Internal 60D",
+          "status": "unavailable",
+          "reason": "insufficient_history",
+          "revisionPct": null,
+          "startEps": null,
+          "endEps": 15.69,
+          "startDate": null,
+          "endDate": "2026-09-23",
+          "anchorDate": "2026-09-23",
+          "targetDate": "2026-07-25"
+        },
+        "90D": {
+          "windowDays": 90,
+          "windowLabel": "Internal 90D",
+          "status": "unavailable",
+          "reason": "insufficient_history",
+          "revisionPct": null,
+          "startEps": null,
+          "endEps": 15.69,
+          "startDate": null,
+          "endDate": "2026-09-23",
+          "anchorDate": "2026-09-23",
+          "targetDate": "2026-06-25"
+        }
+      },
+      "sourceReported": {
+        "1M": {
+          "windowLabel": "Source-reported · Seeking Alpha 1M",
+          "sourceWindow": "Seeking Alpha 1M",
+          "revisionPct": 0.0,
+          "neverInternal30D": true,
+          "neverInternal60D": true,
+          "neverInternal90D": true
+        },
+        "3M": {
+          "windowLabel": "Source-reported · Seeking Alpha 3M",
+          "sourceWindow": "Seeking Alpha 3M",
+          "revisionPct": 18.42,
+          "neverInternal30D": true,
+          "neverInternal60D": true,
+          "neverInternal90D": true
+        },
+        "6M": {
+          "windowLabel": "Source-reported · Seeking Alpha 6M",
+          "sourceWindow": "Seeking Alpha 6M",
+          "revisionPct": 37.5,
+          "neverInternal30D": true,
+          "neverInternal60D": true,
+          "neverInternal90D": true
+        }
+      },
+      "upAnalysts": null,
+      "downAnalysts": null,
+      "analystDirectionStatus": "unavailable",
+      "analystDirectionReason": "not_in_source"
+    },
+    {
+      "ticker": "KEYS",
+      "reportedFiscalPeriodEnding": "Oct 2029",
+      "reportedFiscalLabel": "Oct 2029",
+      "mappedYear": "2029E",
+      "calendarAlignment": "CY2029",
+      "asOf": "2026-09-23",
+      "currentEps": 21.99,
+      "analysts": 1.0,
+      "identity": {
+        "ticker": "KEYS",
+        "reportedFiscalPeriodEnding": "Oct 2029"
+      },
+      "internal": {
+        "30D": {
+          "windowDays": 30,
+          "windowLabel": "Internal 30D",
+          "status": "unavailable",
+          "reason": "insufficient_history",
+          "revisionPct": null,
+          "startEps": null,
+          "endEps": 21.99,
+          "startDate": null,
+          "endDate": "2026-09-23",
+          "anchorDate": "2026-09-23",
+          "targetDate": "2026-08-24"
+        },
+        "60D": {
+          "windowDays": 60,
+          "windowLabel": "Internal 60D",
+          "status": "unavailable",
+          "reason": "insufficient_history",
+          "revisionPct": null,
+          "startEps": null,
+          "endEps": 21.99,
+          "startDate": null,
+          "endDate": "2026-09-23",
+          "anchorDate": "2026-09-23",
+          "targetDate": "2026-07-25"
+        },
+        "90D": {
+          "windowDays": 90,
+          "windowLabel": "Internal 90D",
+          "status": "unavailable",
+          "reason": "insufficient_history",
+          "revisionPct": null,
+          "startEps": null,
+          "endEps": 21.99,
+          "startDate": null,
+          "endDate": "2026-09-23",
+          "anchorDate": "2026-09-23",
+          "targetDate": "2026-06-25"
+        }
+      },
+      "sourceReported": {
+        "1M": {
+          "windowLabel": "Source-reported · Seeking Alpha 1M",
+          "sourceWindow": "Seeking Alpha 1M",
+          "revisionPct": 35.49,
+          "neverInternal30D": true,
+          "neverInternal60D": true,
+          "neverInternal90D": true
+        },
+        "3M": {
+          "windowLabel": "Source-reported · Seeking Alpha 3M",
+          "sourceWindow": "Seeking Alpha 3M",
+          "revisionPct": 48.78,
+          "neverInternal30D": true,
+          "neverInternal60D": true,
+          "neverInternal90D": true
+        },
+        "6M": {
+          "windowLabel": "Source-reported · Seeking Alpha 6M",
+          "sourceWindow": "Seeking Alpha 6M",
+          "revisionPct": 75.92,
+          "neverInternal30D": true,
+          "neverInternal60D": true,
+          "neverInternal90D": true
+        }
+      },
+      "upAnalysts": null,
+      "downAnalysts": null,
+      "analystDirectionStatus": "unavailable",
+      "analystDirectionReason": "not_in_source"
+    },
+    {
+      "ticker": "MSFT",
+      "reportedFiscalPeriodEnding": "Jun 2026",
+      "reportedFiscalLabel": "Jun 2026",
+      "mappedYear": "2026E",
+      "calendarAlignment": "CY2026",
+      "asOf": "2026-09-23",
+      "currentEps": 16.78,
+      "analysts": 26.0,
+      "identity": {
+        "ticker": "MSFT",
+        "reportedFiscalPeriodEnding": "Jun 2026"
+      },
+      "internal": {
+        "30D": {
+          "windowDays": 30,
+          "windowLabel": "Internal 30D",
+          "status": "unavailable",
+          "reason": "insufficient_history",
+          "revisionPct": null,
+          "startEps": null,
+          "endEps": 16.78,
+          "startDate": null,
+          "endDate": "2026-09-23",
+          "anchorDate": "2026-09-23",
+          "targetDate": "2026-08-24"
+        },
+        "60D": {
+          "windowDays": 60,
+          "windowLabel": "Internal 60D",
+          "status": "unavailable",
+          "reason": "insufficient_history",
+          "revisionPct": null,
+          "startEps": null,
+          "endEps": 16.78,
+          "startDate": null,
+          "endDate": "2026-09-23",
+          "anchorDate": "2026-09-23",
+          "targetDate": "2026-07-25"
+        },
+        "90D": {
+          "windowDays": 90,
+          "windowLabel": "Internal 90D",
+          "status": "unavailable",
+          "reason": "insufficient_history",
+          "revisionPct": null,
+          "startEps": null,
+          "endEps": 16.78,
+          "startDate": null,
+          "endDate": "2026-09-23",
+          "anchorDate": "2026-09-23",
+          "targetDate": "2026-06-25"
+        }
+      },
+      "sourceReported": {
+        "1M": {
+          "windowLabel": "Source-reported · Seeking Alpha 1M",
+          "sourceWindow": "Seeking Alpha 1M",
+          "revisionPct": null,
+          "neverInternal30D": true,
+          "neverInternal60D": true,
+          "neverInternal90D": true
+        },
+        "3M": {
+          "windowLabel": "Source-reported · Seeking Alpha 3M",
+          "sourceWindow": "Seeking Alpha 3M",
+          "revisionPct": null,
+          "neverInternal30D": true,
+          "neverInternal60D": true,
+          "neverInternal90D": true
+        },
+        "6M": {
+          "windowLabel": "Source-reported · Seeking Alpha 6M",
+          "sourceWindow": "Seeking Alpha 6M",
+          "revisionPct": null,
+          "neverInternal30D": true,
+          "neverInternal60D": true,
+          "neverInternal90D": true
+        }
+      },
+      "upAnalysts": null,
+      "downAnalysts": null,
+      "analystDirectionStatus": "unavailable",
+      "analystDirectionReason": "not_in_source"
+    },
+    {
+      "ticker": "MSFT",
+      "reportedFiscalPeriodEnding": "Jun 2027",
+      "reportedFiscalLabel": "Jun 2027",
+      "mappedYear": "2027E",
+      "calendarAlignment": "CY2027",
+      "asOf": "2026-09-23",
+      "currentEps": 19.76,
+      "analysts": 33.0,
+      "identity": {
+        "ticker": "MSFT",
+        "reportedFiscalPeriodEnding": "Jun 2027"
+      },
+      "internal": {
+        "30D": {
+          "windowDays": 30,
+          "windowLabel": "Internal 30D",
+          "status": "unavailable",
+          "reason": "insufficient_history",
+          "revisionPct": null,
+          "startEps": null,
+          "endEps": 19.76,
+          "startDate": null,
+          "endDate": "2026-09-23",
+          "anchorDate": "2026-09-23",
+          "targetDate": "2026-08-24"
+        },
+        "60D": {
+          "windowDays": 60,
+          "windowLabel": "Internal 60D",
+          "status": "unavailable",
+          "reason": "insufficient_history",
+          "revisionPct": null,
+          "startEps": null,
+          "endEps": 19.76,
+          "startDate": null,
+          "endDate": "2026-09-23",
+          "anchorDate": "2026-09-23",
+          "targetDate": "2026-07-25"
+        },
+        "90D": {
+          "windowDays": 90,
+          "windowLabel": "Internal 90D",
+          "status": "unavailable",
+          "reason": "insufficient_history",
+          "revisionPct": null,
+          "startEps": null,
+          "endEps": 19.76,
+          "startDate": null,
+          "endDate": "2026-09-23",
+          "anchorDate": "2026-09-23",
+          "targetDate": "2026-06-25"
+        }
+      },
+      "sourceReported": {
+        "1M": {
+          "windowLabel": "Source-reported · Seeking Alpha 1M",
+          "sourceWindow": "Seeking Alpha 1M",
+          "revisionPct": 0.03,
+          "neverInternal30D": true,
+          "neverInternal60D": true,
+          "neverInternal90D": true
+        },
+        "3M": {
+          "windowLabel": "Source-reported · Seeking Alpha 3M",
+          "sourceWindow": "Seeking Alpha 3M",
+          "revisionPct": 1.87,
+          "neverInternal30D": true,
+          "neverInternal60D": true,
+          "neverInternal90D": true
+        },
+        "6M": {
+          "windowLabel": "Source-reported · Seeking Alpha 6M",
+          "sourceWindow": "Seeking Alpha 6M",
+          "revisionPct": 4.94,
+          "neverInternal30D": true,
+          "neverInternal60D": true,
+          "neverInternal90D": true
+        }
+      },
+      "upAnalysts": null,
+      "downAnalysts": null,
+      "analystDirectionStatus": "unavailable",
+      "analystDirectionReason": "not_in_source"
+    },
+    {
+      "ticker": "MSFT",
+      "reportedFiscalPeriodEnding": "Jun 2028",
+      "reportedFiscalLabel": "Jun 2028",
+      "mappedYear": "2028E",
+      "calendarAlignment": "CY2028",
+      "asOf": "2026-09-23",
+      "currentEps": 23.68,
+      "analysts": 32.0,
+      "identity": {
+        "ticker": "MSFT",
+        "reportedFiscalPeriodEnding": "Jun 2028"
+      },
+      "internal": {
+        "30D": {
+          "windowDays": 30,
+          "windowLabel": "Internal 30D",
+          "status": "unavailable",
+          "reason": "insufficient_history",
+          "revisionPct": null,
+          "startEps": null,
+          "endEps": 23.68,
+          "startDate": null,
+          "endDate": "2026-09-23",
+          "anchorDate": "2026-09-23",
+          "targetDate": "2026-08-24"
+        },
+        "60D": {
+          "windowDays": 60,
+          "windowLabel": "Internal 60D",
+          "status": "unavailable",
+          "reason": "insufficient_history",
+          "revisionPct": null,
+          "startEps": null,
+          "endEps": 23.68,
+          "startDate": null,
+          "endDate": "2026-09-23",
+          "anchorDate": "2026-09-23",
+          "targetDate": "2026-07-25"
+        },
+        "90D": {
+          "windowDays": 90,
+          "windowLabel": "Internal 90D",
+          "status": "unavailable",
+          "reason": "insufficient_history",
+          "revisionPct": null,
+          "startEps": null,
+          "endEps": 23.68,
+          "startDate": null,
+          "endDate": "2026-09-23",
+          "anchorDate": "2026-09-23",
+          "targetDate": "2026-06-25"
+        }
+      },
+      "sourceReported": {
+        "1M": {
+          "windowLabel": "Source-reported · Seeking Alpha 1M",
+          "sourceWindow": "Seeking Alpha 1M",
+          "revisionPct": 0.44,
+          "neverInternal30D": true,
+          "neverInternal60D": true,
+          "neverInternal90D": true
+        },
+        "3M": {
+          "windowLabel": "Source-reported · Seeking Alpha 3M",
+          "sourceWindow": "Seeking Alpha 3M",
+          "revisionPct": 4.63,
+          "neverInternal30D": true,
+          "neverInternal60D": true,
+          "neverInternal90D": true
+        },
+        "6M": {
+          "windowLabel": "Source-reported · Seeking Alpha 6M",
+          "sourceWindow": "Seeking Alpha 6M",
+          "revisionPct": 6.33,
+          "neverInternal30D": true,
+          "neverInternal60D": true,
+          "neverInternal90D": true
+        }
+      },
+      "upAnalysts": null,
+      "downAnalysts": null,
+      "analystDirectionStatus": "unavailable",
+      "analystDirectionReason": "not_in_source"
+    },
+    {
+      "ticker": "MSFT",
+      "reportedFiscalPeriodEnding": "Jun 2029",
+      "reportedFiscalLabel": "Jun 2029",
+      "mappedYear": "2029E",
+      "calendarAlignment": "CY2029",
+      "asOf": "2026-09-23",
+      "currentEps": 28.85,
+      "analysts": 15.0,
+      "identity": {
+        "ticker": "MSFT",
+        "reportedFiscalPeriodEnding": "Jun 2029"
+      },
+      "internal": {
+        "30D": {
+          "windowDays": 30,
+          "windowLabel": "Internal 30D",
+          "status": "unavailable",
+          "reason": "insufficient_history",
+          "revisionPct": null,
+          "startEps": null,
+          "endEps": 28.85,
+          "startDate": null,
+          "endDate": "2026-09-23",
+          "anchorDate": "2026-09-23",
+          "targetDate": "2026-08-24"
+        },
+        "60D": {
+          "windowDays": 60,
+          "windowLabel": "Internal 60D",
+          "status": "unavailable",
+          "reason": "insufficient_history",
+          "revisionPct": null,
+          "startEps": null,
+          "endEps": 28.85,
+          "startDate": null,
+          "endDate": "2026-09-23",
+          "anchorDate": "2026-09-23",
+          "targetDate": "2026-07-25"
+        },
+        "90D": {
+          "windowDays": 90,
+          "windowLabel": "Internal 90D",
+          "status": "unavailable",
+          "reason": "insufficient_history",
+          "revisionPct": null,
+          "startEps": null,
+          "endEps": 28.85,
+          "startDate": null,
+          "endDate": "2026-09-23",
+          "anchorDate": "2026-09-23",
+          "targetDate": "2026-06-25"
+        }
+      },
+      "sourceReported": {
+        "1M": {
+          "windowLabel": "Source-reported · Seeking Alpha 1M",
+          "sourceWindow": "Seeking Alpha 1M",
+          "revisionPct": 0.45,
+          "neverInternal30D": true,
+          "neverInternal60D": true,
+          "neverInternal90D": true
+        },
+        "3M": {
+          "windowLabel": "Source-reported · Seeking Alpha 3M",
+          "sourceWindow": "Seeking Alpha 3M",
+          "revisionPct": 5.49,
+          "neverInternal30D": true,
+          "neverInternal60D": true,
+          "neverInternal90D": true
+        },
+        "6M": {
+          "windowLabel": "Source-reported · Seeking Alpha 6M",
+          "sourceWindow": "Seeking Alpha 6M",
+          "revisionPct": 5.63,
+          "neverInternal30D": true,
+          "neverInternal60D": true,
+          "neverInternal90D": true
+        }
+      },
+      "upAnalysts": null,
+      "downAnalysts": null,
+      "analystDirectionStatus": "unavailable",
+      "analystDirectionReason": "not_in_source"
+    },
+    {
+      "ticker": "NVDA",
+      "reportedFiscalPeriodEnding": "Jan 2027",
+      "reportedFiscalLabel": "Jan 2027",
+      "mappedYear": "2026E",
+      "calendarAlignment": "CY2026",
+      "asOf": "2026-09-23",
+      "currentEps": 9.31,
+      "analysts": 51.0,
+      "identity": {
+        "ticker": "NVDA",
+        "reportedFiscalPeriodEnding": "Jan 2027"
+      },
+      "internal": {
+        "30D": {
+          "windowDays": 30,
+          "windowLabel": "Internal 30D",
+          "status": "unavailable",
+          "reason": "insufficient_history",
+          "revisionPct": null,
+          "startEps": null,
+          "endEps": 9.31,
+          "startDate": null,
+          "endDate": "2026-09-23",
+          "anchorDate": "2026-09-23",
+          "targetDate": "2026-08-24"
+        },
+        "60D": {
+          "windowDays": 60,
+          "windowLabel": "Internal 60D",
+          "status": "unavailable",
+          "reason": "insufficient_history",
+          "revisionPct": null,
+          "startEps": null,
+          "endEps": 9.31,
+          "startDate": null,
+          "endDate": "2026-09-23",
+          "anchorDate": "2026-09-23",
+          "targetDate": "2026-07-25"
+        },
+        "90D": {
+          "windowDays": 90,
+          "windowLabel": "Internal 90D",
+          "status": "unavailable",
+          "reason": "insufficient_history",
+          "revisionPct": null,
+          "startEps": null,
+          "endEps": 9.31,
+          "startDate": null,
+          "endDate": "2026-09-23",
+          "anchorDate": "2026-09-23",
+          "targetDate": "2026-06-25"
+        }
+      },
+      "sourceReported": {
+        "1M": {
+          "windowLabel": "Source-reported · Seeking Alpha 1M",
+          "sourceWindow": "Seeking Alpha 1M",
+          "revisionPct": 0.14,
+          "neverInternal30D": true,
+          "neverInternal60D": true,
+          "neverInternal90D": true
+        },
+        "3M": {
+          "windowLabel": "Source-reported · Seeking Alpha 3M",
+          "sourceWindow": "Seeking Alpha 3M",
+          "revisionPct": 4.14,
+          "neverInternal30D": true,
+          "neverInternal60D": true,
+          "neverInternal90D": true
+        },
+        "6M": {
+          "windowLabel": "Source-reported · Seeking Alpha 6M",
+          "sourceWindow": "Seeking Alpha 6M",
+          "revisionPct": 12.2,
+          "neverInternal30D": true,
+          "neverInternal60D": true,
+          "neverInternal90D": true
+        }
+      },
+      "upAnalysts": null,
+      "downAnalysts": null,
+      "analystDirectionStatus": "unavailable",
+      "analystDirectionReason": "not_in_source"
+    },
+    {
+      "ticker": "NVDA",
+      "reportedFiscalPeriodEnding": "Jan 2028",
+      "reportedFiscalLabel": "Jan 2028",
+      "mappedYear": "2027E",
+      "calendarAlignment": "CY2027",
+      "asOf": "2026-09-23",
+      "currentEps": 15.68,
+      "analysts": 53.0,
+      "identity": {
+        "ticker": "NVDA",
+        "reportedFiscalPeriodEnding": "Jan 2028"
+      },
+      "internal": {
+        "30D": {
+          "windowDays": 30,
+          "windowLabel": "Internal 30D",
+          "status": "unavailable",
+          "reason": "insufficient_history",
+          "revisionPct": null,
+          "startEps": null,
+          "endEps": 15.68,
+          "startDate": null,
+          "endDate": "2026-09-23",
+          "anchorDate": "2026-09-23",
+          "targetDate": "2026-08-24"
+        },
+        "60D": {
+          "windowDays": 60,
+          "windowLabel": "Internal 60D",
+          "status": "unavailable",
+          "reason": "insufficient_history",
+          "revisionPct": null,
+          "startEps": null,
+          "endEps": 15.68,
+          "startDate": null,
+          "endDate": "2026-09-23",
+          "anchorDate": "2026-09-23",
+          "targetDate": "2026-07-25"
+        },
+        "90D": {
+          "windowDays": 90,
+          "windowLabel": "Internal 90D",
+          "status": "unavailable",
+          "reason": "insufficient_history",
+          "revisionPct": null,
+          "startEps": null,
+          "endEps": 15.68,
+          "startDate": null,
+          "endDate": "2026-09-23",
+          "anchorDate": "2026-09-23",
+          "targetDate": "2026-06-25"
+        }
+      },
+      "sourceReported": {
+        "1M": {
+          "windowLabel": "Source-reported · Seeking Alpha 1M",
+          "sourceWindow": "Seeking Alpha 1M",
+          "revisionPct": 1.81,
+          "neverInternal30D": true,
+          "neverInternal60D": true,
+          "neverInternal90D": true
+        },
+        "3M": {
+          "windowLabel": "Source-reported · Seeking Alpha 3M",
+          "sourceWindow": "Seeking Alpha 3M",
+          "revisionPct": 23.39,
+          "neverInternal30D": true,
+          "neverInternal60D": true,
+          "neverInternal90D": true
+        },
+        "6M": {
+          "windowLabel": "Source-reported · Seeking Alpha 6M",
+          "sourceWindow": "Seeking Alpha 6M",
+          "revisionPct": 41.18,
+          "neverInternal30D": true,
+          "neverInternal60D": true,
+          "neverInternal90D": true
+        }
+      },
+      "upAnalysts": null,
+      "downAnalysts": null,
+      "analystDirectionStatus": "unavailable",
+      "analystDirectionReason": "not_in_source"
+    },
+    {
+      "ticker": "NVDA",
+      "reportedFiscalPeriodEnding": "Jan 2029",
+      "reportedFiscalLabel": "Jan 2029",
+      "mappedYear": "2028E",
+      "calendarAlignment": "CY2028",
+      "asOf": "2026-09-23",
+      "currentEps": 21.06,
+      "analysts": 32.0,
+      "identity": {
+        "ticker": "NVDA",
+        "reportedFiscalPeriodEnding": "Jan 2029"
+      },
+      "internal": {
+        "30D": {
+          "windowDays": 30,
+          "windowLabel": "Internal 30D",
+          "status": "unavailable",
+          "reason": "insufficient_history",
+          "revisionPct": null,
+          "startEps": null,
+          "endEps": 21.06,
+          "startDate": null,
+          "endDate": "2026-09-23",
+          "anchorDate": "2026-09-23",
+          "targetDate": "2026-08-24"
+        },
+        "60D": {
+          "windowDays": 60,
+          "windowLabel": "Internal 60D",
+          "status": "unavailable",
+          "reason": "insufficient_history",
+          "revisionPct": null,
+          "startEps": null,
+          "endEps": 21.06,
+          "startDate": null,
+          "endDate": "2026-09-23",
+          "anchorDate": "2026-09-23",
+          "targetDate": "2026-07-25"
+        },
+        "90D": {
+          "windowDays": 90,
+          "windowLabel": "Internal 90D",
+          "status": "unavailable",
+          "reason": "insufficient_history",
+          "revisionPct": null,
+          "startEps": null,
+          "endEps": 21.06,
+          "startDate": null,
+          "endDate": "2026-09-23",
+          "anchorDate": "2026-09-23",
+          "targetDate": "2026-06-25"
+        }
+      },
+      "sourceReported": {
+        "1M": {
+          "windowLabel": "Source-reported · Seeking Alpha 1M",
+          "sourceWindow": "Seeking Alpha 1M",
+          "revisionPct": 2.98,
+          "neverInternal30D": true,
+          "neverInternal60D": true,
+          "neverInternal90D": true
+        },
+        "3M": {
+          "windowLabel": "Source-reported · Seeking Alpha 3M",
+          "sourceWindow": "Seeking Alpha 3M",
+          "revisionPct": 33.93,
+          "neverInternal30D": true,
+          "neverInternal60D": true,
+          "neverInternal90D": true
+        },
+        "6M": {
+          "windowLabel": "Source-reported · Seeking Alpha 6M",
+          "sourceWindow": "Seeking Alpha 6M",
+          "revisionPct": 58.53,
+          "neverInternal30D": true,
+          "neverInternal60D": true,
+          "neverInternal90D": true
+        }
+      },
+      "upAnalysts": null,
+      "downAnalysts": null,
+      "analystDirectionStatus": "unavailable",
+      "analystDirectionReason": "not_in_source"
+    },
+    {
+      "ticker": "NVDA",
+      "reportedFiscalPeriodEnding": "Jan 2030",
+      "reportedFiscalLabel": "Jan 2030",
+      "mappedYear": "2029E",
+      "calendarAlignment": "CY2029",
+      "asOf": "2026-09-23",
+      "currentEps": 23.4,
+      "analysts": 4.0,
+      "identity": {
+        "ticker": "NVDA",
+        "reportedFiscalPeriodEnding": "Jan 2030"
+      },
+      "internal": {
+        "30D": {
+          "windowDays": 30,
+          "windowLabel": "Internal 30D",
+          "status": "unavailable",
+          "reason": "insufficient_history",
+          "revisionPct": null,
+          "startEps": null,
+          "endEps": 23.4,
+          "startDate": null,
+          "endDate": "2026-09-23",
+          "anchorDate": "2026-09-23",
+          "targetDate": "2026-08-24"
+        },
+        "60D": {
+          "windowDays": 60,
+          "windowLabel": "Internal 60D",
+          "status": "unavailable",
+          "reason": "insufficient_history",
+          "revisionPct": null,
+          "startEps": null,
+          "endEps": 23.4,
+          "startDate": null,
+          "endDate": "2026-09-23",
+          "anchorDate": "2026-09-23",
+          "targetDate": "2026-07-25"
+        },
+        "90D": {
+          "windowDays": 90,
+          "windowLabel": "Internal 90D",
+          "status": "unavailable",
+          "reason": "insufficient_history",
+          "revisionPct": null,
+          "startEps": null,
+          "endEps": 23.4,
+          "startDate": null,
+          "endDate": "2026-09-23",
+          "anchorDate": "2026-09-23",
+          "targetDate": "2026-06-25"
+        }
+      },
+      "sourceReported": {
+        "1M": {
+          "windowLabel": "Source-reported · Seeking Alpha 1M",
+          "sourceWindow": "Seeking Alpha 1M",
+          "revisionPct": 11.02,
+          "neverInternal30D": true,
+          "neverInternal60D": true,
+          "neverInternal90D": true
+        },
+        "3M": {
+          "windowLabel": "Source-reported · Seeking Alpha 3M",
+          "sourceWindow": "Seeking Alpha 3M",
+          "revisionPct": 33.74,
+          "neverInternal30D": true,
+          "neverInternal60D": true,
+          "neverInternal90D": true
+        },
+        "6M": {
+          "windowLabel": "Source-reported · Seeking Alpha 6M",
+          "sourceWindow": "Seeking Alpha 6M",
+          "revisionPct": 54.8,
+          "neverInternal30D": true,
+          "neverInternal60D": true,
+          "neverInternal90D": true
+        }
+      },
+      "upAnalysts": null,
+      "downAnalysts": null,
+      "analystDirectionStatus": "unavailable",
+      "analystDirectionReason": "not_in_source"
+    },
+    {
+      "ticker": "TSM",
+      "reportedFiscalPeriodEnding": "Dec 2026",
+      "reportedFiscalLabel": "Dec 2026",
+      "mappedYear": "2026E",
+      "calendarAlignment": "CY2026",
+      "asOf": "2026-09-23",
+      "currentEps": 16.93,
+      "analysts": 13.0,
+      "identity": {
+        "ticker": "TSM",
+        "reportedFiscalPeriodEnding": "Dec 2026"
+      },
+      "internal": {
+        "30D": {
+          "windowDays": 30,
+          "windowLabel": "Internal 30D",
+          "status": "unavailable",
+          "reason": "insufficient_history",
+          "revisionPct": null,
+          "startEps": null,
+          "endEps": 16.93,
+          "startDate": null,
+          "endDate": "2026-09-23",
+          "anchorDate": "2026-09-23",
+          "targetDate": "2026-08-24"
+        },
+        "60D": {
+          "windowDays": 60,
+          "windowLabel": "Internal 60D",
+          "status": "unavailable",
+          "reason": "insufficient_history",
+          "revisionPct": null,
+          "startEps": null,
+          "endEps": 16.93,
+          "startDate": null,
+          "endDate": "2026-09-23",
+          "anchorDate": "2026-09-23",
+          "targetDate": "2026-07-25"
+        },
+        "90D": {
+          "windowDays": 90,
+          "windowLabel": "Internal 90D",
+          "status": "unavailable",
+          "reason": "insufficient_history",
+          "revisionPct": null,
+          "startEps": null,
+          "endEps": 16.93,
+          "startDate": null,
+          "endDate": "2026-09-23",
+          "anchorDate": "2026-09-23",
+          "targetDate": "2026-06-25"
+        }
+      },
+      "sourceReported": {
+        "1M": {
+          "windowLabel": "Source-reported · Seeking Alpha 1M",
+          "sourceWindow": "Seeking Alpha 1M",
+          "revisionPct": 0.21,
+          "neverInternal30D": true,
+          "neverInternal60D": true,
+          "neverInternal90D": true
+        },
+        "3M": {
+          "windowLabel": "Source-reported · Seeking Alpha 3M",
+          "sourceWindow": "Seeking Alpha 3M",
+          "revisionPct": 6.99,
+          "neverInternal30D": true,
+          "neverInternal60D": true,
+          "neverInternal90D": true
+        },
+        "6M": {
+          "windowLabel": "Source-reported · Seeking Alpha 6M",
+          "sourceWindow": "Seeking Alpha 6M",
+          "revisionPct": 17.26,
+          "neverInternal30D": true,
+          "neverInternal60D": true,
+          "neverInternal90D": true
+        }
+      },
+      "upAnalysts": null,
+      "downAnalysts": null,
+      "analystDirectionStatus": "unavailable",
+      "analystDirectionReason": "not_in_source"
+    },
+    {
+      "ticker": "TSM",
+      "reportedFiscalPeriodEnding": "Dec 2027",
+      "reportedFiscalLabel": "Dec 2027",
+      "mappedYear": "2027E",
+      "calendarAlignment": "CY2027",
+      "asOf": "2026-09-23",
+      "currentEps": 21.93,
+      "analysts": 13.0,
+      "identity": {
+        "ticker": "TSM",
+        "reportedFiscalPeriodEnding": "Dec 2027"
+      },
+      "internal": {
+        "30D": {
+          "windowDays": 30,
+          "windowLabel": "Internal 30D",
+          "status": "unavailable",
+          "reason": "insufficient_history",
+          "revisionPct": null,
+          "startEps": null,
+          "endEps": 21.93,
+          "startDate": null,
+          "endDate": "2026-09-23",
+          "anchorDate": "2026-09-23",
+          "targetDate": "2026-08-24"
+        },
+        "60D": {
+          "windowDays": 60,
+          "windowLabel": "Internal 60D",
+          "status": "unavailable",
+          "reason": "insufficient_history",
+          "revisionPct": null,
+          "startEps": null,
+          "endEps": 21.93,
+          "startDate": null,
+          "endDate": "2026-09-23",
+          "anchorDate": "2026-09-23",
+          "targetDate": "2026-07-25"
+        },
+        "90D": {
+          "windowDays": 90,
+          "windowLabel": "Internal 90D",
+          "status": "unavailable",
+          "reason": "insufficient_history",
+          "revisionPct": null,
+          "startEps": null,
+          "endEps": 21.93,
+          "startDate": null,
+          "endDate": "2026-09-23",
+          "anchorDate": "2026-09-23",
+          "targetDate": "2026-06-25"
+        }
+      },
+      "sourceReported": {
+        "1M": {
+          "windowLabel": "Source-reported · Seeking Alpha 1M",
+          "sourceWindow": "Seeking Alpha 1M",
+          "revisionPct": 0.66,
+          "neverInternal30D": true,
+          "neverInternal60D": true,
+          "neverInternal90D": true
+        },
+        "3M": {
+          "windowLabel": "Source-reported · Seeking Alpha 3M",
+          "sourceWindow": "Seeking Alpha 3M",
+          "revisionPct": 8.9,
+          "neverInternal30D": true,
+          "neverInternal60D": true,
+          "neverInternal90D": true
+        },
+        "6M": {
+          "windowLabel": "Source-reported · Seeking Alpha 6M",
+          "sourceWindow": "Seeking Alpha 6M",
+          "revisionPct": 22.49,
+          "neverInternal30D": true,
+          "neverInternal60D": true,
+          "neverInternal90D": true
+        }
+      },
+      "upAnalysts": null,
+      "downAnalysts": null,
+      "analystDirectionStatus": "unavailable",
+      "analystDirectionReason": "not_in_source"
+    },
+    {
+      "ticker": "TSM",
+      "reportedFiscalPeriodEnding": "Dec 2028",
+      "reportedFiscalLabel": "Dec 2028",
+      "mappedYear": "2028E",
+      "calendarAlignment": "CY2028",
+      "asOf": "2026-09-23",
+      "currentEps": 28.33,
+      "analysts": 8.0,
+      "identity": {
+        "ticker": "TSM",
+        "reportedFiscalPeriodEnding": "Dec 2028"
+      },
+      "internal": {
+        "30D": {
+          "windowDays": 30,
+          "windowLabel": "Internal 30D",
+          "status": "unavailable",
+          "reason": "insufficient_history",
+          "revisionPct": null,
+          "startEps": null,
+          "endEps": 28.33,
+          "startDate": null,
+          "endDate": "2026-09-23",
+          "anchorDate": "2026-09-23",
+          "targetDate": "2026-08-24"
+        },
+        "60D": {
+          "windowDays": 60,
+          "windowLabel": "Internal 60D",
+          "status": "unavailable",
+          "reason": "insufficient_history",
+          "revisionPct": null,
+          "startEps": null,
+          "endEps": 28.33,
+          "startDate": null,
+          "endDate": "2026-09-23",
+          "anchorDate": "2026-09-23",
+          "targetDate": "2026-07-25"
+        },
+        "90D": {
+          "windowDays": 90,
+          "windowLabel": "Internal 90D",
+          "status": "unavailable",
+          "reason": "insufficient_history",
+          "revisionPct": null,
+          "startEps": null,
+          "endEps": 28.33,
+          "startDate": null,
+          "endDate": "2026-09-23",
+          "anchorDate": "2026-09-23",
+          "targetDate": "2026-06-25"
+        }
+      },
+      "sourceReported": {
+        "1M": {
+          "windowLabel": "Source-reported · Seeking Alpha 1M",
+          "sourceWindow": "Seeking Alpha 1M",
+          "revisionPct": 0.25,
+          "neverInternal30D": true,
+          "neverInternal60D": true,
+          "neverInternal90D": true
+        },
+        "3M": {
+          "windowLabel": "Source-reported · Seeking Alpha 3M",
+          "sourceWindow": "Seeking Alpha 3M",
+          "revisionPct": 8.15,
+          "neverInternal30D": true,
+          "neverInternal60D": true,
+          "neverInternal90D": true
+        },
+        "6M": {
+          "windowLabel": "Source-reported · Seeking Alpha 6M",
+          "sourceWindow": "Seeking Alpha 6M",
+          "revisionPct": null,
+          "neverInternal30D": true,
+          "neverInternal60D": true,
+          "neverInternal90D": true
+        }
+      },
+      "upAnalysts": null,
+      "downAnalysts": null,
+      "analystDirectionStatus": "unavailable",
+      "analystDirectionReason": "not_in_source"
+    }
+  ],
+  "revisionMomentumNote": "Internal 30D/60D/90D are computed from daily EPS history keyed by ticker + reportedFiscalPeriodEnding (normalized). Each window is anchored on the latest valid observation for that identity (targetDate = latestDate − N days), not the snapshot timestamp. Baseline admission is the schedule-aware weekday-gap rule in tools/revision_windows.py (Friday→Monday valid; ancient observations cannot fake an N-day baseline). Insufficient history → unavailable (never substitute the oldest observation). Seeking Alpha 1M/3M/6M are Source-reported windows and are never treated as Internal 30/60/90D. Up/Down Analyst counts are unavailable unless present as source-native fields (captured SA sources in this repo do not include them).",
+  "buildId": "46dead1cc155eb6e5e7485a283e879c05d254f5b3aff2fe577d6f34e734f54c7"
 }
