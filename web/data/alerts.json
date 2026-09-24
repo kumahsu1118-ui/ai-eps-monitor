@@ -23,7 +23,7 @@
       "sourceWindow": "Seeking Alpha 1M",
       "windowLabel": "Source window: Seeking Alpha 1M",
       "neverInternal30D": true,
-      "ageDays": 8,
+      "ageDays": 9,
       "analystCount": 33,
       "consensusLow": 25.22,
       "consensusHigh": 34.25,
@@ -34,8 +34,8 @@
       "status": "Open",
       "lifecycleStatus": "Open",
       "lifecycleEvent": "Hold",
-      "updatedAt": "2026-09-23T00:31:33Z",
-      "lastObservedAt": "2026-09-23T00:31:33Z"
+      "updatedAt": "2026-09-24T00:08:01Z",
+      "lastObservedAt": "2026-09-24T00:08:01Z"
     },
     {
       "id": "source_reported_1m_revision:NVDA:Jan_2030:2026-09-15:sa1m_2029E",
@@ -60,7 +60,7 @@
       "sourceWindow": "Seeking Alpha 1M",
       "windowLabel": "Source window: Seeking Alpha 1M",
       "neverInternal30D": true,
-      "ageDays": 8,
+      "ageDays": 9,
       "analystCount": 4,
       "consensusLow": 17.9,
       "consensusHigh": 30.37,
@@ -71,8 +71,8 @@
       "status": "Open",
       "lifecycleStatus": "Open",
       "lifecycleEvent": "Hold",
-      "updatedAt": "2026-09-23T00:31:33Z",
-      "lastObservedAt": "2026-09-23T00:31:33Z"
+      "updatedAt": "2026-09-24T00:08:01Z",
+      "lastObservedAt": "2026-09-24T00:08:01Z"
     },
     {
       "id": "source_reported_1m_revision:AVGO:Oct_2029:2026-09-15:sa1m_2029E",
@@ -97,7 +97,7 @@
       "sourceWindow": "Seeking Alpha 1M",
       "windowLabel": "Source window: Seeking Alpha 1M",
       "neverInternal30D": true,
-      "ageDays": 8,
+      "ageDays": 9,
       "analystCount": 4,
       "consensusLow": 30.54,
       "consensusHigh": 50.5,
@@ -108,8 +108,8 @@
       "status": "Open",
       "lifecycleStatus": "Open",
       "lifecycleEvent": "Hold",
-      "updatedAt": "2026-09-23T00:31:33Z",
-      "lastObservedAt": "2026-09-23T00:31:33Z"
+      "updatedAt": "2026-09-24T00:08:01Z",
+      "lastObservedAt": "2026-09-24T00:08:01Z"
     },
     {
       "id": "source_reported_1m_revision:KEYS:Oct_2029:2026-09-15:sa1m_2029E",
@@ -134,7 +134,7 @@
       "sourceWindow": "Seeking Alpha 1M",
       "windowLabel": "Source window: Seeking Alpha 1M",
       "neverInternal30D": true,
-      "ageDays": 8,
+      "ageDays": 9,
       "analystCount": 1,
       "consensusLow": 21.99,
       "consensusHigh": 21.99,
@@ -145,8 +145,8 @@
       "status": "Open",
       "lifecycleStatus": "Open",
       "lifecycleEvent": "Hold",
-      "updatedAt": "2026-09-23T00:31:33Z",
-      "lastObservedAt": "2026-09-23T00:31:33Z"
+      "updatedAt": "2026-09-24T00:08:01Z",
+      "lastObservedAt": "2026-09-24T00:08:01Z"
     }
   ],
   "alertHistory": [
@@ -204,7 +204,7 @@
       "sourceTier": 4,
       "actualsSourceUrl": "https://investor.nvidia.com/news/press-release-details/2026/NVIDIA-Announces-Financial-Results-for-Second-Quarter-Fiscal-2027/default.aspx",
       "actualsSourceTier": 1,
-      "ageDays": 28
+      "ageDays": 29
     },
     {
       "id": "results_vs_consensus:AVGO:Q3_2026_(fiscal_2026):2026-09-02:results_above",
@@ -228,7 +228,7 @@
       "sourceTier": 4,
       "actualsSourceUrl": "https://investors.broadcom.com/news-releases/news-release-details/broadcom-inc-announces-third-quarter-fiscal-year-2026-financial",
       "actualsSourceTier": 1,
-      "ageDays": 21
+      "ageDays": 22
     },
     {
       "id": "gross_margin_pressure:AVGO:Q3_2026_(fiscal_2026):2026-09-02:gm_pressure_-210",
@@ -247,7 +247,7 @@
       "activeUntil": "2026-09-23T00:00:00Z",
       "oneshot": true,
       "bpsChange": -210.0,
-      "ageDays": 21
+      "ageDays": 22
     },
     {
       "id": "driver_status_change:NVDA:na:2026-08-26:GPU_shipment",
@@ -270,7 +270,7 @@
       "previousStatus": "unchanged",
       "currentStatus": "improving",
       "sourceUrl": "https://investor.nvidia.com/news/press-release-details/2026/NVIDIA-Announces-Financial-Results-for-Second-Quarter-Fiscal-2027/default.aspx",
-      "ageDays": 28
+      "ageDays": 29
     },
     {
       "id": "driver_status_change:NVDA:na:2026-08-26:Rubin_-_Rubin_Ultra",
@@ -293,7 +293,7 @@
       "previousStatus": "unchanged",
       "currentStatus": "improving",
       "sourceUrl": "https://seekingalpha.com/article/4940563-nvidia-corporation-nvda-q2-2027-earnings-call-transcript",
-      "ageDays": 28
+      "ageDays": 29
     },
     {
       "id": "driver_status_change:NVDA:na:2026-08-26:inference_demand",
@@ -316,7 +316,7 @@
       "previousStatus": "unchanged",
       "currentStatus": "improving",
       "sourceUrl": "https://investor.nvidia.com/news/press-release-details/2026/NVIDIA-Announces-Financial-Results-for-Second-Quarter-Fiscal-2027/default.aspx",
-      "ageDays": 28
+      "ageDays": 29
     },
     {
       "id": "driver_status_change:NVDA:na:2026-08-26:HBM_supply",
@@ -339,7 +339,7 @@
       "previousStatus": "unchanged",
       "currentStatus": "deteriorating",
       "sourceUrl": "https://investor.nvidia.com/news/press-release-details/2026/NVIDIA-Announces-Financial-Results-for-Second-Quarter-Fiscal-2027/default.aspx",
-      "ageDays": 28
+      "ageDays": 29
     },
     {
       "id": "driver_status_change:NVDA:na:2026-08-26:networking",
@@ -362,7 +362,7 @@
       "previousStatus": "unchanged",
       "currentStatus": "improving",
       "sourceUrl": "https://seekingalpha.com/article/4940563-nvidia-corporation-nvda-q2-2027-earnings-call-transcript",
-      "ageDays": 28
+      "ageDays": 29
     },
     {
       "id": "driver_status_change:NVDA:na:2026-08-26:gross_margin",
@@ -385,7 +385,7 @@
       "previousStatus": "unchanged",
       "currentStatus": "deteriorating",
       "sourceUrl": "https://investor.nvidia.com/news/press-release-details/2026/NVIDIA-Announces-Financial-Results-for-Second-Quarter-Fiscal-2027/default.aspx",
-      "ageDays": 28
+      "ageDays": 29
     },
     {
       "id": "driver_status_change:AVGO:na:2026-09-02:AI_ASIC",
@@ -408,7 +408,7 @@
       "previousStatus": "unchanged",
       "currentStatus": "improving",
       "sourceUrl": "https://investors.broadcom.com/news-releases/news-release-details/broadcom-inc-announces-third-quarter-fiscal-year-2026-financial",
-      "ageDays": 21
+      "ageDays": 22
     },
     {
       "id": "driver_status_change:AVGO:na:2026-09-02:hyperscaler_customers",
@@ -431,7 +431,7 @@
       "previousStatus": "unchanged",
       "currentStatus": "improving",
       "sourceUrl": "https://investors.broadcom.com/news-releases/news-release-details/broadcom-inc-announces-third-quarter-fiscal-year-2026-financial",
-      "ageDays": 21
+      "ageDays": 22
     },
     {
       "id": "driver_status_change:AVGO:na:2026-09-02:AI_networking",
@@ -454,7 +454,7 @@
       "previousStatus": "unchanged",
       "currentStatus": "improving",
       "sourceUrl": "https://seekingalpha.com/article/4942557-broadcom-inc-avgo-q3-2026-earnings-call-transcript",
-      "ageDays": 21
+      "ageDays": 22
     },
     {
       "id": "driver_status_change:AVGO:na:2026-09-02:Tomahawk",
@@ -477,7 +477,7 @@
       "previousStatus": "unchanged",
       "currentStatus": "improving",
       "sourceUrl": "https://seekingalpha.com/article/4942557-broadcom-inc-avgo-q3-2026-earnings-call-transcript",
-      "ageDays": 21
+      "ageDays": 22
     },
     {
       "id": "driver_status_change:AVGO:na:2026-09-02:gross_margin",
@@ -500,7 +500,7 @@
       "previousStatus": "unchanged",
       "currentStatus": "deteriorating",
       "sourceUrl": "https://investors.broadcom.com/news-releases/news-release-details/broadcom-inc-announces-third-quarter-fiscal-year-2026-financial",
-      "ageDays": 21
+      "ageDays": 22
     },
     {
       "id": "driver_status_change:AVGO:na:2026-09-02:FCF",
@@ -523,7 +523,7 @@
       "previousStatus": "unchanged",
       "currentStatus": "improving",
       "sourceUrl": "https://investors.broadcom.com/news-releases/news-release-details/broadcom-inc-announces-third-quarter-fiscal-year-2026-financial",
-      "ageDays": 21
+      "ageDays": 22
     },
     {
       "id": "source_reported_1m_revision:NVDA:Jan_2030:2026-09-15:sa1m_2029E",
@@ -548,7 +548,7 @@
       "sourceWindow": "Seeking Alpha 1M",
       "windowLabel": "Source window: Seeking Alpha 1M",
       "neverInternal30D": true,
-      "ageDays": 8,
+      "ageDays": 9,
       "analystCount": 4,
       "consensusLow": 17.9,
       "consensusHigh": 30.37,
@@ -559,8 +559,8 @@
       "status": "Open",
       "lifecycleStatus": "Open",
       "lifecycleEvent": "Hold",
-      "updatedAt": "2026-09-23T00:31:33Z",
-      "lastObservedAt": "2026-09-23T00:31:33Z"
+      "updatedAt": "2026-09-24T00:08:01Z",
+      "lastObservedAt": "2026-09-24T00:08:01Z"
     },
     {
       "id": "source_reported_1m_revision:AVGO:Oct_2028:2026-09-15:sa1m_2028E",
@@ -585,7 +585,7 @@
       "sourceWindow": "Seeking Alpha 1M",
       "windowLabel": "Source window: Seeking Alpha 1M",
       "neverInternal30D": true,
-      "ageDays": 8,
+      "ageDays": 9,
       "analystCount": 33,
       "consensusLow": 25.22,
       "consensusHigh": 34.25,
@@ -596,8 +596,8 @@
       "status": "Open",
       "lifecycleStatus": "Open",
       "lifecycleEvent": "Hold",
-      "updatedAt": "2026-09-23T00:31:33Z",
-      "lastObservedAt": "2026-09-23T00:31:33Z"
+      "updatedAt": "2026-09-24T00:08:01Z",
+      "lastObservedAt": "2026-09-24T00:08:01Z"
     },
     {
       "id": "source_reported_1m_revision:AVGO:Oct_2029:2026-09-15:sa1m_2029E",
@@ -622,7 +622,7 @@
       "sourceWindow": "Seeking Alpha 1M",
       "windowLabel": "Source window: Seeking Alpha 1M",
       "neverInternal30D": true,
-      "ageDays": 8,
+      "ageDays": 9,
       "analystCount": 4,
       "consensusLow": 30.54,
       "consensusHigh": 50.5,
@@ -633,8 +633,8 @@
       "status": "Open",
       "lifecycleStatus": "Open",
       "lifecycleEvent": "Hold",
-      "updatedAt": "2026-09-23T00:31:33Z",
-      "lastObservedAt": "2026-09-23T00:31:33Z"
+      "updatedAt": "2026-09-24T00:08:01Z",
+      "lastObservedAt": "2026-09-24T00:08:01Z"
     },
     {
       "id": "source_reported_1m_revision:KEYS:Oct_2028:2026-09-15:sa1m_2028E",
@@ -659,7 +659,7 @@
       "sourceWindow": "Seeking Alpha 1M",
       "windowLabel": "Source window: Seeking Alpha 1M",
       "neverInternal30D": true,
-      "ageDays": 8,
+      "ageDays": 9,
       "analystCount": 10,
       "consensusLow": 14.04,
       "consensusHigh": 19.51,
@@ -697,7 +697,7 @@
       "sourceWindow": "Seeking Alpha 1M",
       "windowLabel": "Source window: Seeking Alpha 1M",
       "neverInternal30D": true,
-      "ageDays": 8,
+      "ageDays": 9,
       "analystCount": 1,
       "consensusLow": 21.99,
       "consensusHigh": 21.99,
@@ -708,8 +708,8 @@
       "status": "Open",
       "lifecycleStatus": "Open",
       "lifecycleEvent": "Hold",
-      "updatedAt": "2026-09-23T00:31:33Z",
-      "lastObservedAt": "2026-09-23T00:31:33Z"
+      "updatedAt": "2026-09-24T00:08:01Z",
+      "lastObservedAt": "2026-09-24T00:08:01Z"
     }
   ],
   "alertDiagnostics": [
@@ -720,9 +720,9 @@
       "period": "Jan 2027",
       "message": "NVDA Jan 2027: insufficient history for 30D cumulative (insufficient_history)",
       "lookbackDays": 30,
-      "windowPointCount": 3,
+      "windowPointCount": 4,
       "status": "insufficient history",
-      "eventAt": "2026-09-23T00:31:33Z",
+      "eventAt": "2026-09-24T00:08:01Z",
       "diagnostic": true,
       "priorAlertId": null
     },
@@ -733,9 +733,9 @@
       "period": "Jan 2028",
       "message": "NVDA Jan 2028: insufficient history for 30D cumulative (insufficient_history)",
       "lookbackDays": 30,
-      "windowPointCount": 3,
+      "windowPointCount": 4,
       "status": "insufficient history",
-      "eventAt": "2026-09-23T00:31:33Z",
+      "eventAt": "2026-09-24T00:08:01Z",
       "diagnostic": true,
       "priorAlertId": null
     },
@@ -746,9 +746,9 @@
       "period": "Jan 2029",
       "message": "NVDA Jan 2029: insufficient history for 30D cumulative (insufficient_history)",
       "lookbackDays": 30,
-      "windowPointCount": 3,
+      "windowPointCount": 4,
       "status": "insufficient history",
-      "eventAt": "2026-09-23T00:31:33Z",
+      "eventAt": "2026-09-24T00:08:01Z",
       "diagnostic": true,
       "priorAlertId": null
     },
@@ -759,9 +759,9 @@
       "period": "Oct 2026",
       "message": "AVGO Oct 2026: insufficient history for 30D cumulative (insufficient_history)",
       "lookbackDays": 30,
-      "windowPointCount": 3,
+      "windowPointCount": 4,
       "status": "insufficient history",
-      "eventAt": "2026-09-23T00:31:33Z",
+      "eventAt": "2026-09-24T00:08:01Z",
       "diagnostic": true,
       "priorAlertId": null
     },
@@ -772,9 +772,9 @@
       "period": "Oct 2027",
       "message": "AVGO Oct 2027: insufficient history for 30D cumulative (insufficient_history)",
       "lookbackDays": 30,
-      "windowPointCount": 3,
+      "windowPointCount": 4,
       "status": "insufficient history",
-      "eventAt": "2026-09-23T00:31:33Z",
+      "eventAt": "2026-09-24T00:08:01Z",
       "diagnostic": true,
       "priorAlertId": null
     },
@@ -785,9 +785,9 @@
       "period": "Oct 2028",
       "message": "AVGO Oct 2028: insufficient history for 30D cumulative (insufficient_history)",
       "lookbackDays": 30,
-      "windowPointCount": 3,
+      "windowPointCount": 4,
       "status": "insufficient history",
-      "eventAt": "2026-09-23T00:31:33Z",
+      "eventAt": "2026-09-24T00:08:01Z",
       "diagnostic": true,
       "priorAlertId": null
     },
@@ -798,9 +798,9 @@
       "period": "Dec 2026",
       "message": "TSM Dec 2026: insufficient history for 30D cumulative (insufficient_history)",
       "lookbackDays": 30,
-      "windowPointCount": 3,
+      "windowPointCount": 4,
       "status": "insufficient history",
-      "eventAt": "2026-09-23T00:31:33Z",
+      "eventAt": "2026-09-24T00:08:01Z",
       "diagnostic": true,
       "priorAlertId": null
     },
@@ -811,9 +811,9 @@
       "period": "Dec 2027",
       "message": "TSM Dec 2027: insufficient history for 30D cumulative (insufficient_history)",
       "lookbackDays": 30,
-      "windowPointCount": 3,
+      "windowPointCount": 4,
       "status": "insufficient history",
-      "eventAt": "2026-09-23T00:31:33Z",
+      "eventAt": "2026-09-24T00:08:01Z",
       "diagnostic": true,
       "priorAlertId": null
     },
@@ -824,9 +824,9 @@
       "period": "Dec 2028",
       "message": "TSM Dec 2028: insufficient history for 30D cumulative (insufficient_history)",
       "lookbackDays": 30,
-      "windowPointCount": 3,
+      "windowPointCount": 4,
       "status": "insufficient history",
-      "eventAt": "2026-09-23T00:31:33Z",
+      "eventAt": "2026-09-24T00:08:01Z",
       "diagnostic": true,
       "priorAlertId": null
     },
@@ -837,9 +837,9 @@
       "period": "Jun 2027",
       "message": "MSFT Jun 2027: insufficient history for 30D cumulative (insufficient_history)",
       "lookbackDays": 30,
-      "windowPointCount": 3,
+      "windowPointCount": 4,
       "status": "insufficient history",
-      "eventAt": "2026-09-23T00:31:33Z",
+      "eventAt": "2026-09-24T00:08:01Z",
       "diagnostic": true,
       "priorAlertId": null
     },
@@ -850,9 +850,9 @@
       "period": "Jun 2028",
       "message": "MSFT Jun 2028: insufficient history for 30D cumulative (insufficient_history)",
       "lookbackDays": 30,
-      "windowPointCount": 3,
+      "windowPointCount": 4,
       "status": "insufficient history",
-      "eventAt": "2026-09-23T00:31:33Z",
+      "eventAt": "2026-09-24T00:08:01Z",
       "diagnostic": true,
       "priorAlertId": null
     },
@@ -863,9 +863,9 @@
       "period": "Dec 2026",
       "message": "BE Dec 2026: insufficient history for 30D cumulative (insufficient_history)",
       "lookbackDays": 30,
-      "windowPointCount": 3,
+      "windowPointCount": 4,
       "status": "insufficient history",
-      "eventAt": "2026-09-23T00:31:33Z",
+      "eventAt": "2026-09-24T00:08:01Z",
       "diagnostic": true,
       "priorAlertId": null
     },
@@ -876,9 +876,9 @@
       "period": "Dec 2027",
       "message": "BE Dec 2027: insufficient history for 30D cumulative (insufficient_history)",
       "lookbackDays": 30,
-      "windowPointCount": 3,
+      "windowPointCount": 4,
       "status": "insufficient history",
-      "eventAt": "2026-09-23T00:31:33Z",
+      "eventAt": "2026-09-24T00:08:01Z",
       "diagnostic": true,
       "priorAlertId": null
     },
@@ -889,9 +889,9 @@
       "period": "Dec 2028",
       "message": "BE Dec 2028: insufficient history for 30D cumulative (insufficient_history)",
       "lookbackDays": 30,
-      "windowPointCount": 3,
+      "windowPointCount": 4,
       "status": "insufficient history",
-      "eventAt": "2026-09-23T00:31:33Z",
+      "eventAt": "2026-09-24T00:08:01Z",
       "diagnostic": true,
       "priorAlertId": null
     },
@@ -902,9 +902,9 @@
       "period": "Oct 2026",
       "message": "KEYS Oct 2026: insufficient history for 30D cumulative (insufficient_history)",
       "lookbackDays": 30,
-      "windowPointCount": 3,
+      "windowPointCount": 4,
       "status": "insufficient history",
-      "eventAt": "2026-09-23T00:31:33Z",
+      "eventAt": "2026-09-24T00:08:01Z",
       "diagnostic": true,
       "priorAlertId": null
     },
@@ -915,9 +915,9 @@
       "period": "Oct 2027",
       "message": "KEYS Oct 2027: insufficient history for 30D cumulative (insufficient_history)",
       "lookbackDays": 30,
-      "windowPointCount": 3,
+      "windowPointCount": 4,
       "status": "insufficient history",
-      "eventAt": "2026-09-23T00:31:33Z",
+      "eventAt": "2026-09-24T00:08:01Z",
       "diagnostic": true,
       "priorAlertId": null
     },
@@ -928,9 +928,9 @@
       "period": "Oct 2028",
       "message": "KEYS Oct 2028: insufficient history for 30D cumulative (insufficient_history)",
       "lookbackDays": 30,
-      "windowPointCount": 3,
+      "windowPointCount": 4,
       "status": "insufficient history",
-      "eventAt": "2026-09-23T00:31:33Z",
+      "eventAt": "2026-09-24T00:08:01Z",
       "diagnostic": true,
       "priorAlertId": null
     },
@@ -941,9 +941,9 @@
       "period": "Jan 2030",
       "message": "NVDA Jan 2030: insufficient history for 30D cumulative (insufficient_history)",
       "lookbackDays": 30,
-      "windowPointCount": 3,
+      "windowPointCount": 4,
       "status": "insufficient history",
-      "eventAt": "2026-09-23T00:31:33Z",
+      "eventAt": "2026-09-24T00:08:01Z",
       "diagnostic": true,
       "priorAlertId": null
     },
@@ -954,9 +954,9 @@
       "period": "Oct 2029",
       "message": "AVGO Oct 2029: insufficient history for 30D cumulative (insufficient_history)",
       "lookbackDays": 30,
-      "windowPointCount": 3,
+      "windowPointCount": 4,
       "status": "insufficient history",
-      "eventAt": "2026-09-23T00:31:33Z",
+      "eventAt": "2026-09-24T00:08:01Z",
       "diagnostic": true,
       "priorAlertId": null
     },
@@ -967,9 +967,9 @@
       "period": "Jun 2029",
       "message": "MSFT Jun 2029: insufficient history for 30D cumulative (insufficient_history)",
       "lookbackDays": 30,
-      "windowPointCount": 3,
+      "windowPointCount": 4,
       "status": "insufficient history",
-      "eventAt": "2026-09-23T00:31:33Z",
+      "eventAt": "2026-09-24T00:08:01Z",
       "diagnostic": true,
       "priorAlertId": null
     },
@@ -980,9 +980,9 @@
       "period": "Dec 2029",
       "message": "BE Dec 2029: insufficient history for 30D cumulative (insufficient_history)",
       "lookbackDays": 30,
-      "windowPointCount": 3,
+      "windowPointCount": 4,
       "status": "insufficient history",
-      "eventAt": "2026-09-23T00:31:33Z",
+      "eventAt": "2026-09-24T00:08:01Z",
       "diagnostic": true,
       "priorAlertId": null
     },
@@ -993,9 +993,22 @@
       "period": "Oct 2029",
       "message": "KEYS Oct 2029: insufficient history for 30D cumulative (insufficient_history)",
       "lookbackDays": 30,
-      "windowPointCount": 3,
+      "windowPointCount": 4,
       "status": "insufficient history",
-      "eventAt": "2026-09-23T00:31:33Z",
+      "eventAt": "2026-09-24T00:08:01Z",
+      "diagnostic": true,
+      "priorAlertId": null
+    },
+    {
+      "rule": "cumulative_revision_insufficient_history",
+      "severity": "info",
+      "ticker": "MSFT",
+      "period": "Jun 2026",
+      "message": "MSFT Jun 2026: insufficient history for 30D cumulative (insufficient_history)",
+      "lookbackDays": 30,
+      "windowPointCount": 1,
+      "status": "insufficient history",
+      "eventAt": "2026-09-24T00:08:01Z",
       "diagnostic": true,
       "priorAlertId": null
     }
@@ -1024,7 +1037,7 @@
       "sourceWindow": "Seeking Alpha 1M",
       "windowLabel": "Source window: Seeking Alpha 1M",
       "neverInternal30D": true,
-      "ageDays": 8,
+      "ageDays": 9,
       "analystCount": 33,
       "consensusLow": 25.22,
       "consensusHigh": 34.25,
@@ -1035,8 +1048,8 @@
       "status": "Open",
       "lifecycleStatus": "Open",
       "lifecycleEvent": "Hold",
-      "updatedAt": "2026-09-23T00:31:33Z",
-      "lastObservedAt": "2026-09-23T00:31:33Z"
+      "updatedAt": "2026-09-24T00:08:01Z",
+      "lastObservedAt": "2026-09-24T00:08:01Z"
     },
     {
       "id": "source_reported_1m_revision:NVDA:Jan_2030:2026-09-15:sa1m_2029E",
@@ -1061,7 +1074,7 @@
       "sourceWindow": "Seeking Alpha 1M",
       "windowLabel": "Source window: Seeking Alpha 1M",
       "neverInternal30D": true,
-      "ageDays": 8,
+      "ageDays": 9,
       "analystCount": 4,
       "consensusLow": 17.9,
       "consensusHigh": 30.37,
@@ -1072,8 +1085,8 @@
       "status": "Open",
       "lifecycleStatus": "Open",
       "lifecycleEvent": "Hold",
-      "updatedAt": "2026-09-23T00:31:33Z",
-      "lastObservedAt": "2026-09-23T00:31:33Z"
+      "updatedAt": "2026-09-24T00:08:01Z",
+      "lastObservedAt": "2026-09-24T00:08:01Z"
     },
     {
       "id": "source_reported_1m_revision:AVGO:Oct_2029:2026-09-15:sa1m_2029E",
@@ -1098,7 +1111,7 @@
       "sourceWindow": "Seeking Alpha 1M",
       "windowLabel": "Source window: Seeking Alpha 1M",
       "neverInternal30D": true,
-      "ageDays": 8,
+      "ageDays": 9,
       "analystCount": 4,
       "consensusLow": 30.54,
       "consensusHigh": 50.5,
@@ -1109,8 +1122,8 @@
       "status": "Open",
       "lifecycleStatus": "Open",
       "lifecycleEvent": "Hold",
-      "updatedAt": "2026-09-23T00:31:33Z",
-      "lastObservedAt": "2026-09-23T00:31:33Z"
+      "updatedAt": "2026-09-24T00:08:01Z",
+      "lastObservedAt": "2026-09-24T00:08:01Z"
     },
     {
       "id": "source_reported_1m_revision:KEYS:Oct_2029:2026-09-15:sa1m_2029E",
@@ -1135,7 +1148,7 @@
       "sourceWindow": "Seeking Alpha 1M",
       "windowLabel": "Source window: Seeking Alpha 1M",
       "neverInternal30D": true,
-      "ageDays": 8,
+      "ageDays": 9,
       "analystCount": 1,
       "consensusLow": 21.99,
       "consensusHigh": 21.99,
@@ -1146,8 +1159,8 @@
       "status": "Open",
       "lifecycleStatus": "Open",
       "lifecycleEvent": "Hold",
-      "updatedAt": "2026-09-23T00:31:33Z",
-      "lastObservedAt": "2026-09-23T00:31:33Z"
+      "updatedAt": "2026-09-24T00:08:01Z",
+      "lastObservedAt": "2026-09-24T00:08:01Z"
     }
   ],
   "changedSinceLastCollection": [],
@@ -1175,7 +1188,7 @@
       "sourceWindow": "Seeking Alpha 1M",
       "windowLabel": "Source window: Seeking Alpha 1M",
       "neverInternal30D": true,
-      "ageDays": 8,
+      "ageDays": 9,
       "analystCount": 33,
       "consensusLow": 25.22,
       "consensusHigh": 34.25,
@@ -1186,8 +1199,8 @@
       "status": "Open",
       "lifecycleStatus": "Open",
       "lifecycleEvent": "Hold",
-      "updatedAt": "2026-09-23T00:31:33Z",
-      "lastObservedAt": "2026-09-23T00:31:33Z"
+      "updatedAt": "2026-09-24T00:08:01Z",
+      "lastObservedAt": "2026-09-24T00:08:01Z"
     },
     {
       "id": "source_reported_1m_revision:NVDA:Jan_2030:2026-09-15:sa1m_2029E",
@@ -1212,7 +1225,7 @@
       "sourceWindow": "Seeking Alpha 1M",
       "windowLabel": "Source window: Seeking Alpha 1M",
       "neverInternal30D": true,
-      "ageDays": 8,
+      "ageDays": 9,
       "analystCount": 4,
       "consensusLow": 17.9,
       "consensusHigh": 30.37,
@@ -1223,8 +1236,8 @@
       "status": "Open",
       "lifecycleStatus": "Open",
       "lifecycleEvent": "Hold",
-      "updatedAt": "2026-09-23T00:31:33Z",
-      "lastObservedAt": "2026-09-23T00:31:33Z"
+      "updatedAt": "2026-09-24T00:08:01Z",
+      "lastObservedAt": "2026-09-24T00:08:01Z"
     },
     {
       "id": "source_reported_1m_revision:AVGO:Oct_2029:2026-09-15:sa1m_2029E",
@@ -1249,7 +1262,7 @@
       "sourceWindow": "Seeking Alpha 1M",
       "windowLabel": "Source window: Seeking Alpha 1M",
       "neverInternal30D": true,
-      "ageDays": 8,
+      "ageDays": 9,
       "analystCount": 4,
       "consensusLow": 30.54,
       "consensusHigh": 50.5,
@@ -1260,8 +1273,8 @@
       "status": "Open",
       "lifecycleStatus": "Open",
       "lifecycleEvent": "Hold",
-      "updatedAt": "2026-09-23T00:31:33Z",
-      "lastObservedAt": "2026-09-23T00:31:33Z"
+      "updatedAt": "2026-09-24T00:08:01Z",
+      "lastObservedAt": "2026-09-24T00:08:01Z"
     },
     {
       "id": "source_reported_1m_revision:KEYS:Oct_2029:2026-09-15:sa1m_2029E",
@@ -1286,7 +1299,7 @@
       "sourceWindow": "Seeking Alpha 1M",
       "windowLabel": "Source window: Seeking Alpha 1M",
       "neverInternal30D": true,
-      "ageDays": 8,
+      "ageDays": 9,
       "analystCount": 1,
       "consensusLow": 21.99,
       "consensusHigh": 21.99,
@@ -1297,15 +1310,15 @@
       "status": "Open",
       "lifecycleStatus": "Open",
       "lifecycleEvent": "Hold",
-      "updatedAt": "2026-09-23T00:31:33Z",
-      "lastObservedAt": "2026-09-23T00:31:33Z"
+      "updatedAt": "2026-09-24T00:08:01Z",
+      "lastObservedAt": "2026-09-24T00:08:01Z"
     }
   ],
-  "alertEngineLastEvaluated": "2026-09-23T00:31:33Z",
-  "alertEngineLastAttempt": "2026-09-23T00:31:33Z",
-  "alertEngineLastSuccessfulEvaluation": "2026-09-23T00:31:33Z",
+  "alertEngineLastEvaluated": "2026-09-24T00:08:01Z",
+  "alertEngineLastAttempt": "2026-09-24T00:08:01Z",
+  "alertEngineLastSuccessfulEvaluation": "2026-09-24T00:08:01Z",
   "alertEngineStatus": "ok",
   "alertEngineError": null,
   "oneShotActiveDays": 21,
-  "buildId": "46dead1cc155eb6e5e7485a283e879c05d254f5b3aff2fe577d6f34e734f54c7"
+  "buildId": "be7fa5450b63f79ccee7d2462fc6745c4babfa70723d30ed9caf38f034646183"
 }

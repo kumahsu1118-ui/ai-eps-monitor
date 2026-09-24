@@ -1,10 +1,10 @@
 {
   "NVDA": {
     "ticker": "NVDA",
-    "price": 228.87,
-    "lastClose": 228.87,
-    "afterHours": 228.56,
-    "priceAsOf": "4:00 PM 09/22/26; post-market $228.56 (-0.31 (-0.14%)), 7:59 PM",
+    "price": 225.51,
+    "lastClose": 225.51,
+    "afterHours": 225.09,
+    "priceAsOf": "4:00 PM 09/23/26; post-market $225.09 (-0.42 (-0.19%)), 7:55 PM",
     "lastEarnings": "8/26/2026",
     "nextEarnings": "Nov 25, 2026 · Post-Market · Estimated",
     "nextEarningsRaw": "11/25/2026 (Post-Market)",
@@ -144,15 +144,15 @@
       }
     },
     "sourceUrl": "https://seekingalpha.com/symbol/NVDA/earnings/estimates",
-    "updateTime": "2026-09-23T00:29:16Z",
+    "updateTime": "2026-09-24T00:05:51Z",
     "source": "Seeking Alpha",
     "dataGaps": [
       "7-day, 30-day and 90-day revision fields and absolute changes were not visible; only 1M/3M/6M percentage trends were shown.",
       "Fiscal/calendar distinction beyond the 'Fiscal Period Ending' header was not separately labeled on the estimates table."
     ],
-    "collectionAsOf": "2026-09-23T00:31:33Z",
-    "dataAsOf": "2026-09-23T00:31:33Z",
-    "lastSuccessfulCollection": "2026-09-23T00:31:33Z",
+    "collectionAsOf": "2026-09-24T00:08:01Z",
+    "dataAsOf": "2026-09-24T00:08:01Z",
+    "lastSuccessfulCollection": "2026-09-24T00:08:01Z",
     "collectionFailed": false,
     "drivers": {
       "ticker": "NVDA",
@@ -255,10 +255,10 @@
   },
   "AVGO": {
     "ticker": "AVGO",
-    "price": 364.54,
-    "lastClose": 364.54,
-    "afterHours": 366.03,
-    "priceAsOf": "4:00 PM 09/22/26; post-market $366.03 (+1.49 (+0.41%)), 7:59 PM",
+    "price": 354.99,
+    "lastClose": 354.99,
+    "afterHours": 355.36,
+    "priceAsOf": "4:00 PM 09/23/26; post-market $355.36 (+0.37 (+0.10%)), 7:52 PM",
     "lastEarnings": "9/2/2026",
     "nextEarnings": "Dec 10, 2026 · Post-Market · Estimated",
     "nextEarningsRaw": "12/10/2026 (Post-Market)",
@@ -398,15 +398,15 @@
       }
     },
     "sourceUrl": "https://seekingalpha.com/symbol/AVGO/earnings/estimates",
-    "updateTime": "2026-09-23T00:29:16Z",
+    "updateTime": "2026-09-24T00:05:51Z",
     "source": "Seeking Alpha",
     "dataGaps": [
       "7-day, 30-day and 90-day revision fields and absolute changes were not visible; only 1M/3M/6M percentage trends were shown.",
       "Fiscal/calendar distinction beyond the 'Fiscal Period Ending' header was not separately labeled on the estimates table."
     ],
-    "collectionAsOf": "2026-09-23T00:31:33Z",
-    "dataAsOf": "2026-09-23T00:31:33Z",
-    "lastSuccessfulCollection": "2026-09-23T00:31:33Z",
+    "collectionAsOf": "2026-09-24T00:08:01Z",
+    "dataAsOf": "2026-09-24T00:08:01Z",
+    "lastSuccessfulCollection": "2026-09-24T00:08:01Z",
     "collectionFailed": false,
     "drivers": {
       "ticker": "AVGO",
@@ -499,10 +499,10 @@
   },
   "TSM": {
     "ticker": "TSM",
-    "price": 452.0,
-    "lastClose": 452.0,
-    "afterHours": 451.2,
-    "priceAsOf": "4:00 PM 09/22/26; post-market $451.20 (-0.80 (-0.18%)), 7:59 PM",
+    "price": 446.57,
+    "lastClose": 446.57,
+    "afterHours": 447.0,
+    "priceAsOf": "4:00 PM 09/23/26; post-market $447.00 (+0.43 (+0.10%)), 7:49 PM",
     "lastEarnings": "7/16/2026",
     "nextEarnings": "Oct 16, 2026 · Estimated",
     "nextEarningsRaw": "10/16/2026 (Estimated)",
@@ -633,15 +633,15 @@
       }
     },
     "sourceUrl": "https://seekingalpha.com/symbol/TSM/earnings/estimates",
-    "updateTime": "2026-09-23T00:29:16Z",
+    "updateTime": "2026-09-24T00:05:51Z",
     "source": "Seeking Alpha",
     "dataGaps": [
       "7-day, 30-day and 90-day revision fields and absolute changes were not visible; only 1M/3M/6M percentage trends were shown.",
       "Fiscal/calendar distinction beyond the 'Fiscal Period Ending' header was not separately labeled on the estimates table."
     ],
-    "collectionAsOf": "2026-09-23T00:31:33Z",
-    "dataAsOf": "2026-09-23T00:31:33Z",
-    "lastSuccessfulCollection": "2026-09-23T00:31:33Z",
+    "collectionAsOf": "2026-09-24T00:08:01Z",
+    "dataAsOf": "2026-09-24T00:08:01Z",
+    "lastSuccessfulCollection": "2026-09-24T00:08:01Z",
     "collectionFailed": false,
     "drivers": {
       "ticker": "TSM",
@@ -699,10 +699,10 @@
   },
   "MSFT": {
     "ticker": "MSFT",
-    "price": 498.0,
-    "lastClose": 498.0,
-    "afterHours": 500.53,
-    "priceAsOf": "4:00 PM 09/22/26; post-market $500.53 (+2.53 (+0.51%)), 7:59 PM",
+    "price": 500.59,
+    "lastClose": 500.59,
+    "afterHours": 499.83,
+    "priceAsOf": "4:00 PM 09/23/26; post-market $499.83 (-0.76 (-0.15%)), 7:50 PM",
     "lastEarnings": "7/29/2026",
     "nextEarnings": "Oct 29, 2026 · Post-Market · Estimated",
     "nextEarningsRaw": "10/29/2026 (Post-Market)",
@@ -842,16 +842,15 @@
       }
     },
     "sourceUrl": "https://seekingalpha.com/symbol/MSFT/earnings/estimates",
-    "updateTime": "2026-09-23T00:29:16Z",
+    "updateTime": "2026-09-24T00:05:51Z",
     "source": "Seeking Alpha",
     "dataGaps": [
       "7-day, 30-day and 90-day revision fields and absolute changes were not visible; only 1M/3M/6M percentage trends were shown.",
-      "Fiscal/calendar distinction beyond the 'Fiscal Period Ending' header was not separately labeled on the estimates table.",
-      "MSFT Jun 2026 (CY2026E) not listed on SA annual revisions table; 1M/3M/6M = Data unavailable."
+      "Fiscal/calendar distinction beyond the 'Fiscal Period Ending' header was not separately labeled on the estimates table."
     ],
-    "collectionAsOf": "2026-09-23T00:31:33Z",
-    "dataAsOf": "2026-09-23T00:31:33Z",
-    "lastSuccessfulCollection": "2026-09-23T00:31:33Z",
+    "collectionAsOf": "2026-09-24T00:08:01Z",
+    "dataAsOf": "2026-09-24T00:08:01Z",
+    "lastSuccessfulCollection": "2026-09-24T00:08:01Z",
     "collectionFailed": false,
     "drivers": {
       "ticker": "MSFT",
@@ -914,10 +913,10 @@
   },
   "BE": {
     "ticker": "BE",
-    "price": 276.53,
-    "lastClose": 276.53,
-    "afterHours": 277.4,
-    "priceAsOf": "4:00 PM 09/22/26; post-market $277.40 (+0.87 (+0.31%)), 7:59 PM",
+    "price": 275.19,
+    "lastClose": 275.19,
+    "afterHours": 275.31,
+    "priceAsOf": "4:00 PM 09/23/26; post-market $275.31 (+0.12 (+0.04%)), 7:53 PM",
     "lastEarnings": "7/28/2026",
     "nextEarnings": "Oct 29, 2026 · Post-Market · Estimated",
     "nextEarningsRaw": "10/29/2026 (Post-Market)",
@@ -1065,15 +1064,15 @@
       }
     },
     "sourceUrl": "https://seekingalpha.com/symbol/BE/earnings/estimates",
-    "updateTime": "2026-09-23T00:29:16Z",
+    "updateTime": "2026-09-24T00:05:51Z",
     "source": "Seeking Alpha",
     "dataGaps": [
       "7-day, 30-day and 90-day revision fields and absolute changes were not visible; only 1M/3M/6M percentage trends were shown.",
       "Fiscal/calendar distinction beyond the 'Fiscal Period Ending' header was not separately labeled on the estimates table."
     ],
-    "collectionAsOf": "2026-09-23T00:31:33Z",
-    "dataAsOf": "2026-09-23T00:31:33Z",
-    "lastSuccessfulCollection": "2026-09-23T00:31:33Z",
+    "collectionAsOf": "2026-09-24T00:08:01Z",
+    "dataAsOf": "2026-09-24T00:08:01Z",
+    "lastSuccessfulCollection": "2026-09-24T00:08:01Z",
     "collectionFailed": false,
     "drivers": {
       "ticker": "BE",
@@ -1126,10 +1125,10 @@
   },
   "KEYS": {
     "ticker": "KEYS",
-    "price": 347.32,
-    "lastClose": 347.32,
-    "afterHours": 347.32,
-    "priceAsOf": "4:00 PM 09/22/26; post-market $347.32, 7:46 PM",
+    "price": 353.36,
+    "lastClose": 353.36,
+    "afterHours": 353.24,
+    "priceAsOf": "4:00 PM 09/23/26; post-market $353.24 (-0.12 (-0.03%)), 7:45 PM",
     "lastEarnings": "8/18/2026",
     "nextEarnings": null,
     "nextEarningsRaw": null,
@@ -1269,15 +1268,15 @@
       }
     },
     "sourceUrl": "https://seekingalpha.com/symbol/KEYS/earnings/estimates",
-    "updateTime": "2026-09-23T00:29:16Z",
+    "updateTime": "2026-09-24T00:05:51Z",
     "source": "Seeking Alpha",
     "dataGaps": [
       "7-day, 30-day and 90-day revision fields and absolute changes were not visible; only 1M/3M/6M percentage trends were shown.",
       "Fiscal/calendar distinction beyond the 'Fiscal Period Ending' header was not separately labeled on the estimates table."
     ],
-    "collectionAsOf": "2026-09-23T00:31:33Z",
-    "dataAsOf": "2026-09-23T00:31:33Z",
-    "lastSuccessfulCollection": "2026-09-23T00:31:33Z",
+    "collectionAsOf": "2026-09-24T00:08:01Z",
+    "dataAsOf": "2026-09-24T00:08:01Z",
+    "lastSuccessfulCollection": "2026-09-24T00:08:01Z",
     "collectionFailed": false,
     "drivers": {
       "ticker": "KEYS",
@@ -1323,5 +1322,5 @@
     },
     "dataFreshnessBadge": null
   },
-  "_buildId": "46dead1cc155eb6e5e7485a283e879c05d254f5b3aff2fe577d6f34e734f54c7"
+  "_buildId": "be7fa5450b63f79ccee7d2462fc6745c4babfa70723d30ed9caf38f034646183"
 }
