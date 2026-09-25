@@ -1,8 +1,8 @@
 {
-  "buildId": "be7fa5450b63f79ccee7d2462fc6745c4babfa70723d30ed9caf38f034646183",
+  "buildId": "5cb9e824cb335d6f6768b6495e4a8172051a951ff1e904333e580ae6ceaa297b",
   "meta": {
-    "lastUpdated": "2026-09-24T00:08:01Z",
-    "lastUpdatedDisplay": "Sep 24, 2026 08:08 Taipei Time",
+    "lastUpdated": "2026-09-25T00:05:04Z",
+    "lastUpdatedDisplay": "Sep 25, 2026 08:05 Taipei Time",
     "primarySource": "Seeking Alpha",
     "snapshotFile": "snapshot.json",
     "revisionWindowNote": "Seeking Alpha displayed 1M/3M/6M revision % only; 7D/30D/90D fields = Data unavailable. Dashboard uses 1M as the primary short-window revision proxy (not identical to 30D).",
@@ -12,16 +12,16 @@
     "trueCyStatus": "unavailable — need quarterly consensus",
     "momentumFormula": "Deterministic EPS momentum from mapped Y+1 and Y+2 SA 1M revision % only (no management guidance / drivers): both >= +3 → Strong Positive; both >= +1 → Positive; both <= -3 → Strong Negative; both <= -1 → Negative; else Neutral. Missing either leg → Neutral.",
     "revisionRegimeDoc": "Revision regime from mapped Y+1 (nearTerm) and Y+2 (longTerm) SA 1M %: Y+1<0 and Y+2>=+5 → Back-end Loaded / Divergent; Y+1>=+5 and Y+2<0 → Front-loaded / Divergent; both >= +3 → Broad Upward Revision; both <= -3 → Broad Downward Revision; both near 0 (|x|<1) → Stable; else Mixed / Neutral-adjacent. Complements Momentum (which can be Neutral when legs diverge).",
-    "consensusDataAsOf": "2026-09-24T00:08:01Z",
-    "consensusDataAsOfDisplay": "Sep 24, 2026 08:08 Taipei Time",
-    "lastSuccessfulCollection": "2026-09-24T00:08:01Z",
-    "lastSuccessfulCollectionDisplay": "Sep 24, 2026 08:08 Taipei Time",
-    "sitePublished": "2026-09-24T00:09:39Z",
-    "sitePublishedDisplay": "Sep 24, 2026 08:09 Taipei Time",
+    "consensusDataAsOf": "2026-09-25T00:05:04Z",
+    "consensusDataAsOfDisplay": "Sep 25, 2026 08:05 Taipei Time",
+    "lastSuccessfulCollection": "2026-09-25T00:05:04Z",
+    "lastSuccessfulCollectionDisplay": "Sep 25, 2026 08:05 Taipei Time",
+    "sitePublished": "2026-09-25T00:05:11Z",
+    "sitePublishedDisplay": "Sep 25, 2026 08:05 Taipei Time",
     "dataStale": false,
-    "nextExpected": "2026-09-25T00:00:00Z",
-    "staleAfter": "2026-09-25T06:00:00Z",
-    "lastDueGraceDeadline": "2026-09-23T06:00:00Z",
+    "nextExpected": "2026-09-28T00:00:00Z",
+    "staleAfter": "2026-09-28T06:00:00Z",
+    "lastDueGraceDeadline": "2026-09-24T06:00:00Z",
     "freshnessRule": "weekday_0800_taipei_plus_grace",
     "graceHours": 6,
     "displayMappedYears": [
@@ -35,12 +35,12 @@
       "2027E",
       "2028E"
     ],
-    "dataVersion": "be7fa5450b63f79ccee7d2462fc6745c4babfa70723d30ed9caf38f034646183",
-    "refreshVersion": "d1bb445b7e27cde1e662c491823de4ed3488b3cf728e51d750715b03177a9061",
-    "buildId": "be7fa5450b63f79ccee7d2462fc6745c4babfa70723d30ed9caf38f034646183",
-    "alertEngineLastEvaluated": "2026-09-24T00:08:01Z",
-    "alertEngineLastAttempt": "2026-09-24T00:08:01Z",
-    "alertEngineLastSuccessfulEvaluation": "2026-09-24T00:08:01Z",
+    "dataVersion": "5cb9e824cb335d6f6768b6495e4a8172051a951ff1e904333e580ae6ceaa297b",
+    "refreshVersion": "979af61b9fde011572535d3e56e1f341f3884a13861bd87a294217ee4fa899c7",
+    "buildId": "5cb9e824cb335d6f6768b6495e4a8172051a951ff1e904333e580ae6ceaa297b",
+    "alertEngineLastEvaluated": "2026-09-25T00:05:04Z",
+    "alertEngineLastAttempt": "2026-09-25T00:05:04Z",
+    "alertEngineLastSuccessfulEvaluation": "2026-09-25T00:05:04Z",
     "alertEngineStatus": "ok",
     "alertEngineError": null,
     "oneShotActiveDays": 21,
@@ -88,17 +88,17 @@
     },
     "schemaVersion": "1",
     "appVersion": "824c9c361deeef2378513f18fc9eb9db7ec8fb4c4fcf179e52778164461f6d23",
-    "releaseVersion": "e3230e473d4e6d1e65883ccaf0aefd59bb020fab58b44a908493ff0b278ad107",
-    "generationRunId": "20260924T000801106638Z_d9ccf4b2556a1466aa985d7b15fa1c696d028babaa1dfb767d8a40b6e7dadfaa_00a814a405ea4884a39102106380a4f0",
-    "canonicalHeadSha": "3e0c0f4c6d36c7f7e926e88e7091be9d0dc40039"
+    "releaseVersion": "5f2cf03688512a1ae5e329756540556371b2e11bbc487e36f80b1d7436048266",
+    "generationRunId": "20260925T000504013550Z_3f4015f2f6f9692355b88ce09329a4bf45efdb9a7356f23e2a6479df943e236f_6147f977495e4d52bd10e869b7f3a081",
+    "canonicalHeadSha": "22340fae2e7538d1b025e0b16bb3bd97b1dc2ed6"
   },
   "companies": {
     "NVDA": {
       "ticker": "NVDA",
-      "price": 225.51,
-      "lastClose": 225.51,
-      "afterHours": 225.09,
-      "priceAsOf": "4:00 PM 09/23/26; post-market $225.09 (-0.42 (-0.19%)), 7:55 PM",
+      "price": 224.58,
+      "lastClose": 224.58,
+      "afterHours": 223.88,
+      "priceAsOf": "4:00 PM 09/24/26; post-market $223.88 (-0.70 (-0.31%)), 7:53 PM",
       "lastEarnings": "8/26/2026",
       "nextEarnings": "Nov 25, 2026 · Post-Market · Estimated",
       "nextEarningsRaw": "11/25/2026 (Post-Market)",
@@ -238,15 +238,15 @@
         }
       },
       "sourceUrl": "https://seekingalpha.com/symbol/NVDA/earnings/estimates",
-      "updateTime": "2026-09-24T00:05:51Z",
+      "updateTime": "2026-09-24T23:57:17Z",
       "source": "Seeking Alpha",
       "dataGaps": [
         "7-day, 30-day and 90-day revision fields and absolute changes were not visible; only 1M/3M/6M percentage trends were shown.",
         "Fiscal/calendar distinction beyond the 'Fiscal Period Ending' header was not separately labeled on the estimates table."
       ],
-      "collectionAsOf": "2026-09-24T00:08:01Z",
-      "dataAsOf": "2026-09-24T00:08:01Z",
-      "lastSuccessfulCollection": "2026-09-24T00:08:01Z",
+      "collectionAsOf": "2026-09-25T00:05:04Z",
+      "dataAsOf": "2026-09-25T00:05:04Z",
+      "lastSuccessfulCollection": "2026-09-25T00:05:04Z",
       "collectionFailed": false,
       "drivers": {
         "ticker": "NVDA",
@@ -349,10 +349,10 @@
     },
     "AVGO": {
       "ticker": "AVGO",
-      "price": 354.99,
-      "lastClose": 354.99,
-      "afterHours": 355.36,
-      "priceAsOf": "4:00 PM 09/23/26; post-market $355.36 (+0.37 (+0.10%)), 7:52 PM",
+      "price": 350.36,
+      "lastClose": 350.36,
+      "afterHours": 350.25,
+      "priceAsOf": "4:00 PM 09/24/26; post-market $350.25 (-0.11 (-0.03%)), 7:51 PM",
       "lastEarnings": "9/2/2026",
       "nextEarnings": "Dec 10, 2026 · Post-Market · Estimated",
       "nextEarningsRaw": "12/10/2026 (Post-Market)",
@@ -363,7 +363,7 @@
       "fyNote": "Annual view; table column shown as 'Fiscal Period Ending'.",
       "momentum": "Neutral",
       "momentumFormula": "Deterministic EPS momentum from mapped Y+1 and Y+2 SA 1M revision % only (no management guidance / drivers): both >= +3 → Strong Positive; both >= +1 → Positive; both <= -3 → Strong Negative; both <= -1 → Negative; else Neutral. Missing either leg → Neutral.",
-      "nearTermRevision": -0.97,
+      "nearTermRevision": -0.98,
       "longTermRevision": 15.7,
       "revisionRegime": "Back-end Loaded / Divergent",
       "revisionRegimeDoc": "Revision regime from mapped Y+1 (nearTerm) and Y+2 (longTerm) SA 1M %: Y+1<0 and Y+2>=+5 → Back-end Loaded / Divergent; Y+1>=+5 and Y+2<0 → Front-loaded / Divergent; both >= +3 → Broad Upward Revision; both <= -3 → Broad Downward Revision; both near 0 (|x|<1) → Stable; else Mixed / Neutral-adjacent. Complements Momentum (which can be Neutral when legs diverge).",
@@ -374,9 +374,9 @@
           "low": 11.35,
           "analysts": 46.0,
           "dispersion": 0.08833619210977711,
-          "rev1M": 0.23,
-          "rev3M": 0.29,
-          "rev6M": 2.48,
+          "rev1M": 0.24,
+          "rev3M": 0.3,
+          "rev6M": 2.49,
           "reportedFiscalLabel": "Oct 2026",
           "calendarAlignment": "CY2026",
           "mappedYear": "2026E",
@@ -389,9 +389,9 @@
           "low": 17.47,
           "analysts": 47.0,
           "dispersion": 0.2564499484004129,
-          "rev1M": -0.97,
-          "rev3M": -0.4,
-          "rev6M": 8.66,
+          "rev1M": -0.98,
+          "rev3M": -0.41,
+          "rev6M": 8.64,
           "reportedFiscalLabel": "Oct 2027",
           "calendarAlignment": "CY2027",
           "mappedYear": "2027E",
@@ -436,9 +436,9 @@
           "low": 11.35,
           "analysts": 46.0,
           "dispersion": 0.08833619210977711,
-          "rev1M": 0.23,
-          "rev3M": 0.29,
-          "rev6M": 2.48,
+          "rev1M": 0.24,
+          "rev3M": 0.3,
+          "rev6M": 2.49,
           "reportedFiscalLabel": "Oct 2026",
           "calendarAlignment": "CY2026",
           "mappedYear": "2026E",
@@ -451,9 +451,9 @@
           "low": 17.47,
           "analysts": 47.0,
           "dispersion": 0.2564499484004129,
-          "rev1M": -0.97,
-          "rev3M": -0.4,
-          "rev6M": 8.66,
+          "rev1M": -0.98,
+          "rev3M": -0.41,
+          "rev6M": 8.64,
           "reportedFiscalLabel": "Oct 2027",
           "calendarAlignment": "CY2027",
           "mappedYear": "2027E",
@@ -492,15 +492,15 @@
         }
       },
       "sourceUrl": "https://seekingalpha.com/symbol/AVGO/earnings/estimates",
-      "updateTime": "2026-09-24T00:05:51Z",
+      "updateTime": "2026-09-24T23:57:17Z",
       "source": "Seeking Alpha",
       "dataGaps": [
         "7-day, 30-day and 90-day revision fields and absolute changes were not visible; only 1M/3M/6M percentage trends were shown.",
         "Fiscal/calendar distinction beyond the 'Fiscal Period Ending' header was not separately labeled on the estimates table."
       ],
-      "collectionAsOf": "2026-09-24T00:08:01Z",
-      "dataAsOf": "2026-09-24T00:08:01Z",
-      "lastSuccessfulCollection": "2026-09-24T00:08:01Z",
+      "collectionAsOf": "2026-09-25T00:05:04Z",
+      "dataAsOf": "2026-09-25T00:05:04Z",
+      "lastSuccessfulCollection": "2026-09-25T00:05:04Z",
       "collectionFailed": false,
       "drivers": {
         "ticker": "AVGO",
@@ -593,13 +593,13 @@
     },
     "TSM": {
       "ticker": "TSM",
-      "price": 446.57,
-      "lastClose": 446.57,
-      "afterHours": 447.0,
-      "priceAsOf": "4:00 PM 09/23/26; post-market $447.00 (+0.43 (+0.10%)), 7:49 PM",
+      "price": 451.15,
+      "lastClose": 451.15,
+      "afterHours": 450.15,
+      "priceAsOf": "4:00 PM 09/24/26; post-market $450.15 (-1.00 (-0.22%)), 7:51 PM",
       "lastEarnings": "7/16/2026",
-      "nextEarnings": "Oct 16, 2026 · Estimated",
-      "nextEarningsRaw": "10/16/2026 (Estimated)",
+      "nextEarnings": "Oct 15, 2026 · Estimated",
+      "nextEarningsRaw": "10/15/2026 (Estimated)",
       "nextEarningsStatus": "estimated",
       "nextEarningsSource": "Seeking Alpha",
       "nextEarningsSourceUrl": null,
@@ -670,7 +670,7 @@
           "rev3M": null,
           "rev6M": null,
           "reportedFiscalLabel": null,
-          "calendarAlignment": "CY2029",
+          "calendarAlignment": null,
           "mappedYear": "2029E",
           "trueCalendarYearEps": null,
           "slotMappingOnly": true
@@ -727,15 +727,15 @@
         }
       },
       "sourceUrl": "https://seekingalpha.com/symbol/TSM/earnings/estimates",
-      "updateTime": "2026-09-24T00:05:51Z",
+      "updateTime": "2026-09-24T23:57:17Z",
       "source": "Seeking Alpha",
       "dataGaps": [
         "7-day, 30-day and 90-day revision fields and absolute changes were not visible; only 1M/3M/6M percentage trends were shown.",
         "Fiscal/calendar distinction beyond the 'Fiscal Period Ending' header was not separately labeled on the estimates table."
       ],
-      "collectionAsOf": "2026-09-24T00:08:01Z",
-      "dataAsOf": "2026-09-24T00:08:01Z",
-      "lastSuccessfulCollection": "2026-09-24T00:08:01Z",
+      "collectionAsOf": "2026-09-25T00:05:04Z",
+      "dataAsOf": "2026-09-25T00:05:04Z",
+      "lastSuccessfulCollection": "2026-09-25T00:05:04Z",
       "collectionFailed": false,
       "drivers": {
         "ticker": "TSM",
@@ -793,10 +793,10 @@
     },
     "MSFT": {
       "ticker": "MSFT",
-      "price": 500.59,
-      "lastClose": 500.59,
-      "afterHours": 499.83,
-      "priceAsOf": "4:00 PM 09/23/26; post-market $499.83 (-0.76 (-0.15%)), 7:50 PM",
+      "price": 497.93,
+      "lastClose": 497.93,
+      "afterHours": 496.08,
+      "priceAsOf": "4:00 PM 09/24/26; post-market $496.08 (-1.85 (-0.37%)), 7:45 PM",
       "lastEarnings": "7/29/2026",
       "nextEarnings": "Oct 29, 2026 · Post-Market · Estimated",
       "nextEarningsRaw": "10/29/2026 (Post-Market)",
@@ -936,15 +936,15 @@
         }
       },
       "sourceUrl": "https://seekingalpha.com/symbol/MSFT/earnings/estimates",
-      "updateTime": "2026-09-24T00:05:51Z",
+      "updateTime": "2026-09-24T23:57:17Z",
       "source": "Seeking Alpha",
       "dataGaps": [
         "7-day, 30-day and 90-day revision fields and absolute changes were not visible; only 1M/3M/6M percentage trends were shown.",
         "Fiscal/calendar distinction beyond the 'Fiscal Period Ending' header was not separately labeled on the estimates table."
       ],
-      "collectionAsOf": "2026-09-24T00:08:01Z",
-      "dataAsOf": "2026-09-24T00:08:01Z",
-      "lastSuccessfulCollection": "2026-09-24T00:08:01Z",
+      "collectionAsOf": "2026-09-25T00:05:04Z",
+      "dataAsOf": "2026-09-25T00:05:04Z",
+      "lastSuccessfulCollection": "2026-09-25T00:05:04Z",
       "collectionFailed": false,
       "drivers": {
         "ticker": "MSFT",
@@ -1007,10 +1007,10 @@
     },
     "BE": {
       "ticker": "BE",
-      "price": 275.19,
-      "lastClose": 275.19,
-      "afterHours": 275.31,
-      "priceAsOf": "4:00 PM 09/23/26; post-market $275.31 (+0.12 (+0.04%)), 7:53 PM",
+      "price": 266.65,
+      "lastClose": 266.65,
+      "afterHours": 265.69,
+      "priceAsOf": "4:00 PM 09/24/26; post-market $265.69 (-0.96 (-0.36%)), 7:41 PM",
       "lastEarnings": "7/28/2026",
       "nextEarnings": "Oct 29, 2026 · Post-Market · Estimated",
       "nextEarningsRaw": "10/29/2026 (Post-Market)",
@@ -1158,15 +1158,15 @@
         }
       },
       "sourceUrl": "https://seekingalpha.com/symbol/BE/earnings/estimates",
-      "updateTime": "2026-09-24T00:05:51Z",
+      "updateTime": "2026-09-24T23:57:17Z",
       "source": "Seeking Alpha",
       "dataGaps": [
         "7-day, 30-day and 90-day revision fields and absolute changes were not visible; only 1M/3M/6M percentage trends were shown.",
         "Fiscal/calendar distinction beyond the 'Fiscal Period Ending' header was not separately labeled on the estimates table."
       ],
-      "collectionAsOf": "2026-09-24T00:08:01Z",
-      "dataAsOf": "2026-09-24T00:08:01Z",
-      "lastSuccessfulCollection": "2026-09-24T00:08:01Z",
+      "collectionAsOf": "2026-09-25T00:05:04Z",
+      "dataAsOf": "2026-09-25T00:05:04Z",
+      "lastSuccessfulCollection": "2026-09-25T00:05:04Z",
       "collectionFailed": false,
       "drivers": {
         "ticker": "BE",
@@ -1219,10 +1219,10 @@
     },
     "KEYS": {
       "ticker": "KEYS",
-      "price": 353.36,
-      "lastClose": 353.36,
-      "afterHours": 353.24,
-      "priceAsOf": "4:00 PM 09/23/26; post-market $353.24 (-0.12 (-0.03%)), 7:45 PM",
+      "price": 357.54,
+      "lastClose": 357.54,
+      "afterHours": 357.44,
+      "priceAsOf": "4:00 PM 09/24/26; post-market $357.44 (-0.10 (-0.03%)), 7:32 PM",
       "lastEarnings": "8/18/2026",
       "nextEarnings": null,
       "nextEarningsRaw": null,
@@ -1362,15 +1362,15 @@
         }
       },
       "sourceUrl": "https://seekingalpha.com/symbol/KEYS/earnings/estimates",
-      "updateTime": "2026-09-24T00:05:51Z",
+      "updateTime": "2026-09-24T23:57:17Z",
       "source": "Seeking Alpha",
       "dataGaps": [
         "7-day, 30-day and 90-day revision fields and absolute changes were not visible; only 1M/3M/6M percentage trends were shown.",
         "Fiscal/calendar distinction beyond the 'Fiscal Period Ending' header was not separately labeled on the estimates table."
       ],
-      "collectionAsOf": "2026-09-24T00:08:01Z",
-      "dataAsOf": "2026-09-24T00:08:01Z",
-      "lastSuccessfulCollection": "2026-09-24T00:08:01Z",
+      "collectionAsOf": "2026-09-25T00:05:04Z",
+      "dataAsOf": "2026-09-25T00:05:04Z",
+      "lastSuccessfulCollection": "2026-09-25T00:05:04Z",
       "collectionFailed": false,
       "drivers": {
         "ticker": "KEYS",
@@ -1421,20 +1421,20 @@
     "rows": [
       {
         "ticker": "NVDA",
-        "price": 225.51,
-        "lastClose": 225.51,
-        "afterHours": 225.09,
+        "price": 224.58,
+        "lastClose": 224.58,
+        "afterHours": 223.88,
         "periods": {
           "2026E": {
             "eps": 9.31,
-            "pe": 24.22234156820623,
+            "pe": 24.122448979591837,
             "rev1M": 0.14,
             "reportedFiscalLabel": "Jan 2027",
             "reportedFiscalPeriodEnding": "Jan 2027",
             "trueCalendarYearEps": null,
             "growthFromPrior": null,
             "analysts": 51.0,
-            "growthAdjustedPe": 0.4805805289361476,
+            "growthAdjustedPe": 0.4785986217395239,
             "internal": {
               "30D": {
                 "windowDays": 30,
@@ -1445,9 +1445,9 @@
                 "startEps": null,
                 "endEps": 9.31,
                 "startDate": null,
-                "endDate": "2026-09-24",
-                "anchorDate": "2026-09-24",
-                "targetDate": "2026-08-25"
+                "endDate": "2026-09-25",
+                "anchorDate": "2026-09-25",
+                "targetDate": "2026-08-26"
               },
               "60D": {
                 "windowDays": 60,
@@ -1458,9 +1458,9 @@
                 "startEps": null,
                 "endEps": 9.31,
                 "startDate": null,
-                "endDate": "2026-09-24",
-                "anchorDate": "2026-09-24",
-                "targetDate": "2026-07-26"
+                "endDate": "2026-09-25",
+                "anchorDate": "2026-09-25",
+                "targetDate": "2026-07-27"
               },
               "90D": {
                 "windowDays": 90,
@@ -1471,22 +1471,22 @@
                 "startEps": null,
                 "endEps": 9.31,
                 "startDate": null,
-                "endDate": "2026-09-24",
-                "anchorDate": "2026-09-24",
-                "targetDate": "2026-06-26"
+                "endDate": "2026-09-25",
+                "anchorDate": "2026-09-25",
+                "targetDate": "2026-06-27"
               }
             }
           },
           "2027E": {
             "eps": 15.68,
-            "pe": 14.38201530612245,
+            "pe": 14.322704081632654,
             "rev1M": 1.81,
             "reportedFiscalLabel": "Jan 2028",
             "reportedFiscalPeriodEnding": "Jan 2028",
             "trueCalendarYearEps": null,
             "growthFromPrior": 0.6842105263157894,
             "analysts": 53.0,
-            "growthAdjustedPe": 0.28534468905583765,
+            "growthAdjustedPe": 0.2841679316578423,
             "internal": {
               "30D": {
                 "windowDays": 30,
@@ -1497,9 +1497,9 @@
                 "startEps": null,
                 "endEps": 15.68,
                 "startDate": null,
-                "endDate": "2026-09-24",
-                "anchorDate": "2026-09-24",
-                "targetDate": "2026-08-25"
+                "endDate": "2026-09-25",
+                "anchorDate": "2026-09-25",
+                "targetDate": "2026-08-26"
               },
               "60D": {
                 "windowDays": 60,
@@ -1510,9 +1510,9 @@
                 "startEps": null,
                 "endEps": 15.68,
                 "startDate": null,
-                "endDate": "2026-09-24",
-                "anchorDate": "2026-09-24",
-                "targetDate": "2026-07-26"
+                "endDate": "2026-09-25",
+                "anchorDate": "2026-09-25",
+                "targetDate": "2026-07-27"
               },
               "90D": {
                 "windowDays": 90,
@@ -1523,22 +1523,22 @@
                 "startEps": null,
                 "endEps": 15.68,
                 "startDate": null,
-                "endDate": "2026-09-24",
-                "anchorDate": "2026-09-24",
-                "targetDate": "2026-06-26"
+                "endDate": "2026-09-25",
+                "anchorDate": "2026-09-25",
+                "targetDate": "2026-06-27"
               }
             }
           },
           "2028E": {
             "eps": 21.06,
-            "pe": 10.707977207977208,
+            "pe": 10.663817663817666,
             "rev1M": 2.98,
             "reportedFiscalLabel": "Jan 2029",
             "reportedFiscalPeriodEnding": "Jan 2029",
             "trueCalendarYearEps": null,
             "growthFromPrior": 0.3431122448979591,
             "analysts": 32.0,
-            "growthAdjustedPe": 0.21245036678041473,
+            "growthAdjustedPe": 0.21157422452017893,
             "internal": {
               "30D": {
                 "windowDays": 30,
@@ -1549,9 +1549,9 @@
                 "startEps": null,
                 "endEps": 21.06,
                 "startDate": null,
-                "endDate": "2026-09-24",
-                "anchorDate": "2026-09-24",
-                "targetDate": "2026-08-25"
+                "endDate": "2026-09-25",
+                "anchorDate": "2026-09-25",
+                "targetDate": "2026-08-26"
               },
               "60D": {
                 "windowDays": 60,
@@ -1562,9 +1562,9 @@
                 "startEps": null,
                 "endEps": 21.06,
                 "startDate": null,
-                "endDate": "2026-09-24",
-                "anchorDate": "2026-09-24",
-                "targetDate": "2026-07-26"
+                "endDate": "2026-09-25",
+                "anchorDate": "2026-09-25",
+                "targetDate": "2026-07-27"
               },
               "90D": {
                 "windowDays": 90,
@@ -1575,22 +1575,22 @@
                 "startEps": null,
                 "endEps": 21.06,
                 "startDate": null,
-                "endDate": "2026-09-24",
-                "anchorDate": "2026-09-24",
-                "targetDate": "2026-06-26"
+                "endDate": "2026-09-25",
+                "anchorDate": "2026-09-25",
+                "targetDate": "2026-06-27"
               }
             }
           },
           "2029E": {
             "eps": 23.4,
-            "pe": 9.637179487179488,
+            "pe": 9.597435897435899,
             "rev1M": 11.02,
             "reportedFiscalLabel": "Jan 2030",
             "reportedFiscalPeriodEnding": "Jan 2030",
             "trueCalendarYearEps": null,
             "growthFromPrior": 0.1111111111111111,
             "analysts": 4.0,
-            "growthAdjustedPe": 0.19120533010237326,
+            "growthAdjustedPe": 0.19041680206816103,
             "internal": {
               "30D": {
                 "windowDays": 30,
@@ -1601,9 +1601,9 @@
                 "startEps": null,
                 "endEps": 23.4,
                 "startDate": null,
-                "endDate": "2026-09-24",
-                "anchorDate": "2026-09-24",
-                "targetDate": "2026-08-25"
+                "endDate": "2026-09-25",
+                "anchorDate": "2026-09-25",
+                "targetDate": "2026-08-26"
               },
               "60D": {
                 "windowDays": 60,
@@ -1614,9 +1614,9 @@
                 "startEps": null,
                 "endEps": 23.4,
                 "startDate": null,
-                "endDate": "2026-09-24",
-                "anchorDate": "2026-09-24",
-                "targetDate": "2026-07-26"
+                "endDate": "2026-09-25",
+                "anchorDate": "2026-09-25",
+                "targetDate": "2026-07-27"
               },
               "90D": {
                 "windowDays": 90,
@@ -1627,9 +1627,9 @@
                 "startEps": null,
                 "endEps": 23.4,
                 "startDate": null,
-                "endDate": "2026-09-24",
-                "anchorDate": "2026-09-24",
-                "targetDate": "2026-06-26"
+                "endDate": "2026-09-25",
+                "anchorDate": "2026-09-25",
+                "targetDate": "2026-06-27"
               }
             }
           }
@@ -1645,21 +1645,21 @@
         "nearTermRevision": 1.81,
         "longTermRevision": 2.98,
         "revisionRegime": "Mild Upward",
-        "lastUpdated": "2026-09-24T00:08:01Z",
+        "lastUpdated": "2026-09-25T00:05:04Z",
         "eps26": 9.31,
-        "pe26": 24.22234156820623,
+        "pe26": 24.122448979591837,
         "reportedFy26": "Jan 2027",
         "trueCalendarYearEps26": null,
         "eps27": 15.68,
-        "pe27": 14.38201530612245,
+        "pe27": 14.322704081632654,
         "reportedFy27": "Jan 2028",
         "trueCalendarYearEps27": null,
         "eps28": 21.06,
-        "pe28": 10.707977207977208,
+        "pe28": 10.663817663817666,
         "reportedFy28": "Jan 2029",
         "trueCalendarYearEps28": null,
         "eps29": 23.4,
-        "pe29": 9.637179487179488,
+        "pe29": 9.597435897435899,
         "reportedFy29": "Jan 2030",
         "trueCalendarYearEps29": null,
         "rev1M": 1.81,
@@ -1671,20 +1671,20 @@
       },
       {
         "ticker": "AVGO",
-        "price": 354.99,
-        "lastClose": 354.99,
-        "afterHours": 355.36,
+        "price": 350.36,
+        "lastClose": 350.36,
+        "afterHours": 350.25,
         "periods": {
           "2026E": {
             "eps": 11.66,
-            "pe": 30.445111492281303,
-            "rev1M": 0.23,
+            "pe": 30.04802744425386,
+            "rev1M": 0.24,
             "reportedFiscalLabel": "Oct 2026",
             "reportedFiscalPeriodEnding": "Oct 2026",
             "trueCalendarYearEps": null,
             "growthFromPrior": null,
             "analysts": 46.0,
-            "growthAdjustedPe": 0.49190109655645015,
+            "growthAdjustedPe": 0.4854854170244736,
             "internal": {
               "30D": {
                 "windowDays": 30,
@@ -1695,9 +1695,9 @@
                 "startEps": null,
                 "endEps": 11.66,
                 "startDate": null,
-                "endDate": "2026-09-24",
-                "anchorDate": "2026-09-24",
-                "targetDate": "2026-08-25"
+                "endDate": "2026-09-25",
+                "anchorDate": "2026-09-25",
+                "targetDate": "2026-08-26"
               },
               "60D": {
                 "windowDays": 60,
@@ -1708,9 +1708,9 @@
                 "startEps": null,
                 "endEps": 11.66,
                 "startDate": null,
-                "endDate": "2026-09-24",
-                "anchorDate": "2026-09-24",
-                "targetDate": "2026-07-26"
+                "endDate": "2026-09-25",
+                "anchorDate": "2026-09-25",
+                "targetDate": "2026-07-27"
               },
               "90D": {
                 "windowDays": 90,
@@ -1721,22 +1721,22 @@
                 "startEps": null,
                 "endEps": 11.66,
                 "startDate": null,
-                "endDate": "2026-09-24",
-                "anchorDate": "2026-09-24",
-                "targetDate": "2026-06-26"
+                "endDate": "2026-09-25",
+                "anchorDate": "2026-09-25",
+                "targetDate": "2026-06-27"
               }
             }
           },
           "2027E": {
             "eps": 19.38,
-            "pe": 18.317337461300312,
-            "rev1M": -0.97,
+            "pe": 18.078431372549023,
+            "rev1M": -0.98,
             "reportedFiscalLabel": "Oct 2027",
             "reportedFiscalPeriodEnding": "Oct 2027",
             "trueCalendarYearEps": null,
             "growthFromPrior": 0.6620926243567752,
             "analysts": 47.0,
-            "growthAdjustedPe": 0.2959528785267394,
+            "growthAdjustedPe": 0.29209287732225814,
             "internal": {
               "30D": {
                 "windowDays": 30,
@@ -1747,9 +1747,9 @@
                 "startEps": null,
                 "endEps": 19.38,
                 "startDate": null,
-                "endDate": "2026-09-24",
-                "anchorDate": "2026-09-24",
-                "targetDate": "2026-08-25"
+                "endDate": "2026-09-25",
+                "anchorDate": "2026-09-25",
+                "targetDate": "2026-08-26"
               },
               "60D": {
                 "windowDays": 60,
@@ -1760,9 +1760,9 @@
                 "startEps": null,
                 "endEps": 19.38,
                 "startDate": null,
-                "endDate": "2026-09-24",
-                "anchorDate": "2026-09-24",
-                "targetDate": "2026-07-26"
+                "endDate": "2026-09-25",
+                "anchorDate": "2026-09-25",
+                "targetDate": "2026-07-27"
               },
               "90D": {
                 "windowDays": 90,
@@ -1773,22 +1773,22 @@
                 "startEps": null,
                 "endEps": 19.38,
                 "startDate": null,
-                "endDate": "2026-09-24",
-                "anchorDate": "2026-09-24",
-                "targetDate": "2026-06-26"
+                "endDate": "2026-09-25",
+                "anchorDate": "2026-09-25",
+                "targetDate": "2026-06-27"
               }
             }
           },
           "2028E": {
             "eps": 30.56,
-            "pe": 11.61616492146597,
+            "pe": 11.464659685863875,
             "rev1M": 15.7,
             "reportedFiscalLabel": "Oct 2028",
             "reportedFiscalPeriodEnding": "Oct 2028",
             "trueCalendarYearEps": null,
             "growthFromPrior": 0.5768833849329206,
             "analysts": 33.0,
-            "growthAdjustedPe": 0.18768215922278172,
+            "growthAdjustedPe": 0.1852342919667985,
             "internal": {
               "30D": {
                 "windowDays": 30,
@@ -1799,9 +1799,9 @@
                 "startEps": null,
                 "endEps": 30.56,
                 "startDate": null,
-                "endDate": "2026-09-24",
-                "anchorDate": "2026-09-24",
-                "targetDate": "2026-08-25"
+                "endDate": "2026-09-25",
+                "anchorDate": "2026-09-25",
+                "targetDate": "2026-08-26"
               },
               "60D": {
                 "windowDays": 60,
@@ -1812,9 +1812,9 @@
                 "startEps": null,
                 "endEps": 30.56,
                 "startDate": null,
-                "endDate": "2026-09-24",
-                "anchorDate": "2026-09-24",
-                "targetDate": "2026-07-26"
+                "endDate": "2026-09-25",
+                "anchorDate": "2026-09-25",
+                "targetDate": "2026-07-27"
               },
               "90D": {
                 "windowDays": 90,
@@ -1825,22 +1825,22 @@
                 "startEps": null,
                 "endEps": 30.56,
                 "startDate": null,
-                "endDate": "2026-09-24",
-                "anchorDate": "2026-09-24",
-                "targetDate": "2026-06-26"
+                "endDate": "2026-09-25",
+                "anchorDate": "2026-09-25",
+                "targetDate": "2026-06-27"
               }
             }
           },
           "2029E": {
             "eps": 40.66,
-            "pe": 8.730693556320709,
+            "pe": 8.616822429906543,
             "rev1M": 26.48,
             "reportedFiscalLabel": "Oct 2029",
             "reportedFiscalPeriodEnding": "Oct 2029",
             "trueCalendarYearEps": null,
             "growthFromPrior": 0.3304973821989528,
             "analysts": 4.0,
-            "growthAdjustedPe": 0.14106165238190382,
+            "growthAdjustedPe": 0.13922183872369312,
             "internal": {
               "30D": {
                 "windowDays": 30,
@@ -1851,9 +1851,9 @@
                 "startEps": null,
                 "endEps": 40.66,
                 "startDate": null,
-                "endDate": "2026-09-24",
-                "anchorDate": "2026-09-24",
-                "targetDate": "2026-08-25"
+                "endDate": "2026-09-25",
+                "anchorDate": "2026-09-25",
+                "targetDate": "2026-08-26"
               },
               "60D": {
                 "windowDays": 60,
@@ -1864,9 +1864,9 @@
                 "startEps": null,
                 "endEps": 40.66,
                 "startDate": null,
-                "endDate": "2026-09-24",
-                "anchorDate": "2026-09-24",
-                "targetDate": "2026-07-26"
+                "endDate": "2026-09-25",
+                "anchorDate": "2026-09-25",
+                "targetDate": "2026-07-27"
               },
               "90D": {
                 "windowDays": 90,
@@ -1877,9 +1877,9 @@
                 "startEps": null,
                 "endEps": 40.66,
                 "startDate": null,
-                "endDate": "2026-09-24",
-                "anchorDate": "2026-09-24",
-                "targetDate": "2026-06-26"
+                "endDate": "2026-09-25",
+                "anchorDate": "2026-09-25",
+                "targetDate": "2026-06-27"
               }
             }
           }
@@ -1892,27 +1892,27 @@
         ],
         "cagrY0Y2": 0.6189274979342814,
         "momentum": "Neutral",
-        "nearTermRevision": -0.97,
+        "nearTermRevision": -0.98,
         "longTermRevision": 15.7,
         "revisionRegime": "Back-end Loaded / Divergent",
-        "lastUpdated": "2026-09-24T00:08:01Z",
+        "lastUpdated": "2026-09-25T00:05:04Z",
         "eps26": 11.66,
-        "pe26": 30.445111492281303,
+        "pe26": 30.04802744425386,
         "reportedFy26": "Oct 2026",
         "trueCalendarYearEps26": null,
         "eps27": 19.38,
-        "pe27": 18.317337461300312,
+        "pe27": 18.078431372549023,
         "reportedFy27": "Oct 2027",
         "trueCalendarYearEps27": null,
         "eps28": 30.56,
-        "pe28": 11.61616492146597,
+        "pe28": 11.464659685863875,
         "reportedFy28": "Oct 2028",
         "trueCalendarYearEps28": null,
         "eps29": 40.66,
-        "pe29": 8.730693556320709,
+        "pe29": 8.616822429906543,
         "reportedFy29": "Oct 2029",
         "trueCalendarYearEps29": null,
-        "rev1M": -0.97,
+        "rev1M": -0.98,
         "rev1M28": 15.7,
         "rev1M2028": 15.7,
         "growth27": 0.6620926243567752,
@@ -1921,20 +1921,20 @@
       },
       {
         "ticker": "TSM",
-        "price": 446.57,
-        "lastClose": 446.57,
-        "afterHours": 447.0,
+        "price": 451.15,
+        "lastClose": 451.15,
+        "afterHours": 450.15,
         "periods": {
           "2026E": {
             "eps": 16.93,
-            "pe": 26.37743650324867,
+            "pe": 26.64796219728293,
             "rev1M": 0.21,
             "reportedFiscalLabel": "Dec 2026",
             "reportedFiscalPeriodEnding": "Dec 2026",
             "trueCalendarYearEps": null,
             "growthFromPrior": null,
             "analysts": 13.0,
-            "growthAdjustedPe": 0.8984614359007491,
+            "growthAdjustedPe": 0.9076760122861433,
             "internal": {
               "30D": {
                 "windowDays": 30,
@@ -1945,9 +1945,9 @@
                 "startEps": null,
                 "endEps": 16.93,
                 "startDate": null,
-                "endDate": "2026-09-24",
-                "anchorDate": "2026-09-24",
-                "targetDate": "2026-08-25"
+                "endDate": "2026-09-25",
+                "anchorDate": "2026-09-25",
+                "targetDate": "2026-08-26"
               },
               "60D": {
                 "windowDays": 60,
@@ -1958,9 +1958,9 @@
                 "startEps": null,
                 "endEps": 16.93,
                 "startDate": null,
-                "endDate": "2026-09-24",
-                "anchorDate": "2026-09-24",
-                "targetDate": "2026-07-26"
+                "endDate": "2026-09-25",
+                "anchorDate": "2026-09-25",
+                "targetDate": "2026-07-27"
               },
               "90D": {
                 "windowDays": 90,
@@ -1971,22 +1971,22 @@
                 "startEps": null,
                 "endEps": 16.93,
                 "startDate": null,
-                "endDate": "2026-09-24",
-                "anchorDate": "2026-09-24",
-                "targetDate": "2026-06-26"
+                "endDate": "2026-09-25",
+                "anchorDate": "2026-09-25",
+                "targetDate": "2026-06-27"
               }
             }
           },
           "2027E": {
             "eps": 21.93,
-            "pe": 20.36342909256726,
+            "pe": 20.572275421796625,
             "rev1M": 0.66,
             "reportedFiscalLabel": "Dec 2027",
             "reportedFiscalPeriodEnding": "Dec 2027",
             "trueCalendarYearEps": null,
             "growthFromPrior": 0.29533372711163614,
             "analysts": 13.0,
-            "growthAdjustedPe": 0.6936138672959271,
+            "growthAdjustedPe": 0.7007275370727043,
             "internal": {
               "30D": {
                 "windowDays": 30,
@@ -1997,9 +1997,9 @@
                 "startEps": null,
                 "endEps": 21.93,
                 "startDate": null,
-                "endDate": "2026-09-24",
-                "anchorDate": "2026-09-24",
-                "targetDate": "2026-08-25"
+                "endDate": "2026-09-25",
+                "anchorDate": "2026-09-25",
+                "targetDate": "2026-08-26"
               },
               "60D": {
                 "windowDays": 60,
@@ -2010,9 +2010,9 @@
                 "startEps": null,
                 "endEps": 21.93,
                 "startDate": null,
-                "endDate": "2026-09-24",
-                "anchorDate": "2026-09-24",
-                "targetDate": "2026-07-26"
+                "endDate": "2026-09-25",
+                "anchorDate": "2026-09-25",
+                "targetDate": "2026-07-27"
               },
               "90D": {
                 "windowDays": 90,
@@ -2023,22 +2023,22 @@
                 "startEps": null,
                 "endEps": 21.93,
                 "startDate": null,
-                "endDate": "2026-09-24",
-                "anchorDate": "2026-09-24",
-                "targetDate": "2026-06-26"
+                "endDate": "2026-09-25",
+                "anchorDate": "2026-09-25",
+                "targetDate": "2026-06-27"
               }
             }
           },
           "2028E": {
             "eps": 28.33,
-            "pe": 15.763148605718321,
+            "pe": 15.92481468408048,
             "rev1M": 0.25,
             "reportedFiscalLabel": "Dec 2028",
             "reportedFiscalPeriodEnding": "Dec 2028",
             "trueCalendarYearEps": null,
             "growthFromPrior": 0.29183766529867755,
             "analysts": 8.0,
-            "growthAdjustedPe": 0.5369203003812102,
+            "growthAdjustedPe": 0.5424269286270528,
             "internal": {
               "30D": {
                 "windowDays": 30,
@@ -2049,9 +2049,9 @@
                 "startEps": null,
                 "endEps": 28.33,
                 "startDate": null,
-                "endDate": "2026-09-24",
-                "anchorDate": "2026-09-24",
-                "targetDate": "2026-08-25"
+                "endDate": "2026-09-25",
+                "anchorDate": "2026-09-25",
+                "targetDate": "2026-08-26"
               },
               "60D": {
                 "windowDays": 60,
@@ -2062,9 +2062,9 @@
                 "startEps": null,
                 "endEps": 28.33,
                 "startDate": null,
-                "endDate": "2026-09-24",
-                "anchorDate": "2026-09-24",
-                "targetDate": "2026-07-26"
+                "endDate": "2026-09-25",
+                "anchorDate": "2026-09-25",
+                "targetDate": "2026-07-27"
               },
               "90D": {
                 "windowDays": 90,
@@ -2075,9 +2075,9 @@
                 "startEps": null,
                 "endEps": 28.33,
                 "startDate": null,
-                "endDate": "2026-09-24",
-                "anchorDate": "2026-09-24",
-                "targetDate": "2026-06-26"
+                "endDate": "2026-09-25",
+                "anchorDate": "2026-09-25",
+                "targetDate": "2026-06-27"
               }
             }
           },
@@ -2104,17 +2104,17 @@
         "nearTermRevision": 0.66,
         "longTermRevision": 0.25,
         "revisionRegime": "Stable",
-        "lastUpdated": "2026-09-24T00:08:01Z",
+        "lastUpdated": "2026-09-25T00:05:04Z",
         "eps26": 16.93,
-        "pe26": 26.37743650324867,
+        "pe26": 26.64796219728293,
         "reportedFy26": "Dec 2026",
         "trueCalendarYearEps26": null,
         "eps27": 21.93,
-        "pe27": 20.36342909256726,
+        "pe27": 20.572275421796625,
         "reportedFy27": "Dec 2027",
         "trueCalendarYearEps27": null,
         "eps28": 28.33,
-        "pe28": 15.763148605718321,
+        "pe28": 15.92481468408048,
         "reportedFy28": "Dec 2028",
         "trueCalendarYearEps28": null,
         "eps29": null,
@@ -2130,20 +2130,20 @@
       },
       {
         "ticker": "MSFT",
-        "price": 500.59,
-        "lastClose": 500.59,
-        "afterHours": 499.83,
+        "price": 497.93,
+        "lastClose": 497.93,
+        "afterHours": 496.08,
         "periods": {
           "2026E": {
             "eps": 16.78,
-            "pe": 29.832538736591175,
+            "pe": 29.674016686531584,
             "rev1M": null,
             "reportedFiscalLabel": "Jun 2026",
             "reportedFiscalPeriodEnding": "Jun 2026",
             "trueCalendarYearEps": null,
             "growthFromPrior": null,
             "analysts": 26.0,
-            "growthAdjustedPe": 1.5873353392010645,
+            "growthAdjustedPe": 1.5789006681084043,
             "internal": {
               "30D": {
                 "windowDays": 30,
@@ -2154,9 +2154,9 @@
                 "startEps": null,
                 "endEps": 16.78,
                 "startDate": null,
-                "endDate": "2026-09-24",
-                "anchorDate": "2026-09-24",
-                "targetDate": "2026-08-25"
+                "endDate": "2026-09-25",
+                "anchorDate": "2026-09-25",
+                "targetDate": "2026-08-26"
               },
               "60D": {
                 "windowDays": 60,
@@ -2167,9 +2167,9 @@
                 "startEps": null,
                 "endEps": 16.78,
                 "startDate": null,
-                "endDate": "2026-09-24",
-                "anchorDate": "2026-09-24",
-                "targetDate": "2026-07-26"
+                "endDate": "2026-09-25",
+                "anchorDate": "2026-09-25",
+                "targetDate": "2026-07-27"
               },
               "90D": {
                 "windowDays": 90,
@@ -2180,22 +2180,22 @@
                 "startEps": null,
                 "endEps": 16.78,
                 "startDate": null,
-                "endDate": "2026-09-24",
-                "anchorDate": "2026-09-24",
-                "targetDate": "2026-06-26"
+                "endDate": "2026-09-25",
+                "anchorDate": "2026-09-25",
+                "targetDate": "2026-06-27"
               }
             }
           },
           "2027E": {
             "eps": 19.76,
-            "pe": 25.333502024291494,
+            "pe": 25.19888663967611,
             "rev1M": 0.03,
             "reportedFiscalLabel": "Jun 2027",
             "reportedFiscalPeriodEnding": "Jun 2027",
             "trueCalendarYearEps": null,
             "growthFromPrior": 0.17759237187127533,
             "analysts": 33.0,
-            "growthAdjustedPe": 1.3479497465482724,
+            "growthAdjustedPe": 1.3407871058127037,
             "internal": {
               "30D": {
                 "windowDays": 30,
@@ -2206,9 +2206,9 @@
                 "startEps": null,
                 "endEps": 19.76,
                 "startDate": null,
-                "endDate": "2026-09-24",
-                "anchorDate": "2026-09-24",
-                "targetDate": "2026-08-25"
+                "endDate": "2026-09-25",
+                "anchorDate": "2026-09-25",
+                "targetDate": "2026-08-26"
               },
               "60D": {
                 "windowDays": 60,
@@ -2219,9 +2219,9 @@
                 "startEps": null,
                 "endEps": 19.76,
                 "startDate": null,
-                "endDate": "2026-09-24",
-                "anchorDate": "2026-09-24",
-                "targetDate": "2026-07-26"
+                "endDate": "2026-09-25",
+                "anchorDate": "2026-09-25",
+                "targetDate": "2026-07-27"
               },
               "90D": {
                 "windowDays": 90,
@@ -2232,22 +2232,22 @@
                 "startEps": null,
                 "endEps": 19.76,
                 "startDate": null,
-                "endDate": "2026-09-24",
-                "anchorDate": "2026-09-24",
-                "targetDate": "2026-06-26"
+                "endDate": "2026-09-25",
+                "anchorDate": "2026-09-25",
+                "targetDate": "2026-06-27"
               }
             }
           },
           "2028E": {
             "eps": 23.68,
-            "pe": 21.139780405405403,
+            "pe": 21.027449324324326,
             "rev1M": 0.44,
             "reportedFiscalLabel": "Jun 2028",
             "reportedFiscalPeriodEnding": "Jun 2028",
             "trueCalendarYearEps": null,
             "growthFromPrior": 0.19838056680161933,
             "analysts": 32.0,
-            "growthAdjustedPe": 1.1248094168831868,
+            "growthAdjustedPe": 1.1188324835666819,
             "internal": {
               "30D": {
                 "windowDays": 30,
@@ -2258,9 +2258,9 @@
                 "startEps": null,
                 "endEps": 23.68,
                 "startDate": null,
-                "endDate": "2026-09-24",
-                "anchorDate": "2026-09-24",
-                "targetDate": "2026-08-25"
+                "endDate": "2026-09-25",
+                "anchorDate": "2026-09-25",
+                "targetDate": "2026-08-26"
               },
               "60D": {
                 "windowDays": 60,
@@ -2271,9 +2271,9 @@
                 "startEps": null,
                 "endEps": 23.68,
                 "startDate": null,
-                "endDate": "2026-09-24",
-                "anchorDate": "2026-09-24",
-                "targetDate": "2026-07-26"
+                "endDate": "2026-09-25",
+                "anchorDate": "2026-09-25",
+                "targetDate": "2026-07-27"
               },
               "90D": {
                 "windowDays": 90,
@@ -2284,22 +2284,22 @@
                 "startEps": null,
                 "endEps": 23.68,
                 "startDate": null,
-                "endDate": "2026-09-24",
-                "anchorDate": "2026-09-24",
-                "targetDate": "2026-06-26"
+                "endDate": "2026-09-25",
+                "anchorDate": "2026-09-25",
+                "targetDate": "2026-06-27"
               }
             }
           },
           "2029E": {
             "eps": 28.85,
-            "pe": 17.351473136915075,
+            "pe": 17.259272097053724,
             "rev1M": 0.45,
             "reportedFiscalLabel": "Jun 2029",
             "reportedFiscalPeriodEnding": "Jun 2029",
             "trueCalendarYearEps": null,
             "growthFromPrior": 0.21832770270270277,
             "analysts": 15.0,
-            "growthAdjustedPe": 0.9232404503221442,
+            "growthAdjustedPe": 0.9183346000297755,
             "internal": {
               "30D": {
                 "windowDays": 30,
@@ -2310,9 +2310,9 @@
                 "startEps": null,
                 "endEps": 28.85,
                 "startDate": null,
-                "endDate": "2026-09-24",
-                "anchorDate": "2026-09-24",
-                "targetDate": "2026-08-25"
+                "endDate": "2026-09-25",
+                "anchorDate": "2026-09-25",
+                "targetDate": "2026-08-26"
               },
               "60D": {
                 "windowDays": 60,
@@ -2323,9 +2323,9 @@
                 "startEps": null,
                 "endEps": 28.85,
                 "startDate": null,
-                "endDate": "2026-09-24",
-                "anchorDate": "2026-09-24",
-                "targetDate": "2026-07-26"
+                "endDate": "2026-09-25",
+                "anchorDate": "2026-09-25",
+                "targetDate": "2026-07-27"
               },
               "90D": {
                 "windowDays": 90,
@@ -2336,9 +2336,9 @@
                 "startEps": null,
                 "endEps": 28.85,
                 "startDate": null,
-                "endDate": "2026-09-24",
-                "anchorDate": "2026-09-24",
-                "targetDate": "2026-06-26"
+                "endDate": "2026-09-25",
+                "anchorDate": "2026-09-25",
+                "targetDate": "2026-06-27"
               }
             }
           }
@@ -2354,21 +2354,21 @@
         "nearTermRevision": 0.03,
         "longTermRevision": 0.44,
         "revisionRegime": "Stable",
-        "lastUpdated": "2026-09-24T00:08:01Z",
+        "lastUpdated": "2026-09-25T00:05:04Z",
         "eps26": 16.78,
-        "pe26": 29.832538736591175,
+        "pe26": 29.674016686531584,
         "reportedFy26": "Jun 2026",
         "trueCalendarYearEps26": null,
         "eps27": 19.76,
-        "pe27": 25.333502024291494,
+        "pe27": 25.19888663967611,
         "reportedFy27": "Jun 2027",
         "trueCalendarYearEps27": null,
         "eps28": 23.68,
-        "pe28": 21.139780405405403,
+        "pe28": 21.027449324324326,
         "reportedFy28": "Jun 2028",
         "trueCalendarYearEps28": null,
         "eps29": 28.85,
-        "pe29": 17.351473136915075,
+        "pe29": 17.259272097053724,
         "reportedFy29": "Jun 2029",
         "trueCalendarYearEps29": null,
         "rev1M": 0.03,
@@ -2380,20 +2380,20 @@
       },
       {
         "ticker": "BE",
-        "price": 275.19,
-        "lastClose": 275.19,
-        "afterHours": 275.31,
+        "price": 266.65,
+        "lastClose": 266.65,
+        "afterHours": 265.69,
         "periods": {
           "2026E": {
             "eps": 2.71,
-            "pe": 101.54612546125462,
+            "pe": 98.39483394833948,
             "rev1M": -0.01,
             "reportedFiscalLabel": "Dec 2026",
             "reportedFiscalPeriodEnding": "Dec 2026",
             "trueCalendarYearEps": null,
             "growthFromPrior": null,
             "analysts": 26.0,
-            "growthAdjustedPe": 1.4601573132169214,
+            "growthAdjustedPe": 1.4148440988745667,
             "internal": {
               "30D": {
                 "windowDays": 30,
@@ -2404,9 +2404,9 @@
                 "startEps": null,
                 "endEps": 2.71,
                 "startDate": null,
-                "endDate": "2026-09-24",
-                "anchorDate": "2026-09-24",
-                "targetDate": "2026-08-25"
+                "endDate": "2026-09-25",
+                "anchorDate": "2026-09-25",
+                "targetDate": "2026-08-26"
               },
               "60D": {
                 "windowDays": 60,
@@ -2417,9 +2417,9 @@
                 "startEps": null,
                 "endEps": 2.71,
                 "startDate": null,
-                "endDate": "2026-09-24",
-                "anchorDate": "2026-09-24",
-                "targetDate": "2026-07-26"
+                "endDate": "2026-09-25",
+                "anchorDate": "2026-09-25",
+                "targetDate": "2026-07-27"
               },
               "90D": {
                 "windowDays": 90,
@@ -2430,22 +2430,22 @@
                 "startEps": null,
                 "endEps": 2.71,
                 "startDate": null,
-                "endDate": "2026-09-24",
-                "anchorDate": "2026-09-24",
-                "targetDate": "2026-06-26"
+                "endDate": "2026-09-25",
+                "anchorDate": "2026-09-25",
+                "targetDate": "2026-06-27"
               }
             }
           },
           "2027E": {
             "eps": 4.93,
-            "pe": 55.819472616632865,
+            "pe": 54.087221095334684,
             "rev1M": 0.17,
             "reportedFiscalLabel": "Dec 2027",
             "reportedFiscalPeriodEnding": "Dec 2027",
             "trueCalendarYearEps": null,
             "growthFromPrior": 0.8191881918819187,
             "analysts": 28.0,
-            "growthAdjustedPe": 0.8026422553383077,
+            "growthAdjustedPe": 0.7777337744320642,
             "internal": {
               "30D": {
                 "windowDays": 30,
@@ -2456,9 +2456,9 @@
                 "startEps": null,
                 "endEps": 4.93,
                 "startDate": null,
-                "endDate": "2026-09-24",
-                "anchorDate": "2026-09-24",
-                "targetDate": "2026-08-25"
+                "endDate": "2026-09-25",
+                "anchorDate": "2026-09-25",
+                "targetDate": "2026-08-26"
               },
               "60D": {
                 "windowDays": 60,
@@ -2469,9 +2469,9 @@
                 "startEps": null,
                 "endEps": 4.93,
                 "startDate": null,
-                "endDate": "2026-09-24",
-                "anchorDate": "2026-09-24",
-                "targetDate": "2026-07-26"
+                "endDate": "2026-09-25",
+                "anchorDate": "2026-09-25",
+                "targetDate": "2026-07-27"
               },
               "90D": {
                 "windowDays": 90,
@@ -2482,22 +2482,22 @@
                 "startEps": null,
                 "endEps": 4.93,
                 "startDate": null,
-                "endDate": "2026-09-24",
-                "anchorDate": "2026-09-24",
-                "targetDate": "2026-06-26"
+                "endDate": "2026-09-25",
+                "anchorDate": "2026-09-25",
+                "targetDate": "2026-06-27"
               }
             }
           },
           "2028E": {
             "eps": 7.79,
-            "pe": 35.32605905006418,
+            "pe": 34.22978177150192,
             "rev1M": 0.65,
             "reportedFiscalLabel": "Dec 2028",
             "reportedFiscalPeriodEnding": "Dec 2028",
             "trueCalendarYearEps": null,
             "growthFromPrior": 0.5801217038539555,
             "analysts": 23.0,
-            "growthAdjustedPe": 0.5079623002333576,
+            "growthAdjustedPe": 0.49219865313864897,
             "internal": {
               "30D": {
                 "windowDays": 30,
@@ -2508,9 +2508,9 @@
                 "startEps": null,
                 "endEps": 7.79,
                 "startDate": null,
-                "endDate": "2026-09-24",
-                "anchorDate": "2026-09-24",
-                "targetDate": "2026-08-25"
+                "endDate": "2026-09-25",
+                "anchorDate": "2026-09-25",
+                "targetDate": "2026-08-26"
               },
               "60D": {
                 "windowDays": 60,
@@ -2521,9 +2521,9 @@
                 "startEps": null,
                 "endEps": 7.79,
                 "startDate": null,
-                "endDate": "2026-09-24",
-                "anchorDate": "2026-09-24",
-                "targetDate": "2026-07-26"
+                "endDate": "2026-09-25",
+                "anchorDate": "2026-09-25",
+                "targetDate": "2026-07-27"
               },
               "90D": {
                 "windowDays": 90,
@@ -2534,22 +2534,22 @@
                 "startEps": null,
                 "endEps": 7.79,
                 "startDate": null,
-                "endDate": "2026-09-24",
-                "anchorDate": "2026-09-24",
-                "targetDate": "2026-06-26"
+                "endDate": "2026-09-25",
+                "anchorDate": "2026-09-25",
+                "targetDate": "2026-06-27"
               }
             }
           },
           "2029E": {
             "eps": 10.36,
-            "pe": 26.562741312741313,
+            "pe": 25.738416988416986,
             "rev1M": -2.28,
             "reportedFiscalLabel": "Dec 2029",
             "reportedFiscalPeriodEnding": "Dec 2029",
             "trueCalendarYearEps": null,
             "growthFromPrior": 0.32991014120667517,
             "analysts": 7.0,
-            "growthAdjustedPe": 0.381952347376241,
+            "growthAdjustedPe": 0.37009918030406136,
             "internal": {
               "30D": {
                 "windowDays": 30,
@@ -2560,9 +2560,9 @@
                 "startEps": null,
                 "endEps": 10.36,
                 "startDate": null,
-                "endDate": "2026-09-24",
-                "anchorDate": "2026-09-24",
-                "targetDate": "2026-08-25"
+                "endDate": "2026-09-25",
+                "anchorDate": "2026-09-25",
+                "targetDate": "2026-08-26"
               },
               "60D": {
                 "windowDays": 60,
@@ -2573,9 +2573,9 @@
                 "startEps": null,
                 "endEps": 10.36,
                 "startDate": null,
-                "endDate": "2026-09-24",
-                "anchorDate": "2026-09-24",
-                "targetDate": "2026-07-26"
+                "endDate": "2026-09-25",
+                "anchorDate": "2026-09-25",
+                "targetDate": "2026-07-27"
               },
               "90D": {
                 "windowDays": 90,
@@ -2586,9 +2586,9 @@
                 "startEps": null,
                 "endEps": 10.36,
                 "startDate": null,
-                "endDate": "2026-09-24",
-                "anchorDate": "2026-09-24",
-                "targetDate": "2026-06-26"
+                "endDate": "2026-09-25",
+                "anchorDate": "2026-09-25",
+                "targetDate": "2026-06-27"
               }
             }
           }
@@ -2604,21 +2604,21 @@
         "nearTermRevision": 0.17,
         "longTermRevision": 0.65,
         "revisionRegime": "Stable",
-        "lastUpdated": "2026-09-24T00:08:01Z",
+        "lastUpdated": "2026-09-25T00:05:04Z",
         "eps26": 2.71,
-        "pe26": 101.54612546125462,
+        "pe26": 98.39483394833948,
         "reportedFy26": "Dec 2026",
         "trueCalendarYearEps26": null,
         "eps27": 4.93,
-        "pe27": 55.819472616632865,
+        "pe27": 54.087221095334684,
         "reportedFy27": "Dec 2027",
         "trueCalendarYearEps27": null,
         "eps28": 7.79,
-        "pe28": 35.32605905006418,
+        "pe28": 34.22978177150192,
         "reportedFy28": "Dec 2028",
         "trueCalendarYearEps28": null,
         "eps29": 10.36,
-        "pe29": 26.562741312741313,
+        "pe29": 25.738416988416986,
         "reportedFy29": "Dec 2029",
         "trueCalendarYearEps29": null,
         "rev1M": 0.17,
@@ -2630,20 +2630,20 @@
       },
       {
         "ticker": "KEYS",
-        "price": 353.36,
-        "lastClose": 353.36,
-        "afterHours": 353.24,
+        "price": 357.54,
+        "lastClose": 357.54,
+        "afterHours": 357.44,
         "periods": {
           "2026E": {
             "eps": 11.47,
-            "pe": 30.80732345248474,
+            "pe": 31.171752397558848,
             "rev1M": -0.22,
             "reportedFiscalLabel": "Oct 2026",
             "reportedFiscalPeriodEnding": "Oct 2026",
             "trueCalendarYearEps": null,
             "growthFromPrior": null,
             "analysts": 12.0,
-            "growthAdjustedPe": 1.8166886888853961,
+            "growthAdjustedPe": 1.838178836948394,
             "internal": {
               "30D": {
                 "windowDays": 30,
@@ -2654,9 +2654,9 @@
                 "startEps": null,
                 "endEps": 11.47,
                 "startDate": null,
-                "endDate": "2026-09-24",
-                "anchorDate": "2026-09-24",
-                "targetDate": "2026-08-25"
+                "endDate": "2026-09-25",
+                "anchorDate": "2026-09-25",
+                "targetDate": "2026-08-26"
               },
               "60D": {
                 "windowDays": 60,
@@ -2667,9 +2667,9 @@
                 "startEps": null,
                 "endEps": 11.47,
                 "startDate": null,
-                "endDate": "2026-09-24",
-                "anchorDate": "2026-09-24",
-                "targetDate": "2026-07-26"
+                "endDate": "2026-09-25",
+                "anchorDate": "2026-09-25",
+                "targetDate": "2026-07-27"
               },
               "90D": {
                 "windowDays": 90,
@@ -2680,22 +2680,22 @@
                 "startEps": null,
                 "endEps": 11.47,
                 "startDate": null,
-                "endDate": "2026-09-24",
-                "anchorDate": "2026-09-24",
-                "targetDate": "2026-06-26"
+                "endDate": "2026-09-25",
+                "anchorDate": "2026-09-25",
+                "targetDate": "2026-06-27"
               }
             }
           },
           "2027E": {
             "eps": 13.87,
-            "pe": 25.47656813266042,
+            "pe": 25.77793799567412,
             "rev1M": 1.62,
             "reportedFiscalLabel": "Oct 2027",
             "reportedFiscalPeriodEnding": "Oct 2027",
             "trueCalendarYearEps": null,
             "growthFromPrior": 0.20924149956408009,
             "analysts": 12.0,
-            "growthAdjustedPe": 1.502337365646395,
+            "growthAdjustedPe": 1.5201089588895518,
             "internal": {
               "30D": {
                 "windowDays": 30,
@@ -2706,9 +2706,9 @@
                 "startEps": null,
                 "endEps": 13.87,
                 "startDate": null,
-                "endDate": "2026-09-24",
-                "anchorDate": "2026-09-24",
-                "targetDate": "2026-08-25"
+                "endDate": "2026-09-25",
+                "anchorDate": "2026-09-25",
+                "targetDate": "2026-08-26"
               },
               "60D": {
                 "windowDays": 60,
@@ -2719,9 +2719,9 @@
                 "startEps": null,
                 "endEps": 13.87,
                 "startDate": null,
-                "endDate": "2026-09-24",
-                "anchorDate": "2026-09-24",
-                "targetDate": "2026-07-26"
+                "endDate": "2026-09-25",
+                "anchorDate": "2026-09-25",
+                "targetDate": "2026-07-27"
               },
               "90D": {
                 "windowDays": 90,
@@ -2732,22 +2732,22 @@
                 "startEps": null,
                 "endEps": 13.87,
                 "startDate": null,
-                "endDate": "2026-09-24",
-                "anchorDate": "2026-09-24",
-                "targetDate": "2026-06-26"
+                "endDate": "2026-09-25",
+                "anchorDate": "2026-09-25",
+                "targetDate": "2026-06-27"
               }
             }
           },
           "2028E": {
             "eps": 15.69,
-            "pe": 22.521351179094967,
+            "pe": 22.787762906309755,
             "rev1M": 0.0,
             "reportedFiscalLabel": "Oct 2028",
             "reportedFiscalPeriodEnding": "Oct 2028",
             "trueCalendarYearEps": null,
             "growthFromPrior": 0.13121845710165828,
             "analysts": 10.0,
-            "growthAdjustedPe": 1.3280700612820584,
+            "growthAdjustedPe": 1.3437801950158117,
             "internal": {
               "30D": {
                 "windowDays": 30,
@@ -2758,9 +2758,9 @@
                 "startEps": null,
                 "endEps": 15.69,
                 "startDate": null,
-                "endDate": "2026-09-24",
-                "anchorDate": "2026-09-24",
-                "targetDate": "2026-08-25"
+                "endDate": "2026-09-25",
+                "anchorDate": "2026-09-25",
+                "targetDate": "2026-08-26"
               },
               "60D": {
                 "windowDays": 60,
@@ -2771,9 +2771,9 @@
                 "startEps": null,
                 "endEps": 15.69,
                 "startDate": null,
-                "endDate": "2026-09-24",
-                "anchorDate": "2026-09-24",
-                "targetDate": "2026-07-26"
+                "endDate": "2026-09-25",
+                "anchorDate": "2026-09-25",
+                "targetDate": "2026-07-27"
               },
               "90D": {
                 "windowDays": 90,
@@ -2784,22 +2784,22 @@
                 "startEps": null,
                 "endEps": 15.69,
                 "startDate": null,
-                "endDate": "2026-09-24",
-                "anchorDate": "2026-09-24",
-                "targetDate": "2026-06-26"
+                "endDate": "2026-09-25",
+                "anchorDate": "2026-09-25",
+                "targetDate": "2026-06-27"
               }
             }
           },
           "2029E": {
             "eps": 21.99,
-            "pe": 16.069122328331062,
+            "pe": 16.259208731241475,
             "rev1M": 35.49,
             "reportedFiscalLabel": "Oct 2029",
             "reportedFiscalPeriodEnding": "Oct 2029",
             "trueCalendarYearEps": null,
             "growthFromPrior": 0.401529636711281,
             "analysts": 1.0,
-            "growthAdjustedPe": 0.9475861419515915,
+            "growthAdjustedPe": 0.9587954188175573,
             "internal": {
               "30D": {
                 "windowDays": 30,
@@ -2810,9 +2810,9 @@
                 "startEps": null,
                 "endEps": 21.99,
                 "startDate": null,
-                "endDate": "2026-09-24",
-                "anchorDate": "2026-09-24",
-                "targetDate": "2026-08-25"
+                "endDate": "2026-09-25",
+                "anchorDate": "2026-09-25",
+                "targetDate": "2026-08-26"
               },
               "60D": {
                 "windowDays": 60,
@@ -2823,9 +2823,9 @@
                 "startEps": null,
                 "endEps": 21.99,
                 "startDate": null,
-                "endDate": "2026-09-24",
-                "anchorDate": "2026-09-24",
-                "targetDate": "2026-07-26"
+                "endDate": "2026-09-25",
+                "anchorDate": "2026-09-25",
+                "targetDate": "2026-07-27"
               },
               "90D": {
                 "windowDays": 90,
@@ -2836,9 +2836,9 @@
                 "startEps": null,
                 "endEps": 21.99,
                 "startDate": null,
-                "endDate": "2026-09-24",
-                "anchorDate": "2026-09-24",
-                "targetDate": "2026-06-26"
+                "endDate": "2026-09-25",
+                "anchorDate": "2026-09-25",
+                "targetDate": "2026-06-27"
               }
             }
           }
@@ -2854,21 +2854,21 @@
         "nearTermRevision": 1.62,
         "longTermRevision": 0.0,
         "revisionRegime": "Divergent / Mixed",
-        "lastUpdated": "2026-09-24T00:08:01Z",
+        "lastUpdated": "2026-09-25T00:05:04Z",
         "eps26": 11.47,
-        "pe26": 30.80732345248474,
+        "pe26": 31.171752397558848,
         "reportedFy26": "Oct 2026",
         "trueCalendarYearEps26": null,
         "eps27": 13.87,
-        "pe27": 25.47656813266042,
+        "pe27": 25.77793799567412,
         "reportedFy27": "Oct 2027",
         "trueCalendarYearEps27": null,
         "eps28": 15.69,
-        "pe28": 22.521351179094967,
+        "pe28": 22.787762906309755,
         "reportedFy28": "Oct 2028",
         "trueCalendarYearEps28": null,
         "eps29": 21.99,
-        "pe29": 16.069122328331062,
+        "pe29": 16.259208731241475,
         "reportedFy29": "Oct 2029",
         "trueCalendarYearEps29": null,
         "rev1M": 1.62,
@@ -3338,7 +3338,7 @@
         "reportedFiscalLabel": "Oct 2026",
         "mappedYear": "2026E",
         "calendarAlignment": "CY2026",
-        "asOf": "2026-09-24",
+        "asOf": "2026-09-25",
         "currentEps": 11.66,
         "analysts": 46.0,
         "identity": {
@@ -3355,9 +3355,9 @@
             "startEps": null,
             "endEps": 11.66,
             "startDate": null,
-            "endDate": "2026-09-24",
-            "anchorDate": "2026-09-24",
-            "targetDate": "2026-08-25"
+            "endDate": "2026-09-25",
+            "anchorDate": "2026-09-25",
+            "targetDate": "2026-08-26"
           },
           "60D": {
             "windowDays": 60,
@@ -3368,9 +3368,9 @@
             "startEps": null,
             "endEps": 11.66,
             "startDate": null,
-            "endDate": "2026-09-24",
-            "anchorDate": "2026-09-24",
-            "targetDate": "2026-07-26"
+            "endDate": "2026-09-25",
+            "anchorDate": "2026-09-25",
+            "targetDate": "2026-07-27"
           },
           "90D": {
             "windowDays": 90,
@@ -3381,16 +3381,16 @@
             "startEps": null,
             "endEps": 11.66,
             "startDate": null,
-            "endDate": "2026-09-24",
-            "anchorDate": "2026-09-24",
-            "targetDate": "2026-06-26"
+            "endDate": "2026-09-25",
+            "anchorDate": "2026-09-25",
+            "targetDate": "2026-06-27"
           }
         },
         "sourceReported": {
           "1M": {
             "windowLabel": "Source-reported · Seeking Alpha 1M",
             "sourceWindow": "Seeking Alpha 1M",
-            "revisionPct": 0.23,
+            "revisionPct": 0.24,
             "neverInternal30D": true,
             "neverInternal60D": true,
             "neverInternal90D": true
@@ -3398,7 +3398,7 @@
           "3M": {
             "windowLabel": "Source-reported · Seeking Alpha 3M",
             "sourceWindow": "Seeking Alpha 3M",
-            "revisionPct": 0.29,
+            "revisionPct": 0.3,
             "neverInternal30D": true,
             "neverInternal60D": true,
             "neverInternal90D": true
@@ -3406,7 +3406,7 @@
           "6M": {
             "windowLabel": "Source-reported · Seeking Alpha 6M",
             "sourceWindow": "Seeking Alpha 6M",
-            "revisionPct": 2.48,
+            "revisionPct": 2.49,
             "neverInternal30D": true,
             "neverInternal60D": true,
             "neverInternal90D": true
@@ -3423,7 +3423,7 @@
         "reportedFiscalLabel": "Oct 2027",
         "mappedYear": "2027E",
         "calendarAlignment": "CY2027",
-        "asOf": "2026-09-24",
+        "asOf": "2026-09-25",
         "currentEps": 19.38,
         "analysts": 47.0,
         "identity": {
@@ -3440,9 +3440,9 @@
             "startEps": null,
             "endEps": 19.38,
             "startDate": null,
-            "endDate": "2026-09-24",
-            "anchorDate": "2026-09-24",
-            "targetDate": "2026-08-25"
+            "endDate": "2026-09-25",
+            "anchorDate": "2026-09-25",
+            "targetDate": "2026-08-26"
           },
           "60D": {
             "windowDays": 60,
@@ -3453,9 +3453,9 @@
             "startEps": null,
             "endEps": 19.38,
             "startDate": null,
-            "endDate": "2026-09-24",
-            "anchorDate": "2026-09-24",
-            "targetDate": "2026-07-26"
+            "endDate": "2026-09-25",
+            "anchorDate": "2026-09-25",
+            "targetDate": "2026-07-27"
           },
           "90D": {
             "windowDays": 90,
@@ -3466,16 +3466,16 @@
             "startEps": null,
             "endEps": 19.38,
             "startDate": null,
-            "endDate": "2026-09-24",
-            "anchorDate": "2026-09-24",
-            "targetDate": "2026-06-26"
+            "endDate": "2026-09-25",
+            "anchorDate": "2026-09-25",
+            "targetDate": "2026-06-27"
           }
         },
         "sourceReported": {
           "1M": {
             "windowLabel": "Source-reported · Seeking Alpha 1M",
             "sourceWindow": "Seeking Alpha 1M",
-            "revisionPct": -0.97,
+            "revisionPct": -0.98,
             "neverInternal30D": true,
             "neverInternal60D": true,
             "neverInternal90D": true
@@ -3483,7 +3483,7 @@
           "3M": {
             "windowLabel": "Source-reported · Seeking Alpha 3M",
             "sourceWindow": "Seeking Alpha 3M",
-            "revisionPct": -0.4,
+            "revisionPct": -0.41,
             "neverInternal30D": true,
             "neverInternal60D": true,
             "neverInternal90D": true
@@ -3491,7 +3491,7 @@
           "6M": {
             "windowLabel": "Source-reported · Seeking Alpha 6M",
             "sourceWindow": "Seeking Alpha 6M",
-            "revisionPct": 8.66,
+            "revisionPct": 8.64,
             "neverInternal30D": true,
             "neverInternal60D": true,
             "neverInternal90D": true
@@ -3508,7 +3508,7 @@
         "reportedFiscalLabel": "Oct 2028",
         "mappedYear": "2028E",
         "calendarAlignment": "CY2028",
-        "asOf": "2026-09-24",
+        "asOf": "2026-09-25",
         "currentEps": 30.56,
         "analysts": 33.0,
         "identity": {
@@ -3525,9 +3525,9 @@
             "startEps": null,
             "endEps": 30.56,
             "startDate": null,
-            "endDate": "2026-09-24",
-            "anchorDate": "2026-09-24",
-            "targetDate": "2026-08-25"
+            "endDate": "2026-09-25",
+            "anchorDate": "2026-09-25",
+            "targetDate": "2026-08-26"
           },
           "60D": {
             "windowDays": 60,
@@ -3538,9 +3538,9 @@
             "startEps": null,
             "endEps": 30.56,
             "startDate": null,
-            "endDate": "2026-09-24",
-            "anchorDate": "2026-09-24",
-            "targetDate": "2026-07-26"
+            "endDate": "2026-09-25",
+            "anchorDate": "2026-09-25",
+            "targetDate": "2026-07-27"
           },
           "90D": {
             "windowDays": 90,
@@ -3551,9 +3551,9 @@
             "startEps": null,
             "endEps": 30.56,
             "startDate": null,
-            "endDate": "2026-09-24",
-            "anchorDate": "2026-09-24",
-            "targetDate": "2026-06-26"
+            "endDate": "2026-09-25",
+            "anchorDate": "2026-09-25",
+            "targetDate": "2026-06-27"
           }
         },
         "sourceReported": {
@@ -3593,7 +3593,7 @@
         "reportedFiscalLabel": "Oct 2029",
         "mappedYear": "2029E",
         "calendarAlignment": "CY2029",
-        "asOf": "2026-09-24",
+        "asOf": "2026-09-25",
         "currentEps": 40.66,
         "analysts": 4.0,
         "identity": {
@@ -3610,9 +3610,9 @@
             "startEps": null,
             "endEps": 40.66,
             "startDate": null,
-            "endDate": "2026-09-24",
-            "anchorDate": "2026-09-24",
-            "targetDate": "2026-08-25"
+            "endDate": "2026-09-25",
+            "anchorDate": "2026-09-25",
+            "targetDate": "2026-08-26"
           },
           "60D": {
             "windowDays": 60,
@@ -3623,9 +3623,9 @@
             "startEps": null,
             "endEps": 40.66,
             "startDate": null,
-            "endDate": "2026-09-24",
-            "anchorDate": "2026-09-24",
-            "targetDate": "2026-07-26"
+            "endDate": "2026-09-25",
+            "anchorDate": "2026-09-25",
+            "targetDate": "2026-07-27"
           },
           "90D": {
             "windowDays": 90,
@@ -3636,9 +3636,9 @@
             "startEps": null,
             "endEps": 40.66,
             "startDate": null,
-            "endDate": "2026-09-24",
-            "anchorDate": "2026-09-24",
-            "targetDate": "2026-06-26"
+            "endDate": "2026-09-25",
+            "anchorDate": "2026-09-25",
+            "targetDate": "2026-06-27"
           }
         },
         "sourceReported": {
@@ -3678,7 +3678,7 @@
         "reportedFiscalLabel": "Dec 2026",
         "mappedYear": "2026E",
         "calendarAlignment": "CY2026",
-        "asOf": "2026-09-24",
+        "asOf": "2026-09-25",
         "currentEps": 2.71,
         "analysts": 26.0,
         "identity": {
@@ -3695,9 +3695,9 @@
             "startEps": null,
             "endEps": 2.71,
             "startDate": null,
-            "endDate": "2026-09-24",
-            "anchorDate": "2026-09-24",
-            "targetDate": "2026-08-25"
+            "endDate": "2026-09-25",
+            "anchorDate": "2026-09-25",
+            "targetDate": "2026-08-26"
           },
           "60D": {
             "windowDays": 60,
@@ -3708,9 +3708,9 @@
             "startEps": null,
             "endEps": 2.71,
             "startDate": null,
-            "endDate": "2026-09-24",
-            "anchorDate": "2026-09-24",
-            "targetDate": "2026-07-26"
+            "endDate": "2026-09-25",
+            "anchorDate": "2026-09-25",
+            "targetDate": "2026-07-27"
           },
           "90D": {
             "windowDays": 90,
@@ -3721,9 +3721,9 @@
             "startEps": null,
             "endEps": 2.71,
             "startDate": null,
-            "endDate": "2026-09-24",
-            "anchorDate": "2026-09-24",
-            "targetDate": "2026-06-26"
+            "endDate": "2026-09-25",
+            "anchorDate": "2026-09-25",
+            "targetDate": "2026-06-27"
           }
         },
         "sourceReported": {
@@ -3763,7 +3763,7 @@
         "reportedFiscalLabel": "Dec 2027",
         "mappedYear": "2027E",
         "calendarAlignment": "CY2027",
-        "asOf": "2026-09-24",
+        "asOf": "2026-09-25",
         "currentEps": 4.93,
         "analysts": 28.0,
         "identity": {
@@ -3780,9 +3780,9 @@
             "startEps": null,
             "endEps": 4.93,
             "startDate": null,
-            "endDate": "2026-09-24",
-            "anchorDate": "2026-09-24",
-            "targetDate": "2026-08-25"
+            "endDate": "2026-09-25",
+            "anchorDate": "2026-09-25",
+            "targetDate": "2026-08-26"
           },
           "60D": {
             "windowDays": 60,
@@ -3793,9 +3793,9 @@
             "startEps": null,
             "endEps": 4.93,
             "startDate": null,
-            "endDate": "2026-09-24",
-            "anchorDate": "2026-09-24",
-            "targetDate": "2026-07-26"
+            "endDate": "2026-09-25",
+            "anchorDate": "2026-09-25",
+            "targetDate": "2026-07-27"
           },
           "90D": {
             "windowDays": 90,
@@ -3806,9 +3806,9 @@
             "startEps": null,
             "endEps": 4.93,
             "startDate": null,
-            "endDate": "2026-09-24",
-            "anchorDate": "2026-09-24",
-            "targetDate": "2026-06-26"
+            "endDate": "2026-09-25",
+            "anchorDate": "2026-09-25",
+            "targetDate": "2026-06-27"
           }
         },
         "sourceReported": {
@@ -3848,7 +3848,7 @@
         "reportedFiscalLabel": "Dec 2028",
         "mappedYear": "2028E",
         "calendarAlignment": "CY2028",
-        "asOf": "2026-09-24",
+        "asOf": "2026-09-25",
         "currentEps": 7.79,
         "analysts": 23.0,
         "identity": {
@@ -3865,9 +3865,9 @@
             "startEps": null,
             "endEps": 7.79,
             "startDate": null,
-            "endDate": "2026-09-24",
-            "anchorDate": "2026-09-24",
-            "targetDate": "2026-08-25"
+            "endDate": "2026-09-25",
+            "anchorDate": "2026-09-25",
+            "targetDate": "2026-08-26"
           },
           "60D": {
             "windowDays": 60,
@@ -3878,9 +3878,9 @@
             "startEps": null,
             "endEps": 7.79,
             "startDate": null,
-            "endDate": "2026-09-24",
-            "anchorDate": "2026-09-24",
-            "targetDate": "2026-07-26"
+            "endDate": "2026-09-25",
+            "anchorDate": "2026-09-25",
+            "targetDate": "2026-07-27"
           },
           "90D": {
             "windowDays": 90,
@@ -3891,9 +3891,9 @@
             "startEps": null,
             "endEps": 7.79,
             "startDate": null,
-            "endDate": "2026-09-24",
-            "anchorDate": "2026-09-24",
-            "targetDate": "2026-06-26"
+            "endDate": "2026-09-25",
+            "anchorDate": "2026-09-25",
+            "targetDate": "2026-06-27"
           }
         },
         "sourceReported": {
@@ -3933,7 +3933,7 @@
         "reportedFiscalLabel": "Dec 2029",
         "mappedYear": "2029E",
         "calendarAlignment": "CY2029",
-        "asOf": "2026-09-24",
+        "asOf": "2026-09-25",
         "currentEps": 10.36,
         "analysts": 7.0,
         "identity": {
@@ -3950,9 +3950,9 @@
             "startEps": null,
             "endEps": 10.36,
             "startDate": null,
-            "endDate": "2026-09-24",
-            "anchorDate": "2026-09-24",
-            "targetDate": "2026-08-25"
+            "endDate": "2026-09-25",
+            "anchorDate": "2026-09-25",
+            "targetDate": "2026-08-26"
           },
           "60D": {
             "windowDays": 60,
@@ -3963,9 +3963,9 @@
             "startEps": null,
             "endEps": 10.36,
             "startDate": null,
-            "endDate": "2026-09-24",
-            "anchorDate": "2026-09-24",
-            "targetDate": "2026-07-26"
+            "endDate": "2026-09-25",
+            "anchorDate": "2026-09-25",
+            "targetDate": "2026-07-27"
           },
           "90D": {
             "windowDays": 90,
@@ -3976,9 +3976,9 @@
             "startEps": null,
             "endEps": 10.36,
             "startDate": null,
-            "endDate": "2026-09-24",
-            "anchorDate": "2026-09-24",
-            "targetDate": "2026-06-26"
+            "endDate": "2026-09-25",
+            "anchorDate": "2026-09-25",
+            "targetDate": "2026-06-27"
           }
         },
         "sourceReported": {
@@ -4018,7 +4018,7 @@
         "reportedFiscalLabel": "Oct 2026",
         "mappedYear": "2026E",
         "calendarAlignment": "CY2026",
-        "asOf": "2026-09-24",
+        "asOf": "2026-09-25",
         "currentEps": 11.47,
         "analysts": 12.0,
         "identity": {
@@ -4035,9 +4035,9 @@
             "startEps": null,
             "endEps": 11.47,
             "startDate": null,
-            "endDate": "2026-09-24",
-            "anchorDate": "2026-09-24",
-            "targetDate": "2026-08-25"
+            "endDate": "2026-09-25",
+            "anchorDate": "2026-09-25",
+            "targetDate": "2026-08-26"
           },
           "60D": {
             "windowDays": 60,
@@ -4048,9 +4048,9 @@
             "startEps": null,
             "endEps": 11.47,
             "startDate": null,
-            "endDate": "2026-09-24",
-            "anchorDate": "2026-09-24",
-            "targetDate": "2026-07-26"
+            "endDate": "2026-09-25",
+            "anchorDate": "2026-09-25",
+            "targetDate": "2026-07-27"
           },
           "90D": {
             "windowDays": 90,
@@ -4061,9 +4061,9 @@
             "startEps": null,
             "endEps": 11.47,
             "startDate": null,
-            "endDate": "2026-09-24",
-            "anchorDate": "2026-09-24",
-            "targetDate": "2026-06-26"
+            "endDate": "2026-09-25",
+            "anchorDate": "2026-09-25",
+            "targetDate": "2026-06-27"
           }
         },
         "sourceReported": {
@@ -4103,7 +4103,7 @@
         "reportedFiscalLabel": "Oct 2027",
         "mappedYear": "2027E",
         "calendarAlignment": "CY2027",
-        "asOf": "2026-09-24",
+        "asOf": "2026-09-25",
         "currentEps": 13.87,
         "analysts": 12.0,
         "identity": {
@@ -4120,9 +4120,9 @@
             "startEps": null,
             "endEps": 13.87,
             "startDate": null,
-            "endDate": "2026-09-24",
-            "anchorDate": "2026-09-24",
-            "targetDate": "2026-08-25"
+            "endDate": "2026-09-25",
+            "anchorDate": "2026-09-25",
+            "targetDate": "2026-08-26"
           },
           "60D": {
             "windowDays": 60,
@@ -4133,9 +4133,9 @@
             "startEps": null,
             "endEps": 13.87,
             "startDate": null,
-            "endDate": "2026-09-24",
-            "anchorDate": "2026-09-24",
-            "targetDate": "2026-07-26"
+            "endDate": "2026-09-25",
+            "anchorDate": "2026-09-25",
+            "targetDate": "2026-07-27"
           },
           "90D": {
             "windowDays": 90,
@@ -4146,9 +4146,9 @@
             "startEps": null,
             "endEps": 13.87,
             "startDate": null,
-            "endDate": "2026-09-24",
-            "anchorDate": "2026-09-24",
-            "targetDate": "2026-06-26"
+            "endDate": "2026-09-25",
+            "anchorDate": "2026-09-25",
+            "targetDate": "2026-06-27"
           }
         },
         "sourceReported": {
@@ -4188,7 +4188,7 @@
         "reportedFiscalLabel": "Oct 2028",
         "mappedYear": "2028E",
         "calendarAlignment": "CY2028",
-        "asOf": "2026-09-24",
+        "asOf": "2026-09-25",
         "currentEps": 15.69,
         "analysts": 10.0,
         "identity": {
@@ -4205,9 +4205,9 @@
             "startEps": null,
             "endEps": 15.69,
             "startDate": null,
-            "endDate": "2026-09-24",
-            "anchorDate": "2026-09-24",
-            "targetDate": "2026-08-25"
+            "endDate": "2026-09-25",
+            "anchorDate": "2026-09-25",
+            "targetDate": "2026-08-26"
           },
           "60D": {
             "windowDays": 60,
@@ -4218,9 +4218,9 @@
             "startEps": null,
             "endEps": 15.69,
             "startDate": null,
-            "endDate": "2026-09-24",
-            "anchorDate": "2026-09-24",
-            "targetDate": "2026-07-26"
+            "endDate": "2026-09-25",
+            "anchorDate": "2026-09-25",
+            "targetDate": "2026-07-27"
           },
           "90D": {
             "windowDays": 90,
@@ -4231,9 +4231,9 @@
             "startEps": null,
             "endEps": 15.69,
             "startDate": null,
-            "endDate": "2026-09-24",
-            "anchorDate": "2026-09-24",
-            "targetDate": "2026-06-26"
+            "endDate": "2026-09-25",
+            "anchorDate": "2026-09-25",
+            "targetDate": "2026-06-27"
           }
         },
         "sourceReported": {
@@ -4273,7 +4273,7 @@
         "reportedFiscalLabel": "Oct 2029",
         "mappedYear": "2029E",
         "calendarAlignment": "CY2029",
-        "asOf": "2026-09-24",
+        "asOf": "2026-09-25",
         "currentEps": 21.99,
         "analysts": 1.0,
         "identity": {
@@ -4290,9 +4290,9 @@
             "startEps": null,
             "endEps": 21.99,
             "startDate": null,
-            "endDate": "2026-09-24",
-            "anchorDate": "2026-09-24",
-            "targetDate": "2026-08-25"
+            "endDate": "2026-09-25",
+            "anchorDate": "2026-09-25",
+            "targetDate": "2026-08-26"
           },
           "60D": {
             "windowDays": 60,
@@ -4303,9 +4303,9 @@
             "startEps": null,
             "endEps": 21.99,
             "startDate": null,
-            "endDate": "2026-09-24",
-            "anchorDate": "2026-09-24",
-            "targetDate": "2026-07-26"
+            "endDate": "2026-09-25",
+            "anchorDate": "2026-09-25",
+            "targetDate": "2026-07-27"
           },
           "90D": {
             "windowDays": 90,
@@ -4316,9 +4316,9 @@
             "startEps": null,
             "endEps": 21.99,
             "startDate": null,
-            "endDate": "2026-09-24",
-            "anchorDate": "2026-09-24",
-            "targetDate": "2026-06-26"
+            "endDate": "2026-09-25",
+            "anchorDate": "2026-09-25",
+            "targetDate": "2026-06-27"
           }
         },
         "sourceReported": {
@@ -4358,7 +4358,7 @@
         "reportedFiscalLabel": "Jun 2026",
         "mappedYear": "2026E",
         "calendarAlignment": "CY2026",
-        "asOf": "2026-09-24",
+        "asOf": "2026-09-25",
         "currentEps": 16.78,
         "analysts": 26.0,
         "identity": {
@@ -4375,9 +4375,9 @@
             "startEps": null,
             "endEps": 16.78,
             "startDate": null,
-            "endDate": "2026-09-24",
-            "anchorDate": "2026-09-24",
-            "targetDate": "2026-08-25"
+            "endDate": "2026-09-25",
+            "anchorDate": "2026-09-25",
+            "targetDate": "2026-08-26"
           },
           "60D": {
             "windowDays": 60,
@@ -4388,9 +4388,9 @@
             "startEps": null,
             "endEps": 16.78,
             "startDate": null,
-            "endDate": "2026-09-24",
-            "anchorDate": "2026-09-24",
-            "targetDate": "2026-07-26"
+            "endDate": "2026-09-25",
+            "anchorDate": "2026-09-25",
+            "targetDate": "2026-07-27"
           },
           "90D": {
             "windowDays": 90,
@@ -4401,9 +4401,9 @@
             "startEps": null,
             "endEps": 16.78,
             "startDate": null,
-            "endDate": "2026-09-24",
-            "anchorDate": "2026-09-24",
-            "targetDate": "2026-06-26"
+            "endDate": "2026-09-25",
+            "anchorDate": "2026-09-25",
+            "targetDate": "2026-06-27"
           }
         },
         "sourceReported": {
@@ -4443,7 +4443,7 @@
         "reportedFiscalLabel": "Jun 2027",
         "mappedYear": "2027E",
         "calendarAlignment": "CY2027",
-        "asOf": "2026-09-24",
+        "asOf": "2026-09-25",
         "currentEps": 19.76,
         "analysts": 33.0,
         "identity": {
@@ -4460,9 +4460,9 @@
             "startEps": null,
             "endEps": 19.76,
             "startDate": null,
-            "endDate": "2026-09-24",
-            "anchorDate": "2026-09-24",
-            "targetDate": "2026-08-25"
+            "endDate": "2026-09-25",
+            "anchorDate": "2026-09-25",
+            "targetDate": "2026-08-26"
           },
           "60D": {
             "windowDays": 60,
@@ -4473,9 +4473,9 @@
             "startEps": null,
             "endEps": 19.76,
             "startDate": null,
-            "endDate": "2026-09-24",
-            "anchorDate": "2026-09-24",
-            "targetDate": "2026-07-26"
+            "endDate": "2026-09-25",
+            "anchorDate": "2026-09-25",
+            "targetDate": "2026-07-27"
           },
           "90D": {
             "windowDays": 90,
@@ -4486,9 +4486,9 @@
             "startEps": null,
             "endEps": 19.76,
             "startDate": null,
-            "endDate": "2026-09-24",
-            "anchorDate": "2026-09-24",
-            "targetDate": "2026-06-26"
+            "endDate": "2026-09-25",
+            "anchorDate": "2026-09-25",
+            "targetDate": "2026-06-27"
           }
         },
         "sourceReported": {
@@ -4528,7 +4528,7 @@
         "reportedFiscalLabel": "Jun 2028",
         "mappedYear": "2028E",
         "calendarAlignment": "CY2028",
-        "asOf": "2026-09-24",
+        "asOf": "2026-09-25",
         "currentEps": 23.68,
         "analysts": 32.0,
         "identity": {
@@ -4545,9 +4545,9 @@
             "startEps": null,
             "endEps": 23.68,
             "startDate": null,
-            "endDate": "2026-09-24",
-            "anchorDate": "2026-09-24",
-            "targetDate": "2026-08-25"
+            "endDate": "2026-09-25",
+            "anchorDate": "2026-09-25",
+            "targetDate": "2026-08-26"
           },
           "60D": {
             "windowDays": 60,
@@ -4558,9 +4558,9 @@
             "startEps": null,
             "endEps": 23.68,
             "startDate": null,
-            "endDate": "2026-09-24",
-            "anchorDate": "2026-09-24",
-            "targetDate": "2026-07-26"
+            "endDate": "2026-09-25",
+            "anchorDate": "2026-09-25",
+            "targetDate": "2026-07-27"
           },
           "90D": {
             "windowDays": 90,
@@ -4571,9 +4571,9 @@
             "startEps": null,
             "endEps": 23.68,
             "startDate": null,
-            "endDate": "2026-09-24",
-            "anchorDate": "2026-09-24",
-            "targetDate": "2026-06-26"
+            "endDate": "2026-09-25",
+            "anchorDate": "2026-09-25",
+            "targetDate": "2026-06-27"
           }
         },
         "sourceReported": {
@@ -4613,7 +4613,7 @@
         "reportedFiscalLabel": "Jun 2029",
         "mappedYear": "2029E",
         "calendarAlignment": "CY2029",
-        "asOf": "2026-09-24",
+        "asOf": "2026-09-25",
         "currentEps": 28.85,
         "analysts": 15.0,
         "identity": {
@@ -4630,9 +4630,9 @@
             "startEps": null,
             "endEps": 28.85,
             "startDate": null,
-            "endDate": "2026-09-24",
-            "anchorDate": "2026-09-24",
-            "targetDate": "2026-08-25"
+            "endDate": "2026-09-25",
+            "anchorDate": "2026-09-25",
+            "targetDate": "2026-08-26"
           },
           "60D": {
             "windowDays": 60,
@@ -4643,9 +4643,9 @@
             "startEps": null,
             "endEps": 28.85,
             "startDate": null,
-            "endDate": "2026-09-24",
-            "anchorDate": "2026-09-24",
-            "targetDate": "2026-07-26"
+            "endDate": "2026-09-25",
+            "anchorDate": "2026-09-25",
+            "targetDate": "2026-07-27"
           },
           "90D": {
             "windowDays": 90,
@@ -4656,9 +4656,9 @@
             "startEps": null,
             "endEps": 28.85,
             "startDate": null,
-            "endDate": "2026-09-24",
-            "anchorDate": "2026-09-24",
-            "targetDate": "2026-06-26"
+            "endDate": "2026-09-25",
+            "anchorDate": "2026-09-25",
+            "targetDate": "2026-06-27"
           }
         },
         "sourceReported": {
@@ -4698,7 +4698,7 @@
         "reportedFiscalLabel": "Jan 2027",
         "mappedYear": "2026E",
         "calendarAlignment": "CY2026",
-        "asOf": "2026-09-24",
+        "asOf": "2026-09-25",
         "currentEps": 9.31,
         "analysts": 51.0,
         "identity": {
@@ -4715,9 +4715,9 @@
             "startEps": null,
             "endEps": 9.31,
             "startDate": null,
-            "endDate": "2026-09-24",
-            "anchorDate": "2026-09-24",
-            "targetDate": "2026-08-25"
+            "endDate": "2026-09-25",
+            "anchorDate": "2026-09-25",
+            "targetDate": "2026-08-26"
           },
           "60D": {
             "windowDays": 60,
@@ -4728,9 +4728,9 @@
             "startEps": null,
             "endEps": 9.31,
             "startDate": null,
-            "endDate": "2026-09-24",
-            "anchorDate": "2026-09-24",
-            "targetDate": "2026-07-26"
+            "endDate": "2026-09-25",
+            "anchorDate": "2026-09-25",
+            "targetDate": "2026-07-27"
           },
           "90D": {
             "windowDays": 90,
@@ -4741,9 +4741,9 @@
             "startEps": null,
             "endEps": 9.31,
             "startDate": null,
-            "endDate": "2026-09-24",
-            "anchorDate": "2026-09-24",
-            "targetDate": "2026-06-26"
+            "endDate": "2026-09-25",
+            "anchorDate": "2026-09-25",
+            "targetDate": "2026-06-27"
           }
         },
         "sourceReported": {
@@ -4783,7 +4783,7 @@
         "reportedFiscalLabel": "Jan 2028",
         "mappedYear": "2027E",
         "calendarAlignment": "CY2027",
-        "asOf": "2026-09-24",
+        "asOf": "2026-09-25",
         "currentEps": 15.68,
         "analysts": 53.0,
         "identity": {
@@ -4800,9 +4800,9 @@
             "startEps": null,
             "endEps": 15.68,
             "startDate": null,
-            "endDate": "2026-09-24",
-            "anchorDate": "2026-09-24",
-            "targetDate": "2026-08-25"
+            "endDate": "2026-09-25",
+            "anchorDate": "2026-09-25",
+            "targetDate": "2026-08-26"
           },
           "60D": {
             "windowDays": 60,
@@ -4813,9 +4813,9 @@
             "startEps": null,
             "endEps": 15.68,
             "startDate": null,
-            "endDate": "2026-09-24",
-            "anchorDate": "2026-09-24",
-            "targetDate": "2026-07-26"
+            "endDate": "2026-09-25",
+            "anchorDate": "2026-09-25",
+            "targetDate": "2026-07-27"
           },
           "90D": {
             "windowDays": 90,
@@ -4826,9 +4826,9 @@
             "startEps": null,
             "endEps": 15.68,
             "startDate": null,
-            "endDate": "2026-09-24",
-            "anchorDate": "2026-09-24",
-            "targetDate": "2026-06-26"
+            "endDate": "2026-09-25",
+            "anchorDate": "2026-09-25",
+            "targetDate": "2026-06-27"
           }
         },
         "sourceReported": {
@@ -4868,7 +4868,7 @@
         "reportedFiscalLabel": "Jan 2029",
         "mappedYear": "2028E",
         "calendarAlignment": "CY2028",
-        "asOf": "2026-09-24",
+        "asOf": "2026-09-25",
         "currentEps": 21.06,
         "analysts": 32.0,
         "identity": {
@@ -4885,9 +4885,9 @@
             "startEps": null,
             "endEps": 21.06,
             "startDate": null,
-            "endDate": "2026-09-24",
-            "anchorDate": "2026-09-24",
-            "targetDate": "2026-08-25"
+            "endDate": "2026-09-25",
+            "anchorDate": "2026-09-25",
+            "targetDate": "2026-08-26"
           },
           "60D": {
             "windowDays": 60,
@@ -4898,9 +4898,9 @@
             "startEps": null,
             "endEps": 21.06,
             "startDate": null,
-            "endDate": "2026-09-24",
-            "anchorDate": "2026-09-24",
-            "targetDate": "2026-07-26"
+            "endDate": "2026-09-25",
+            "anchorDate": "2026-09-25",
+            "targetDate": "2026-07-27"
           },
           "90D": {
             "windowDays": 90,
@@ -4911,9 +4911,9 @@
             "startEps": null,
             "endEps": 21.06,
             "startDate": null,
-            "endDate": "2026-09-24",
-            "anchorDate": "2026-09-24",
-            "targetDate": "2026-06-26"
+            "endDate": "2026-09-25",
+            "anchorDate": "2026-09-25",
+            "targetDate": "2026-06-27"
           }
         },
         "sourceReported": {
@@ -4953,7 +4953,7 @@
         "reportedFiscalLabel": "Jan 2030",
         "mappedYear": "2029E",
         "calendarAlignment": "CY2029",
-        "asOf": "2026-09-24",
+        "asOf": "2026-09-25",
         "currentEps": 23.4,
         "analysts": 4.0,
         "identity": {
@@ -4970,9 +4970,9 @@
             "startEps": null,
             "endEps": 23.4,
             "startDate": null,
-            "endDate": "2026-09-24",
-            "anchorDate": "2026-09-24",
-            "targetDate": "2026-08-25"
+            "endDate": "2026-09-25",
+            "anchorDate": "2026-09-25",
+            "targetDate": "2026-08-26"
           },
           "60D": {
             "windowDays": 60,
@@ -4983,9 +4983,9 @@
             "startEps": null,
             "endEps": 23.4,
             "startDate": null,
-            "endDate": "2026-09-24",
-            "anchorDate": "2026-09-24",
-            "targetDate": "2026-07-26"
+            "endDate": "2026-09-25",
+            "anchorDate": "2026-09-25",
+            "targetDate": "2026-07-27"
           },
           "90D": {
             "windowDays": 90,
@@ -4996,9 +4996,9 @@
             "startEps": null,
             "endEps": 23.4,
             "startDate": null,
-            "endDate": "2026-09-24",
-            "anchorDate": "2026-09-24",
-            "targetDate": "2026-06-26"
+            "endDate": "2026-09-25",
+            "anchorDate": "2026-09-25",
+            "targetDate": "2026-06-27"
           }
         },
         "sourceReported": {
@@ -5038,7 +5038,7 @@
         "reportedFiscalLabel": "Dec 2026",
         "mappedYear": "2026E",
         "calendarAlignment": "CY2026",
-        "asOf": "2026-09-24",
+        "asOf": "2026-09-25",
         "currentEps": 16.93,
         "analysts": 13.0,
         "identity": {
@@ -5055,9 +5055,9 @@
             "startEps": null,
             "endEps": 16.93,
             "startDate": null,
-            "endDate": "2026-09-24",
-            "anchorDate": "2026-09-24",
-            "targetDate": "2026-08-25"
+            "endDate": "2026-09-25",
+            "anchorDate": "2026-09-25",
+            "targetDate": "2026-08-26"
           },
           "60D": {
             "windowDays": 60,
@@ -5068,9 +5068,9 @@
             "startEps": null,
             "endEps": 16.93,
             "startDate": null,
-            "endDate": "2026-09-24",
-            "anchorDate": "2026-09-24",
-            "targetDate": "2026-07-26"
+            "endDate": "2026-09-25",
+            "anchorDate": "2026-09-25",
+            "targetDate": "2026-07-27"
           },
           "90D": {
             "windowDays": 90,
@@ -5081,9 +5081,9 @@
             "startEps": null,
             "endEps": 16.93,
             "startDate": null,
-            "endDate": "2026-09-24",
-            "anchorDate": "2026-09-24",
-            "targetDate": "2026-06-26"
+            "endDate": "2026-09-25",
+            "anchorDate": "2026-09-25",
+            "targetDate": "2026-06-27"
           }
         },
         "sourceReported": {
@@ -5123,7 +5123,7 @@
         "reportedFiscalLabel": "Dec 2027",
         "mappedYear": "2027E",
         "calendarAlignment": "CY2027",
-        "asOf": "2026-09-24",
+        "asOf": "2026-09-25",
         "currentEps": 21.93,
         "analysts": 13.0,
         "identity": {
@@ -5140,9 +5140,9 @@
             "startEps": null,
             "endEps": 21.93,
             "startDate": null,
-            "endDate": "2026-09-24",
-            "anchorDate": "2026-09-24",
-            "targetDate": "2026-08-25"
+            "endDate": "2026-09-25",
+            "anchorDate": "2026-09-25",
+            "targetDate": "2026-08-26"
           },
           "60D": {
             "windowDays": 60,
@@ -5153,9 +5153,9 @@
             "startEps": null,
             "endEps": 21.93,
             "startDate": null,
-            "endDate": "2026-09-24",
-            "anchorDate": "2026-09-24",
-            "targetDate": "2026-07-26"
+            "endDate": "2026-09-25",
+            "anchorDate": "2026-09-25",
+            "targetDate": "2026-07-27"
           },
           "90D": {
             "windowDays": 90,
@@ -5166,9 +5166,9 @@
             "startEps": null,
             "endEps": 21.93,
             "startDate": null,
-            "endDate": "2026-09-24",
-            "anchorDate": "2026-09-24",
-            "targetDate": "2026-06-26"
+            "endDate": "2026-09-25",
+            "anchorDate": "2026-09-25",
+            "targetDate": "2026-06-27"
           }
         },
         "sourceReported": {
@@ -5208,7 +5208,7 @@
         "reportedFiscalLabel": "Dec 2028",
         "mappedYear": "2028E",
         "calendarAlignment": "CY2028",
-        "asOf": "2026-09-24",
+        "asOf": "2026-09-25",
         "currentEps": 28.33,
         "analysts": 8.0,
         "identity": {
@@ -5225,9 +5225,9 @@
             "startEps": null,
             "endEps": 28.33,
             "startDate": null,
-            "endDate": "2026-09-24",
-            "anchorDate": "2026-09-24",
-            "targetDate": "2026-08-25"
+            "endDate": "2026-09-25",
+            "anchorDate": "2026-09-25",
+            "targetDate": "2026-08-26"
           },
           "60D": {
             "windowDays": 60,
@@ -5238,9 +5238,9 @@
             "startEps": null,
             "endEps": 28.33,
             "startDate": null,
-            "endDate": "2026-09-24",
-            "anchorDate": "2026-09-24",
-            "targetDate": "2026-07-26"
+            "endDate": "2026-09-25",
+            "anchorDate": "2026-09-25",
+            "targetDate": "2026-07-27"
           },
           "90D": {
             "windowDays": 90,
@@ -5251,9 +5251,9 @@
             "startEps": null,
             "endEps": 28.33,
             "startDate": null,
-            "endDate": "2026-09-24",
-            "anchorDate": "2026-09-24",
-            "targetDate": "2026-06-26"
+            "endDate": "2026-09-25",
+            "anchorDate": "2026-09-25",
+            "targetDate": "2026-06-27"
           }
         },
         "sourceReported": {
@@ -5317,6 +5317,11 @@
           "date": "2026-09-24",
           "eps": 11.66,
           "reportedFiscalLabel": "Oct 2026"
+        },
+        {
+          "date": "2026-09-25",
+          "eps": 11.66,
+          "reportedFiscalLabel": "Oct 2026"
         }
       ],
       "2027E": [
@@ -5342,6 +5347,11 @@
         },
         {
           "date": "2026-09-24",
+          "eps": 19.38,
+          "reportedFiscalLabel": "Oct 2027"
+        },
+        {
+          "date": "2026-09-25",
           "eps": 19.38,
           "reportedFiscalLabel": "Oct 2027"
         }
@@ -5371,6 +5381,11 @@
           "date": "2026-09-24",
           "eps": 30.56,
           "reportedFiscalLabel": "Oct 2028"
+        },
+        {
+          "date": "2026-09-25",
+          "eps": 30.56,
+          "reportedFiscalLabel": "Oct 2028"
         }
       ],
       "2029E": [
@@ -5396,6 +5411,11 @@
         },
         {
           "date": "2026-09-24",
+          "eps": 40.66,
+          "reportedFiscalLabel": "Oct 2029"
+        },
+        {
+          "date": "2026-09-25",
           "eps": 40.66,
           "reportedFiscalLabel": "Oct 2029"
         }
@@ -5427,6 +5447,11 @@
           "date": "2026-09-24",
           "eps": 2.71,
           "reportedFiscalLabel": "Dec 2026"
+        },
+        {
+          "date": "2026-09-25",
+          "eps": 2.71,
+          "reportedFiscalLabel": "Dec 2026"
         }
       ],
       "2027E": [
@@ -5452,6 +5477,11 @@
         },
         {
           "date": "2026-09-24",
+          "eps": 4.93,
+          "reportedFiscalLabel": "Dec 2027"
+        },
+        {
+          "date": "2026-09-25",
           "eps": 4.93,
           "reportedFiscalLabel": "Dec 2027"
         }
@@ -5481,6 +5511,11 @@
           "date": "2026-09-24",
           "eps": 7.79,
           "reportedFiscalLabel": "Dec 2028"
+        },
+        {
+          "date": "2026-09-25",
+          "eps": 7.79,
+          "reportedFiscalLabel": "Dec 2028"
         }
       ],
       "2029E": [
@@ -5506,6 +5541,11 @@
         },
         {
           "date": "2026-09-24",
+          "eps": 10.36,
+          "reportedFiscalLabel": "Dec 2029"
+        },
+        {
+          "date": "2026-09-25",
           "eps": 10.36,
           "reportedFiscalLabel": "Dec 2029"
         }
@@ -5537,6 +5577,11 @@
           "date": "2026-09-24",
           "eps": 11.47,
           "reportedFiscalLabel": "Oct 2026"
+        },
+        {
+          "date": "2026-09-25",
+          "eps": 11.47,
+          "reportedFiscalLabel": "Oct 2026"
         }
       ],
       "2027E": [
@@ -5562,6 +5607,11 @@
         },
         {
           "date": "2026-09-24",
+          "eps": 13.87,
+          "reportedFiscalLabel": "Oct 2027"
+        },
+        {
+          "date": "2026-09-25",
           "eps": 13.87,
           "reportedFiscalLabel": "Oct 2027"
         }
@@ -5591,6 +5641,11 @@
           "date": "2026-09-24",
           "eps": 15.69,
           "reportedFiscalLabel": "Oct 2028"
+        },
+        {
+          "date": "2026-09-25",
+          "eps": 15.69,
+          "reportedFiscalLabel": "Oct 2028"
         }
       ],
       "2029E": [
@@ -5618,6 +5673,11 @@
           "date": "2026-09-24",
           "eps": 21.99,
           "reportedFiscalLabel": "Oct 2029"
+        },
+        {
+          "date": "2026-09-25",
+          "eps": 21.99,
+          "reportedFiscalLabel": "Oct 2029"
         }
       ]
     },
@@ -5635,6 +5695,11 @@
         },
         {
           "date": "2026-09-24",
+          "eps": 16.78,
+          "reportedFiscalLabel": "Jun 2026"
+        },
+        {
+          "date": "2026-09-25",
           "eps": 16.78,
           "reportedFiscalLabel": "Jun 2026"
         }
@@ -5664,6 +5729,11 @@
           "date": "2026-09-24",
           "eps": 19.76,
           "reportedFiscalLabel": "Jun 2027"
+        },
+        {
+          "date": "2026-09-25",
+          "eps": 19.76,
+          "reportedFiscalLabel": "Jun 2027"
         }
       ],
       "2028E": [
@@ -5691,6 +5761,11 @@
           "date": "2026-09-24",
           "eps": 23.68,
           "reportedFiscalLabel": "Jun 2028"
+        },
+        {
+          "date": "2026-09-25",
+          "eps": 23.68,
+          "reportedFiscalLabel": "Jun 2028"
         }
       ],
       "2029E": [
@@ -5716,6 +5791,11 @@
         },
         {
           "date": "2026-09-24",
+          "eps": 28.85,
+          "reportedFiscalLabel": "Jun 2029"
+        },
+        {
+          "date": "2026-09-25",
           "eps": 28.85,
           "reportedFiscalLabel": "Jun 2029"
         }
@@ -5747,6 +5827,11 @@
           "date": "2026-09-24",
           "eps": 9.31,
           "reportedFiscalLabel": "Jan 2027"
+        },
+        {
+          "date": "2026-09-25",
+          "eps": 9.31,
+          "reportedFiscalLabel": "Jan 2027"
         }
       ],
       "2027E": [
@@ -5772,6 +5857,11 @@
         },
         {
           "date": "2026-09-24",
+          "eps": 15.68,
+          "reportedFiscalLabel": "Jan 2028"
+        },
+        {
+          "date": "2026-09-25",
           "eps": 15.68,
           "reportedFiscalLabel": "Jan 2028"
         }
@@ -5801,6 +5891,11 @@
           "date": "2026-09-24",
           "eps": 21.06,
           "reportedFiscalLabel": "Jan 2029"
+        },
+        {
+          "date": "2026-09-25",
+          "eps": 21.06,
+          "reportedFiscalLabel": "Jan 2029"
         }
       ],
       "2029E": [
@@ -5826,6 +5921,11 @@
         },
         {
           "date": "2026-09-24",
+          "eps": 23.4,
+          "reportedFiscalLabel": "Jan 2030"
+        },
+        {
+          "date": "2026-09-25",
           "eps": 23.4,
           "reportedFiscalLabel": "Jan 2030"
         }
@@ -5857,6 +5957,11 @@
           "date": "2026-09-24",
           "eps": 16.93,
           "reportedFiscalLabel": "Dec 2026"
+        },
+        {
+          "date": "2026-09-25",
+          "eps": 16.93,
+          "reportedFiscalLabel": "Dec 2026"
         }
       ],
       "2027E": [
@@ -5884,6 +5989,11 @@
           "date": "2026-09-24",
           "eps": 21.93,
           "reportedFiscalLabel": "Dec 2027"
+        },
+        {
+          "date": "2026-09-25",
+          "eps": 21.93,
+          "reportedFiscalLabel": "Dec 2027"
         }
       ],
       "2028E": [
@@ -5909,6 +6019,11 @@
         },
         {
           "date": "2026-09-24",
+          "eps": 28.33,
+          "reportedFiscalLabel": "Dec 2028"
+        },
+        {
+          "date": "2026-09-25",
           "eps": 28.33,
           "reportedFiscalLabel": "Dec 2028"
         }
@@ -6602,8 +6717,8 @@
       "ticker": "TSM",
       "hasDigest": false,
       "lastEarnings": "7/16/2026",
-      "nextEarnings": "Oct 16, 2026 · Estimated",
-      "nextEarningsRaw": "10/16/2026 (Estimated)",
+      "nextEarnings": "Oct 15, 2026 · Estimated",
+      "nextEarningsRaw": "10/15/2026 (Estimated)",
       "nextEarningsStatus": "estimated",
       "nextEarningsSource": "Seeking Alpha",
       "revenue": [],
@@ -6708,7 +6823,7 @@
         "sourceWindow": "Seeking Alpha 1M",
         "windowLabel": "Source window: Seeking Alpha 1M",
         "neverInternal30D": true,
-        "ageDays": 9,
+        "ageDays": 10,
         "analystCount": 33,
         "consensusLow": 25.22,
         "consensusHigh": 34.25,
@@ -6719,8 +6834,8 @@
         "status": "Open",
         "lifecycleStatus": "Open",
         "lifecycleEvent": "Hold",
-        "updatedAt": "2026-09-24T00:08:01Z",
-        "lastObservedAt": "2026-09-24T00:08:01Z"
+        "updatedAt": "2026-09-25T00:05:04Z",
+        "lastObservedAt": "2026-09-25T00:05:04Z"
       },
       {
         "id": "source_reported_1m_revision:NVDA:Jan_2030:2026-09-15:sa1m_2029E",
@@ -6745,7 +6860,7 @@
         "sourceWindow": "Seeking Alpha 1M",
         "windowLabel": "Source window: Seeking Alpha 1M",
         "neverInternal30D": true,
-        "ageDays": 9,
+        "ageDays": 10,
         "analystCount": 4,
         "consensusLow": 17.9,
         "consensusHigh": 30.37,
@@ -6756,8 +6871,8 @@
         "status": "Open",
         "lifecycleStatus": "Open",
         "lifecycleEvent": "Hold",
-        "updatedAt": "2026-09-24T00:08:01Z",
-        "lastObservedAt": "2026-09-24T00:08:01Z"
+        "updatedAt": "2026-09-25T00:05:04Z",
+        "lastObservedAt": "2026-09-25T00:05:04Z"
       },
       {
         "id": "source_reported_1m_revision:AVGO:Oct_2029:2026-09-15:sa1m_2029E",
@@ -6782,7 +6897,7 @@
         "sourceWindow": "Seeking Alpha 1M",
         "windowLabel": "Source window: Seeking Alpha 1M",
         "neverInternal30D": true,
-        "ageDays": 9,
+        "ageDays": 10,
         "analystCount": 4,
         "consensusLow": 30.54,
         "consensusHigh": 50.5,
@@ -6793,8 +6908,8 @@
         "status": "Open",
         "lifecycleStatus": "Open",
         "lifecycleEvent": "Hold",
-        "updatedAt": "2026-09-24T00:08:01Z",
-        "lastObservedAt": "2026-09-24T00:08:01Z"
+        "updatedAt": "2026-09-25T00:05:04Z",
+        "lastObservedAt": "2026-09-25T00:05:04Z"
       },
       {
         "id": "source_reported_1m_revision:KEYS:Oct_2029:2026-09-15:sa1m_2029E",
@@ -6819,7 +6934,7 @@
         "sourceWindow": "Seeking Alpha 1M",
         "windowLabel": "Source window: Seeking Alpha 1M",
         "neverInternal30D": true,
-        "ageDays": 9,
+        "ageDays": 10,
         "analystCount": 1,
         "consensusLow": 21.99,
         "consensusHigh": 21.99,
@@ -6830,8 +6945,8 @@
         "status": "Open",
         "lifecycleStatus": "Open",
         "lifecycleEvent": "Hold",
-        "updatedAt": "2026-09-24T00:08:01Z",
-        "lastObservedAt": "2026-09-24T00:08:01Z"
+        "updatedAt": "2026-09-25T00:05:04Z",
+        "lastObservedAt": "2026-09-25T00:05:04Z"
       }
     ],
     "alertHistory": [
@@ -6889,7 +7004,7 @@
         "sourceTier": 4,
         "actualsSourceUrl": "https://investor.nvidia.com/news/press-release-details/2026/NVIDIA-Announces-Financial-Results-for-Second-Quarter-Fiscal-2027/default.aspx",
         "actualsSourceTier": 1,
-        "ageDays": 29
+        "ageDays": 30
       },
       {
         "id": "results_vs_consensus:AVGO:Q3_2026_(fiscal_2026):2026-09-02:results_above",
@@ -6913,7 +7028,7 @@
         "sourceTier": 4,
         "actualsSourceUrl": "https://investors.broadcom.com/news-releases/news-release-details/broadcom-inc-announces-third-quarter-fiscal-year-2026-financial",
         "actualsSourceTier": 1,
-        "ageDays": 22
+        "ageDays": 23
       },
       {
         "id": "gross_margin_pressure:AVGO:Q3_2026_(fiscal_2026):2026-09-02:gm_pressure_-210",
@@ -6932,7 +7047,7 @@
         "activeUntil": "2026-09-23T00:00:00Z",
         "oneshot": true,
         "bpsChange": -210.0,
-        "ageDays": 22
+        "ageDays": 23
       },
       {
         "id": "driver_status_change:NVDA:na:2026-08-26:GPU_shipment",
@@ -6955,7 +7070,7 @@
         "previousStatus": "unchanged",
         "currentStatus": "improving",
         "sourceUrl": "https://investor.nvidia.com/news/press-release-details/2026/NVIDIA-Announces-Financial-Results-for-Second-Quarter-Fiscal-2027/default.aspx",
-        "ageDays": 29
+        "ageDays": 30
       },
       {
         "id": "driver_status_change:NVDA:na:2026-08-26:Rubin_-_Rubin_Ultra",
@@ -6978,7 +7093,7 @@
         "previousStatus": "unchanged",
         "currentStatus": "improving",
         "sourceUrl": "https://seekingalpha.com/article/4940563-nvidia-corporation-nvda-q2-2027-earnings-call-transcript",
-        "ageDays": 29
+        "ageDays": 30
       },
       {
         "id": "driver_status_change:NVDA:na:2026-08-26:inference_demand",
@@ -7001,7 +7116,7 @@
         "previousStatus": "unchanged",
         "currentStatus": "improving",
         "sourceUrl": "https://investor.nvidia.com/news/press-release-details/2026/NVIDIA-Announces-Financial-Results-for-Second-Quarter-Fiscal-2027/default.aspx",
-        "ageDays": 29
+        "ageDays": 30
       },
       {
         "id": "driver_status_change:NVDA:na:2026-08-26:HBM_supply",
@@ -7024,7 +7139,7 @@
         "previousStatus": "unchanged",
         "currentStatus": "deteriorating",
         "sourceUrl": "https://investor.nvidia.com/news/press-release-details/2026/NVIDIA-Announces-Financial-Results-for-Second-Quarter-Fiscal-2027/default.aspx",
-        "ageDays": 29
+        "ageDays": 30
       },
       {
         "id": "driver_status_change:NVDA:na:2026-08-26:networking",
@@ -7047,7 +7162,7 @@
         "previousStatus": "unchanged",
         "currentStatus": "improving",
         "sourceUrl": "https://seekingalpha.com/article/4940563-nvidia-corporation-nvda-q2-2027-earnings-call-transcript",
-        "ageDays": 29
+        "ageDays": 30
       },
       {
         "id": "driver_status_change:NVDA:na:2026-08-26:gross_margin",
@@ -7070,7 +7185,7 @@
         "previousStatus": "unchanged",
         "currentStatus": "deteriorating",
         "sourceUrl": "https://investor.nvidia.com/news/press-release-details/2026/NVIDIA-Announces-Financial-Results-for-Second-Quarter-Fiscal-2027/default.aspx",
-        "ageDays": 29
+        "ageDays": 30
       },
       {
         "id": "driver_status_change:AVGO:na:2026-09-02:AI_ASIC",
@@ -7093,7 +7208,7 @@
         "previousStatus": "unchanged",
         "currentStatus": "improving",
         "sourceUrl": "https://investors.broadcom.com/news-releases/news-release-details/broadcom-inc-announces-third-quarter-fiscal-year-2026-financial",
-        "ageDays": 22
+        "ageDays": 23
       },
       {
         "id": "driver_status_change:AVGO:na:2026-09-02:hyperscaler_customers",
@@ -7116,7 +7231,7 @@
         "previousStatus": "unchanged",
         "currentStatus": "improving",
         "sourceUrl": "https://investors.broadcom.com/news-releases/news-release-details/broadcom-inc-announces-third-quarter-fiscal-year-2026-financial",
-        "ageDays": 22
+        "ageDays": 23
       },
       {
         "id": "driver_status_change:AVGO:na:2026-09-02:AI_networking",
@@ -7139,7 +7254,7 @@
         "previousStatus": "unchanged",
         "currentStatus": "improving",
         "sourceUrl": "https://seekingalpha.com/article/4942557-broadcom-inc-avgo-q3-2026-earnings-call-transcript",
-        "ageDays": 22
+        "ageDays": 23
       },
       {
         "id": "driver_status_change:AVGO:na:2026-09-02:Tomahawk",
@@ -7162,7 +7277,7 @@
         "previousStatus": "unchanged",
         "currentStatus": "improving",
         "sourceUrl": "https://seekingalpha.com/article/4942557-broadcom-inc-avgo-q3-2026-earnings-call-transcript",
-        "ageDays": 22
+        "ageDays": 23
       },
       {
         "id": "driver_status_change:AVGO:na:2026-09-02:gross_margin",
@@ -7185,7 +7300,7 @@
         "previousStatus": "unchanged",
         "currentStatus": "deteriorating",
         "sourceUrl": "https://investors.broadcom.com/news-releases/news-release-details/broadcom-inc-announces-third-quarter-fiscal-year-2026-financial",
-        "ageDays": 22
+        "ageDays": 23
       },
       {
         "id": "driver_status_change:AVGO:na:2026-09-02:FCF",
@@ -7208,7 +7323,7 @@
         "previousStatus": "unchanged",
         "currentStatus": "improving",
         "sourceUrl": "https://investors.broadcom.com/news-releases/news-release-details/broadcom-inc-announces-third-quarter-fiscal-year-2026-financial",
-        "ageDays": 22
+        "ageDays": 23
       },
       {
         "id": "source_reported_1m_revision:NVDA:Jan_2030:2026-09-15:sa1m_2029E",
@@ -7233,7 +7348,7 @@
         "sourceWindow": "Seeking Alpha 1M",
         "windowLabel": "Source window: Seeking Alpha 1M",
         "neverInternal30D": true,
-        "ageDays": 9,
+        "ageDays": 10,
         "analystCount": 4,
         "consensusLow": 17.9,
         "consensusHigh": 30.37,
@@ -7244,8 +7359,8 @@
         "status": "Open",
         "lifecycleStatus": "Open",
         "lifecycleEvent": "Hold",
-        "updatedAt": "2026-09-24T00:08:01Z",
-        "lastObservedAt": "2026-09-24T00:08:01Z"
+        "updatedAt": "2026-09-25T00:05:04Z",
+        "lastObservedAt": "2026-09-25T00:05:04Z"
       },
       {
         "id": "source_reported_1m_revision:AVGO:Oct_2028:2026-09-15:sa1m_2028E",
@@ -7270,7 +7385,7 @@
         "sourceWindow": "Seeking Alpha 1M",
         "windowLabel": "Source window: Seeking Alpha 1M",
         "neverInternal30D": true,
-        "ageDays": 9,
+        "ageDays": 10,
         "analystCount": 33,
         "consensusLow": 25.22,
         "consensusHigh": 34.25,
@@ -7281,8 +7396,8 @@
         "status": "Open",
         "lifecycleStatus": "Open",
         "lifecycleEvent": "Hold",
-        "updatedAt": "2026-09-24T00:08:01Z",
-        "lastObservedAt": "2026-09-24T00:08:01Z"
+        "updatedAt": "2026-09-25T00:05:04Z",
+        "lastObservedAt": "2026-09-25T00:05:04Z"
       },
       {
         "id": "source_reported_1m_revision:AVGO:Oct_2029:2026-09-15:sa1m_2029E",
@@ -7307,7 +7422,7 @@
         "sourceWindow": "Seeking Alpha 1M",
         "windowLabel": "Source window: Seeking Alpha 1M",
         "neverInternal30D": true,
-        "ageDays": 9,
+        "ageDays": 10,
         "analystCount": 4,
         "consensusLow": 30.54,
         "consensusHigh": 50.5,
@@ -7318,8 +7433,8 @@
         "status": "Open",
         "lifecycleStatus": "Open",
         "lifecycleEvent": "Hold",
-        "updatedAt": "2026-09-24T00:08:01Z",
-        "lastObservedAt": "2026-09-24T00:08:01Z"
+        "updatedAt": "2026-09-25T00:05:04Z",
+        "lastObservedAt": "2026-09-25T00:05:04Z"
       },
       {
         "id": "source_reported_1m_revision:KEYS:Oct_2028:2026-09-15:sa1m_2028E",
@@ -7344,7 +7459,7 @@
         "sourceWindow": "Seeking Alpha 1M",
         "windowLabel": "Source window: Seeking Alpha 1M",
         "neverInternal30D": true,
-        "ageDays": 9,
+        "ageDays": 10,
         "analystCount": 10,
         "consensusLow": 14.04,
         "consensusHigh": 19.51,
@@ -7382,7 +7497,7 @@
         "sourceWindow": "Seeking Alpha 1M",
         "windowLabel": "Source window: Seeking Alpha 1M",
         "neverInternal30D": true,
-        "ageDays": 9,
+        "ageDays": 10,
         "analystCount": 1,
         "consensusLow": 21.99,
         "consensusHigh": 21.99,
@@ -7393,8 +7508,8 @@
         "status": "Open",
         "lifecycleStatus": "Open",
         "lifecycleEvent": "Hold",
-        "updatedAt": "2026-09-24T00:08:01Z",
-        "lastObservedAt": "2026-09-24T00:08:01Z"
+        "updatedAt": "2026-09-25T00:05:04Z",
+        "lastObservedAt": "2026-09-25T00:05:04Z"
       }
     ],
     "alertDiagnostics": [
@@ -7405,9 +7520,9 @@
         "period": "Jan 2027",
         "message": "NVDA Jan 2027: insufficient history for 30D cumulative (insufficient_history)",
         "lookbackDays": 30,
-        "windowPointCount": 4,
+        "windowPointCount": 5,
         "status": "insufficient history",
-        "eventAt": "2026-09-24T00:08:01Z",
+        "eventAt": "2026-09-25T00:05:04Z",
         "diagnostic": true,
         "priorAlertId": null
       },
@@ -7418,9 +7533,9 @@
         "period": "Jan 2028",
         "message": "NVDA Jan 2028: insufficient history for 30D cumulative (insufficient_history)",
         "lookbackDays": 30,
-        "windowPointCount": 4,
+        "windowPointCount": 5,
         "status": "insufficient history",
-        "eventAt": "2026-09-24T00:08:01Z",
+        "eventAt": "2026-09-25T00:05:04Z",
         "diagnostic": true,
         "priorAlertId": null
       },
@@ -7431,9 +7546,9 @@
         "period": "Jan 2029",
         "message": "NVDA Jan 2029: insufficient history for 30D cumulative (insufficient_history)",
         "lookbackDays": 30,
-        "windowPointCount": 4,
+        "windowPointCount": 5,
         "status": "insufficient history",
-        "eventAt": "2026-09-24T00:08:01Z",
+        "eventAt": "2026-09-25T00:05:04Z",
         "diagnostic": true,
         "priorAlertId": null
       },
@@ -7444,9 +7559,9 @@
         "period": "Oct 2026",
         "message": "AVGO Oct 2026: insufficient history for 30D cumulative (insufficient_history)",
         "lookbackDays": 30,
-        "windowPointCount": 4,
+        "windowPointCount": 5,
         "status": "insufficient history",
-        "eventAt": "2026-09-24T00:08:01Z",
+        "eventAt": "2026-09-25T00:05:04Z",
         "diagnostic": true,
         "priorAlertId": null
       },
@@ -7457,9 +7572,9 @@
         "period": "Oct 2027",
         "message": "AVGO Oct 2027: insufficient history for 30D cumulative (insufficient_history)",
         "lookbackDays": 30,
-        "windowPointCount": 4,
+        "windowPointCount": 5,
         "status": "insufficient history",
-        "eventAt": "2026-09-24T00:08:01Z",
+        "eventAt": "2026-09-25T00:05:04Z",
         "diagnostic": true,
         "priorAlertId": null
       },
@@ -7470,9 +7585,9 @@
         "period": "Oct 2028",
         "message": "AVGO Oct 2028: insufficient history for 30D cumulative (insufficient_history)",
         "lookbackDays": 30,
-        "windowPointCount": 4,
+        "windowPointCount": 5,
         "status": "insufficient history",
-        "eventAt": "2026-09-24T00:08:01Z",
+        "eventAt": "2026-09-25T00:05:04Z",
         "diagnostic": true,
         "priorAlertId": null
       },
@@ -7483,9 +7598,9 @@
         "period": "Dec 2026",
         "message": "TSM Dec 2026: insufficient history for 30D cumulative (insufficient_history)",
         "lookbackDays": 30,
-        "windowPointCount": 4,
+        "windowPointCount": 5,
         "status": "insufficient history",
-        "eventAt": "2026-09-24T00:08:01Z",
+        "eventAt": "2026-09-25T00:05:04Z",
         "diagnostic": true,
         "priorAlertId": null
       },
@@ -7496,9 +7611,9 @@
         "period": "Dec 2027",
         "message": "TSM Dec 2027: insufficient history for 30D cumulative (insufficient_history)",
         "lookbackDays": 30,
-        "windowPointCount": 4,
+        "windowPointCount": 5,
         "status": "insufficient history",
-        "eventAt": "2026-09-24T00:08:01Z",
+        "eventAt": "2026-09-25T00:05:04Z",
         "diagnostic": true,
         "priorAlertId": null
       },
@@ -7509,9 +7624,9 @@
         "period": "Dec 2028",
         "message": "TSM Dec 2028: insufficient history for 30D cumulative (insufficient_history)",
         "lookbackDays": 30,
-        "windowPointCount": 4,
+        "windowPointCount": 5,
         "status": "insufficient history",
-        "eventAt": "2026-09-24T00:08:01Z",
+        "eventAt": "2026-09-25T00:05:04Z",
         "diagnostic": true,
         "priorAlertId": null
       },
@@ -7522,9 +7637,9 @@
         "period": "Jun 2027",
         "message": "MSFT Jun 2027: insufficient history for 30D cumulative (insufficient_history)",
         "lookbackDays": 30,
-        "windowPointCount": 4,
+        "windowPointCount": 5,
         "status": "insufficient history",
-        "eventAt": "2026-09-24T00:08:01Z",
+        "eventAt": "2026-09-25T00:05:04Z",
         "diagnostic": true,
         "priorAlertId": null
       },
@@ -7535,9 +7650,9 @@
         "period": "Jun 2028",
         "message": "MSFT Jun 2028: insufficient history for 30D cumulative (insufficient_history)",
         "lookbackDays": 30,
-        "windowPointCount": 4,
+        "windowPointCount": 5,
         "status": "insufficient history",
-        "eventAt": "2026-09-24T00:08:01Z",
+        "eventAt": "2026-09-25T00:05:04Z",
         "diagnostic": true,
         "priorAlertId": null
       },
@@ -7548,9 +7663,9 @@
         "period": "Dec 2026",
         "message": "BE Dec 2026: insufficient history for 30D cumulative (insufficient_history)",
         "lookbackDays": 30,
-        "windowPointCount": 4,
+        "windowPointCount": 5,
         "status": "insufficient history",
-        "eventAt": "2026-09-24T00:08:01Z",
+        "eventAt": "2026-09-25T00:05:04Z",
         "diagnostic": true,
         "priorAlertId": null
       },
@@ -7561,9 +7676,9 @@
         "period": "Dec 2027",
         "message": "BE Dec 2027: insufficient history for 30D cumulative (insufficient_history)",
         "lookbackDays": 30,
-        "windowPointCount": 4,
+        "windowPointCount": 5,
         "status": "insufficient history",
-        "eventAt": "2026-09-24T00:08:01Z",
+        "eventAt": "2026-09-25T00:05:04Z",
         "diagnostic": true,
         "priorAlertId": null
       },
@@ -7574,9 +7689,9 @@
         "period": "Dec 2028",
         "message": "BE Dec 2028: insufficient history for 30D cumulative (insufficient_history)",
         "lookbackDays": 30,
-        "windowPointCount": 4,
+        "windowPointCount": 5,
         "status": "insufficient history",
-        "eventAt": "2026-09-24T00:08:01Z",
+        "eventAt": "2026-09-25T00:05:04Z",
         "diagnostic": true,
         "priorAlertId": null
       },
@@ -7587,9 +7702,9 @@
         "period": "Oct 2026",
         "message": "KEYS Oct 2026: insufficient history for 30D cumulative (insufficient_history)",
         "lookbackDays": 30,
-        "windowPointCount": 4,
+        "windowPointCount": 5,
         "status": "insufficient history",
-        "eventAt": "2026-09-24T00:08:01Z",
+        "eventAt": "2026-09-25T00:05:04Z",
         "diagnostic": true,
         "priorAlertId": null
       },
@@ -7600,9 +7715,9 @@
         "period": "Oct 2027",
         "message": "KEYS Oct 2027: insufficient history for 30D cumulative (insufficient_history)",
         "lookbackDays": 30,
-        "windowPointCount": 4,
+        "windowPointCount": 5,
         "status": "insufficient history",
-        "eventAt": "2026-09-24T00:08:01Z",
+        "eventAt": "2026-09-25T00:05:04Z",
         "diagnostic": true,
         "priorAlertId": null
       },
@@ -7613,9 +7728,9 @@
         "period": "Oct 2028",
         "message": "KEYS Oct 2028: insufficient history for 30D cumulative (insufficient_history)",
         "lookbackDays": 30,
-        "windowPointCount": 4,
+        "windowPointCount": 5,
         "status": "insufficient history",
-        "eventAt": "2026-09-24T00:08:01Z",
+        "eventAt": "2026-09-25T00:05:04Z",
         "diagnostic": true,
         "priorAlertId": null
       },
@@ -7626,9 +7741,9 @@
         "period": "Jan 2030",
         "message": "NVDA Jan 2030: insufficient history for 30D cumulative (insufficient_history)",
         "lookbackDays": 30,
-        "windowPointCount": 4,
+        "windowPointCount": 5,
         "status": "insufficient history",
-        "eventAt": "2026-09-24T00:08:01Z",
+        "eventAt": "2026-09-25T00:05:04Z",
         "diagnostic": true,
         "priorAlertId": null
       },
@@ -7639,9 +7754,9 @@
         "period": "Oct 2029",
         "message": "AVGO Oct 2029: insufficient history for 30D cumulative (insufficient_history)",
         "lookbackDays": 30,
-        "windowPointCount": 4,
+        "windowPointCount": 5,
         "status": "insufficient history",
-        "eventAt": "2026-09-24T00:08:01Z",
+        "eventAt": "2026-09-25T00:05:04Z",
         "diagnostic": true,
         "priorAlertId": null
       },
@@ -7652,9 +7767,9 @@
         "period": "Jun 2029",
         "message": "MSFT Jun 2029: insufficient history for 30D cumulative (insufficient_history)",
         "lookbackDays": 30,
-        "windowPointCount": 4,
+        "windowPointCount": 5,
         "status": "insufficient history",
-        "eventAt": "2026-09-24T00:08:01Z",
+        "eventAt": "2026-09-25T00:05:04Z",
         "diagnostic": true,
         "priorAlertId": null
       },
@@ -7665,9 +7780,9 @@
         "period": "Dec 2029",
         "message": "BE Dec 2029: insufficient history for 30D cumulative (insufficient_history)",
         "lookbackDays": 30,
-        "windowPointCount": 4,
+        "windowPointCount": 5,
         "status": "insufficient history",
-        "eventAt": "2026-09-24T00:08:01Z",
+        "eventAt": "2026-09-25T00:05:04Z",
         "diagnostic": true,
         "priorAlertId": null
       },
@@ -7678,9 +7793,9 @@
         "period": "Oct 2029",
         "message": "KEYS Oct 2029: insufficient history for 30D cumulative (insufficient_history)",
         "lookbackDays": 30,
-        "windowPointCount": 4,
+        "windowPointCount": 5,
         "status": "insufficient history",
-        "eventAt": "2026-09-24T00:08:01Z",
+        "eventAt": "2026-09-25T00:05:04Z",
         "diagnostic": true,
         "priorAlertId": null
       },
@@ -7691,9 +7806,9 @@
         "period": "Jun 2026",
         "message": "MSFT Jun 2026: insufficient history for 30D cumulative (insufficient_history)",
         "lookbackDays": 30,
-        "windowPointCount": 1,
+        "windowPointCount": 2,
         "status": "insufficient history",
-        "eventAt": "2026-09-24T00:08:01Z",
+        "eventAt": "2026-09-25T00:05:04Z",
         "diagnostic": true,
         "priorAlertId": null
       }
@@ -7722,7 +7837,7 @@
         "sourceWindow": "Seeking Alpha 1M",
         "windowLabel": "Source window: Seeking Alpha 1M",
         "neverInternal30D": true,
-        "ageDays": 9,
+        "ageDays": 10,
         "analystCount": 33,
         "consensusLow": 25.22,
         "consensusHigh": 34.25,
@@ -7733,8 +7848,8 @@
         "status": "Open",
         "lifecycleStatus": "Open",
         "lifecycleEvent": "Hold",
-        "updatedAt": "2026-09-24T00:08:01Z",
-        "lastObservedAt": "2026-09-24T00:08:01Z"
+        "updatedAt": "2026-09-25T00:05:04Z",
+        "lastObservedAt": "2026-09-25T00:05:04Z"
       },
       {
         "id": "source_reported_1m_revision:NVDA:Jan_2030:2026-09-15:sa1m_2029E",
@@ -7759,7 +7874,7 @@
         "sourceWindow": "Seeking Alpha 1M",
         "windowLabel": "Source window: Seeking Alpha 1M",
         "neverInternal30D": true,
-        "ageDays": 9,
+        "ageDays": 10,
         "analystCount": 4,
         "consensusLow": 17.9,
         "consensusHigh": 30.37,
@@ -7770,8 +7885,8 @@
         "status": "Open",
         "lifecycleStatus": "Open",
         "lifecycleEvent": "Hold",
-        "updatedAt": "2026-09-24T00:08:01Z",
-        "lastObservedAt": "2026-09-24T00:08:01Z"
+        "updatedAt": "2026-09-25T00:05:04Z",
+        "lastObservedAt": "2026-09-25T00:05:04Z"
       },
       {
         "id": "source_reported_1m_revision:AVGO:Oct_2029:2026-09-15:sa1m_2029E",
@@ -7796,7 +7911,7 @@
         "sourceWindow": "Seeking Alpha 1M",
         "windowLabel": "Source window: Seeking Alpha 1M",
         "neverInternal30D": true,
-        "ageDays": 9,
+        "ageDays": 10,
         "analystCount": 4,
         "consensusLow": 30.54,
         "consensusHigh": 50.5,
@@ -7807,8 +7922,8 @@
         "status": "Open",
         "lifecycleStatus": "Open",
         "lifecycleEvent": "Hold",
-        "updatedAt": "2026-09-24T00:08:01Z",
-        "lastObservedAt": "2026-09-24T00:08:01Z"
+        "updatedAt": "2026-09-25T00:05:04Z",
+        "lastObservedAt": "2026-09-25T00:05:04Z"
       },
       {
         "id": "source_reported_1m_revision:KEYS:Oct_2029:2026-09-15:sa1m_2029E",
@@ -7833,7 +7948,7 @@
         "sourceWindow": "Seeking Alpha 1M",
         "windowLabel": "Source window: Seeking Alpha 1M",
         "neverInternal30D": true,
-        "ageDays": 9,
+        "ageDays": 10,
         "analystCount": 1,
         "consensusLow": 21.99,
         "consensusHigh": 21.99,
@@ -7844,8 +7959,8 @@
         "status": "Open",
         "lifecycleStatus": "Open",
         "lifecycleEvent": "Hold",
-        "updatedAt": "2026-09-24T00:08:01Z",
-        "lastObservedAt": "2026-09-24T00:08:01Z"
+        "updatedAt": "2026-09-25T00:05:04Z",
+        "lastObservedAt": "2026-09-25T00:05:04Z"
       }
     ],
     "changedSinceLastCollection": [],
@@ -7873,7 +7988,7 @@
         "sourceWindow": "Seeking Alpha 1M",
         "windowLabel": "Source window: Seeking Alpha 1M",
         "neverInternal30D": true,
-        "ageDays": 9,
+        "ageDays": 10,
         "analystCount": 33,
         "consensusLow": 25.22,
         "consensusHigh": 34.25,
@@ -7884,8 +7999,8 @@
         "status": "Open",
         "lifecycleStatus": "Open",
         "lifecycleEvent": "Hold",
-        "updatedAt": "2026-09-24T00:08:01Z",
-        "lastObservedAt": "2026-09-24T00:08:01Z"
+        "updatedAt": "2026-09-25T00:05:04Z",
+        "lastObservedAt": "2026-09-25T00:05:04Z"
       },
       {
         "id": "source_reported_1m_revision:NVDA:Jan_2030:2026-09-15:sa1m_2029E",
@@ -7910,7 +8025,7 @@
         "sourceWindow": "Seeking Alpha 1M",
         "windowLabel": "Source window: Seeking Alpha 1M",
         "neverInternal30D": true,
-        "ageDays": 9,
+        "ageDays": 10,
         "analystCount": 4,
         "consensusLow": 17.9,
         "consensusHigh": 30.37,
@@ -7921,8 +8036,8 @@
         "status": "Open",
         "lifecycleStatus": "Open",
         "lifecycleEvent": "Hold",
-        "updatedAt": "2026-09-24T00:08:01Z",
-        "lastObservedAt": "2026-09-24T00:08:01Z"
+        "updatedAt": "2026-09-25T00:05:04Z",
+        "lastObservedAt": "2026-09-25T00:05:04Z"
       },
       {
         "id": "source_reported_1m_revision:AVGO:Oct_2029:2026-09-15:sa1m_2029E",
@@ -7947,7 +8062,7 @@
         "sourceWindow": "Seeking Alpha 1M",
         "windowLabel": "Source window: Seeking Alpha 1M",
         "neverInternal30D": true,
-        "ageDays": 9,
+        "ageDays": 10,
         "analystCount": 4,
         "consensusLow": 30.54,
         "consensusHigh": 50.5,
@@ -7958,8 +8073,8 @@
         "status": "Open",
         "lifecycleStatus": "Open",
         "lifecycleEvent": "Hold",
-        "updatedAt": "2026-09-24T00:08:01Z",
-        "lastObservedAt": "2026-09-24T00:08:01Z"
+        "updatedAt": "2026-09-25T00:05:04Z",
+        "lastObservedAt": "2026-09-25T00:05:04Z"
       },
       {
         "id": "source_reported_1m_revision:KEYS:Oct_2029:2026-09-15:sa1m_2029E",
@@ -7984,7 +8099,7 @@
         "sourceWindow": "Seeking Alpha 1M",
         "windowLabel": "Source window: Seeking Alpha 1M",
         "neverInternal30D": true,
-        "ageDays": 9,
+        "ageDays": 10,
         "analystCount": 1,
         "consensusLow": 21.99,
         "consensusHigh": 21.99,
@@ -7995,13 +8110,13 @@
         "status": "Open",
         "lifecycleStatus": "Open",
         "lifecycleEvent": "Hold",
-        "updatedAt": "2026-09-24T00:08:01Z",
-        "lastObservedAt": "2026-09-24T00:08:01Z"
+        "updatedAt": "2026-09-25T00:05:04Z",
+        "lastObservedAt": "2026-09-25T00:05:04Z"
       }
     ],
-    "alertEngineLastEvaluated": "2026-09-24T00:08:01Z",
-    "alertEngineLastAttempt": "2026-09-24T00:08:01Z",
-    "alertEngineLastSuccessfulEvaluation": "2026-09-24T00:08:01Z",
+    "alertEngineLastEvaluated": "2026-09-25T00:05:04Z",
+    "alertEngineLastAttempt": "2026-09-25T00:05:04Z",
+    "alertEngineLastSuccessfulEvaluation": "2026-09-25T00:05:04Z",
     "alertEngineStatus": "ok",
     "alertEngineError": null,
     "oneShotActiveDays": 21
