@@ -508,7 +508,7 @@
         "1M": {
           "windowLabel": "Source-reported · Seeking Alpha 1M",
           "sourceWindow": "Seeking Alpha 1M",
-          "revisionPct": 65.87,
+          "revisionPct": 0.24,
           "neverInternal30D": true,
           "neverInternal60D": true,
           "neverInternal90D": true
@@ -516,7 +516,7 @@
         "3M": {
           "windowLabel": "Source-reported · Seeking Alpha 3M",
           "sourceWindow": "Seeking Alpha 3M",
-          "revisionPct": -0.11,
+          "revisionPct": 0.3,
           "neverInternal30D": true,
           "neverInternal60D": true,
           "neverInternal90D": true
@@ -524,7 +524,7 @@
         "6M": {
           "windowLabel": "Source-reported · Seeking Alpha 6M",
           "sourceWindow": "Seeking Alpha 6M",
-          "revisionPct": -0.07,
+          "revisionPct": 2.49,
           "neverInternal30D": true,
           "neverInternal60D": true,
           "neverInternal90D": true
@@ -593,7 +593,7 @@
         "1M": {
           "windowLabel": "Source-reported · Seeking Alpha 1M",
           "sourceWindow": "Seeking Alpha 1M",
-          "revisionPct": 63.73,
+          "revisionPct": -0.98,
           "neverInternal30D": true,
           "neverInternal60D": true,
           "neverInternal90D": true
@@ -601,7 +601,7 @@
         "3M": {
           "windowLabel": "Source-reported · Seeking Alpha 3M",
           "sourceWindow": "Seeking Alpha 3M",
-          "revisionPct": 0.04,
+          "revisionPct": -0.41,
           "neverInternal30D": true,
           "neverInternal60D": true,
           "neverInternal90D": true
@@ -609,7 +609,7 @@
         "6M": {
           "windowLabel": "Source-reported · Seeking Alpha 6M",
           "sourceWindow": "Seeking Alpha 6M",
-          "revisionPct": 0.75,
+          "revisionPct": 8.64,
           "neverInternal30D": true,
           "neverInternal60D": true,
           "neverInternal90D": true
@@ -678,7 +678,7 @@
         "1M": {
           "windowLabel": "Source-reported · Seeking Alpha 1M",
           "sourceWindow": "Seeking Alpha 1M",
-          "revisionPct": 57.23,
+          "revisionPct": 15.7,
           "neverInternal30D": true,
           "neverInternal60D": true,
           "neverInternal90D": true
@@ -686,7 +686,7 @@
         "3M": {
           "windowLabel": "Source-reported · Seeking Alpha 3M",
           "sourceWindow": "Seeking Alpha 3M",
-          "revisionPct": 16.6,
+          "revisionPct": 18.76,
           "neverInternal30D": true,
           "neverInternal60D": true,
           "neverInternal90D": true
@@ -694,7 +694,7 @@
         "6M": {
           "windowLabel": "Source-reported · Seeking Alpha 6M",
           "sourceWindow": "Seeking Alpha 6M",
-          "revisionPct": 19.27,
+          "revisionPct": 37.83,
           "neverInternal30D": true,
           "neverInternal60D": true,
           "neverInternal90D": true
@@ -763,7 +763,7 @@
         "1M": {
           "windowLabel": "Source-reported · Seeking Alpha 1M",
           "sourceWindow": "Seeking Alpha 1M",
-          "revisionPct": 17.76,
+          "revisionPct": 26.48,
           "neverInternal30D": true,
           "neverInternal60D": true,
           "neverInternal90D": true
@@ -771,7 +771,7 @@
         "3M": {
           "windowLabel": "Source-reported · Seeking Alpha 3M",
           "sourceWindow": "Seeking Alpha 3M",
-          "revisionPct": 28.55,
+          "revisionPct": 30.45,
           "neverInternal30D": true,
           "neverInternal60D": true,
           "neverInternal90D": true
@@ -779,7 +779,7 @@
         "6M": {
           "windowLabel": "Source-reported · Seeking Alpha 6M",
           "sourceWindow": "Seeking Alpha 6M",
-          "revisionPct": 34.4,
+          "revisionPct": 53.56,
           "neverInternal30D": true,
           "neverInternal60D": true,
           "neverInternal90D": true
@@ -848,7 +848,7 @@
         "1M": {
           "windowLabel": "Source-reported · Seeking Alpha 1M",
           "sourceWindow": "Seeking Alpha 1M",
-          "revisionPct": 103.35,
+          "revisionPct": -0.01,
           "neverInternal30D": true,
           "neverInternal60D": true,
           "neverInternal90D": true
@@ -856,7 +856,7 @@
         "3M": {
           "windowLabel": "Source-reported · Seeking Alpha 3M",
           "sourceWindow": "Seeking Alpha 3M",
-          "revisionPct": 0.0,
+          "revisionPct": 26.52,
           "neverInternal30D": true,
           "neverInternal60D": true,
           "neverInternal90D": true
@@ -864,7 +864,7 @@
         "6M": {
           "windowLabel": "Source-reported · Seeking Alpha 6M",
           "sourceWindow": "Seeking Alpha 6M",
-          "revisionPct": 9.94,
+          "revisionPct": 94.08,
           "neverInternal30D": true,
           "neverInternal60D": true,
           "neverInternal90D": true
@@ -933,7 +933,7 @@
         "1M": {
           "windowLabel": "Source-reported · Seeking Alpha 1M",
           "sourceWindow": "Seeking Alpha 1M",
-          "revisionPct": 65.0,
+          "revisionPct": 0.17,
           "neverInternal30D": true,
           "neverInternal60D": true,
           "neverInternal90D": true
@@ -941,7 +941,7 @@
         "3M": {
           "windowLabel": "Source-reported · Seeking Alpha 3M",
           "sourceWindow": "Seeking Alpha 3M",
-          "revisionPct": 0.05,
+          "revisionPct": 12.95,
           "neverInternal30D": true,
           "neverInternal60D": true,
           "neverInternal90D": true
@@ -949,7 +949,7 @@
         "6M": {
           "windowLabel": "Source-reported · Seeking Alpha 6M",
           "sourceWindow": "Seeking Alpha 6M",
-          "revisionPct": 5.44,
+          "revisionPct": 67.59,
           "neverInternal30D": true,
           "neverInternal60D": true,
           "neverInternal90D": true
@@ -1018,7 +1018,7 @@
         "1M": {
           "windowLabel": "Source-reported · Seeking Alpha 1M",
           "sourceWindow": "Seeking Alpha 1M",
-          "revisionPct": 45.94,
+          "revisionPct": 0.65,
           "neverInternal30D": true,
           "neverInternal60D": true,
           "neverInternal90D": true
@@ -1026,7 +1026,7 @@
         "3M": {
           "windowLabel": "Source-reported · Seeking Alpha 3M",
           "sourceWindow": "Seeking Alpha 3M",
-          "revisionPct": 0.15,
+          "revisionPct": 9.3,
           "neverInternal30D": true,
           "neverInternal60D": true,
           "neverInternal90D": true
@@ -1034,7 +1034,7 @@
         "6M": {
           "windowLabel": "Source-reported · Seeking Alpha 6M",
           "sourceWindow": "Seeking Alpha 6M",
-          "revisionPct": 3.01,
+          "revisionPct": 65.19,
           "neverInternal30D": true,
           "neverInternal60D": true,
           "neverInternal90D": true
@@ -1103,7 +1103,7 @@
         "1M": {
           "windowLabel": "Source-reported · Seeking Alpha 1M",
           "sourceWindow": "Seeking Alpha 1M",
-          "revisionPct": -3.01,
+          "revisionPct": -2.28,
           "neverInternal30D": true,
           "neverInternal60D": true,
           "neverInternal90D": true
@@ -1111,7 +1111,7 @@
         "3M": {
           "windowLabel": "Source-reported · Seeking Alpha 3M",
           "sourceWindow": "Seeking Alpha 3M",
-          "revisionPct": -1.71,
+          "revisionPct": 9.51,
           "neverInternal30D": true,
           "neverInternal60D": true,
           "neverInternal90D": true
@@ -1119,7 +1119,7 @@
         "6M": {
           "windowLabel": "Source-reported · Seeking Alpha 6M",
           "sourceWindow": "Seeking Alpha 6M",
-          "revisionPct": 48.07,
+          "revisionPct": 99.93,
           "neverInternal30D": true,
           "neverInternal60D": true,
           "neverInternal90D": true
@@ -1188,7 +1188,7 @@
         "1M": {
           "windowLabel": "Source-reported · Seeking Alpha 1M",
           "sourceWindow": "Seeking Alpha 1M",
-          "revisionPct": 32.38,
+          "revisionPct": -0.22,
           "neverInternal30D": true,
           "neverInternal60D": true,
           "neverInternal90D": true
@@ -1196,7 +1196,7 @@
         "3M": {
           "windowLabel": "Source-reported · Seeking Alpha 3M",
           "sourceWindow": "Seeking Alpha 3M",
-          "revisionPct": 0.05,
+          "revisionPct": 12.07,
           "neverInternal30D": true,
           "neverInternal60D": true,
           "neverInternal90D": true
@@ -1204,7 +1204,7 @@
         "6M": {
           "windowLabel": "Source-reported · Seeking Alpha 6M",
           "sourceWindow": "Seeking Alpha 6M",
-          "revisionPct": 3.14,
+          "revisionPct": 29.28,
           "neverInternal30D": true,
           "neverInternal60D": true,
           "neverInternal90D": true
@@ -1273,7 +1273,7 @@
         "1M": {
           "windowLabel": "Source-reported · Seeking Alpha 1M",
           "sourceWindow": "Seeking Alpha 1M",
-          "revisionPct": 15.17,
+          "revisionPct": 1.62,
           "neverInternal30D": true,
           "neverInternal60D": true,
           "neverInternal90D": true
@@ -1281,7 +1281,7 @@
         "3M": {
           "windowLabel": "Source-reported · Seeking Alpha 3M",
           "sourceWindow": "Seeking Alpha 3M",
-          "revisionPct": 0.74,
+          "revisionPct": 17.0,
           "neverInternal30D": true,
           "neverInternal60D": true,
           "neverInternal90D": true
@@ -1289,7 +1289,7 @@
         "6M": {
           "windowLabel": "Source-reported · Seeking Alpha 6M",
           "sourceWindow": "Seeking Alpha 6M",
-          "revisionPct": 6.99,
+          "revisionPct": 35.14,
           "neverInternal30D": true,
           "neverInternal60D": true,
           "neverInternal90D": true
@@ -1358,7 +1358,7 @@
         "1M": {
           "windowLabel": "Source-reported · Seeking Alpha 1M",
           "sourceWindow": "Seeking Alpha 1M",
-          "revisionPct": 8.94,
+          "revisionPct": 0.0,
           "neverInternal30D": true,
           "neverInternal60D": true,
           "neverInternal90D": true
@@ -1366,7 +1366,7 @@
         "3M": {
           "windowLabel": "Source-reported · Seeking Alpha 3M",
           "sourceWindow": "Seeking Alpha 3M",
-          "revisionPct": 0.0,
+          "revisionPct": 18.42,
           "neverInternal30D": true,
           "neverInternal60D": true,
           "neverInternal90D": true
@@ -1374,7 +1374,7 @@
         "6M": {
           "windowLabel": "Source-reported · Seeking Alpha 6M",
           "sourceWindow": "Seeking Alpha 6M",
-          "revisionPct": 7.94,
+          "revisionPct": 37.5,
           "neverInternal30D": true,
           "neverInternal60D": true,
           "neverInternal90D": true
@@ -1443,7 +1443,7 @@
         "1M": {
           "windowLabel": "Source-reported · Seeking Alpha 1M",
           "sourceWindow": "Seeking Alpha 1M",
-          "revisionPct": 19.56,
+          "revisionPct": 35.49,
           "neverInternal30D": true,
           "neverInternal60D": true,
           "neverInternal90D": true
@@ -1451,7 +1451,7 @@
         "3M": {
           "windowLabel": "Source-reported · Seeking Alpha 3M",
           "sourceWindow": "Seeking Alpha 3M",
-          "revisionPct": 26.16,
+          "revisionPct": 48.78,
           "neverInternal30D": true,
           "neverInternal60D": true,
           "neverInternal90D": true
@@ -1459,7 +1459,7 @@
         "6M": {
           "windowLabel": "Source-reported · Seeking Alpha 6M",
           "sourceWindow": "Seeking Alpha 6M",
-          "revisionPct": 45.39,
+          "revisionPct": 75.92,
           "neverInternal30D": true,
           "neverInternal60D": true,
           "neverInternal90D": true
@@ -1613,7 +1613,7 @@
         "1M": {
           "windowLabel": "Source-reported · Seeking Alpha 1M",
           "sourceWindow": "Seeking Alpha 1M",
-          "revisionPct": 17.84,
+          "revisionPct": 0.03,
           "neverInternal30D": true,
           "neverInternal60D": true,
           "neverInternal90D": true
@@ -1621,7 +1621,7 @@
         "3M": {
           "windowLabel": "Source-reported · Seeking Alpha 3M",
           "sourceWindow": "Seeking Alpha 3M",
-          "revisionPct": -0.01,
+          "revisionPct": 1.87,
           "neverInternal30D": true,
           "neverInternal60D": true,
           "neverInternal90D": true
@@ -1629,7 +1629,7 @@
         "6M": {
           "windowLabel": "Source-reported · Seeking Alpha 6M",
           "sourceWindow": "Seeking Alpha 6M",
-          "revisionPct": 1.68,
+          "revisionPct": 4.94,
           "neverInternal30D": true,
           "neverInternal60D": true,
           "neverInternal90D": true
@@ -1698,7 +1698,7 @@
         "1M": {
           "windowLabel": "Source-reported · Seeking Alpha 1M",
           "sourceWindow": "Seeking Alpha 1M",
-          "revisionPct": 19.5,
+          "revisionPct": 0.44,
           "neverInternal30D": true,
           "neverInternal60D": true,
           "neverInternal90D": true
@@ -1706,7 +1706,7 @@
         "3M": {
           "windowLabel": "Source-reported · Seeking Alpha 3M",
           "sourceWindow": "Seeking Alpha 3M",
-          "revisionPct": -0.01,
+          "revisionPct": 4.63,
           "neverInternal30D": true,
           "neverInternal60D": true,
           "neverInternal90D": true
@@ -1714,7 +1714,7 @@
         "6M": {
           "windowLabel": "Source-reported · Seeking Alpha 6M",
           "sourceWindow": "Seeking Alpha 6M",
-          "revisionPct": 2.85,
+          "revisionPct": 6.33,
           "neverInternal30D": true,
           "neverInternal60D": true,
           "neverInternal90D": true
@@ -1783,7 +1783,7 @@
         "1M": {
           "windowLabel": "Source-reported · Seeking Alpha 1M",
           "sourceWindow": "Seeking Alpha 1M",
-          "revisionPct": 21.25,
+          "revisionPct": 0.45,
           "neverInternal30D": true,
           "neverInternal60D": true,
           "neverInternal90D": true
@@ -1791,7 +1791,7 @@
         "3M": {
           "windowLabel": "Source-reported · Seeking Alpha 3M",
           "sourceWindow": "Seeking Alpha 3M",
-          "revisionPct": -0.12,
+          "revisionPct": 5.49,
           "neverInternal30D": true,
           "neverInternal60D": true,
           "neverInternal90D": true
@@ -1799,7 +1799,7 @@
         "6M": {
           "windowLabel": "Source-reported · Seeking Alpha 6M",
           "sourceWindow": "Seeking Alpha 6M",
-          "revisionPct": 6.97,
+          "revisionPct": 5.63,
           "neverInternal30D": true,
           "neverInternal60D": true,
           "neverInternal90D": true
@@ -1868,7 +1868,7 @@
         "1M": {
           "windowLabel": "Source-reported · Seeking Alpha 1M",
           "sourceWindow": "Seeking Alpha 1M",
-          "revisionPct": 90.59,
+          "revisionPct": 0.14,
           "neverInternal30D": true,
           "neverInternal60D": true,
           "neverInternal90D": true
@@ -1876,7 +1876,7 @@
         "3M": {
           "windowLabel": "Source-reported · Seeking Alpha 3M",
           "sourceWindow": "Seeking Alpha 3M",
-          "revisionPct": 0.06,
+          "revisionPct": 4.14,
           "neverInternal30D": true,
           "neverInternal60D": true,
           "neverInternal90D": true
@@ -1884,7 +1884,7 @@
         "6M": {
           "windowLabel": "Source-reported · Seeking Alpha 6M",
           "sourceWindow": "Seeking Alpha 6M",
-          "revisionPct": 4.86,
+          "revisionPct": 12.2,
           "neverInternal30D": true,
           "neverInternal60D": true,
           "neverInternal90D": true
@@ -1953,7 +1953,7 @@
         "1M": {
           "windowLabel": "Source-reported · Seeking Alpha 1M",
           "sourceWindow": "Seeking Alpha 1M",
-          "revisionPct": 65.89,
+          "revisionPct": 1.81,
           "neverInternal30D": true,
           "neverInternal60D": true,
           "neverInternal90D": true
@@ -1961,7 +1961,7 @@
         "3M": {
           "windowLabel": "Source-reported · Seeking Alpha 3M",
           "sourceWindow": "Seeking Alpha 3M",
-          "revisionPct": 1.51,
+          "revisionPct": 23.39,
           "neverInternal30D": true,
           "neverInternal60D": true,
           "neverInternal90D": true
@@ -1969,7 +1969,7 @@
         "6M": {
           "windowLabel": "Source-reported · Seeking Alpha 6M",
           "sourceWindow": "Seeking Alpha 6M",
-          "revisionPct": 23.14,
+          "revisionPct": 41.18,
           "neverInternal30D": true,
           "neverInternal60D": true,
           "neverInternal90D": true
@@ -2038,7 +2038,7 @@
         "1M": {
           "windowLabel": "Source-reported · Seeking Alpha 1M",
           "sourceWindow": "Seeking Alpha 1M",
-          "revisionPct": 30.85,
+          "revisionPct": 2.98,
           "neverInternal30D": true,
           "neverInternal60D": true,
           "neverInternal90D": true
@@ -2046,7 +2046,7 @@
         "3M": {
           "windowLabel": "Source-reported · Seeking Alpha 3M",
           "sourceWindow": "Seeking Alpha 3M",
-          "revisionPct": 2.74,
+          "revisionPct": 33.93,
           "neverInternal30D": true,
           "neverInternal60D": true,
           "neverInternal90D": true
@@ -2054,7 +2054,7 @@
         "6M": {
           "windowLabel": "Source-reported · Seeking Alpha 6M",
           "sourceWindow": "Seeking Alpha 6M",
-          "revisionPct": 31.46,
+          "revisionPct": 58.53,
           "neverInternal30D": true,
           "neverInternal60D": true,
           "neverInternal90D": true
@@ -2123,7 +2123,7 @@
         "1M": {
           "windowLabel": "Source-reported · Seeking Alpha 1M",
           "sourceWindow": "Seeking Alpha 1M",
-          "revisionPct": 12.88,
+          "revisionPct": 11.02,
           "neverInternal30D": true,
           "neverInternal60D": true,
           "neverInternal90D": true
@@ -2131,7 +2131,7 @@
         "3M": {
           "windowLabel": "Source-reported · Seeking Alpha 3M",
           "sourceWindow": "Seeking Alpha 3M",
-          "revisionPct": 37.45,
+          "revisionPct": 33.74,
           "neverInternal30D": true,
           "neverInternal60D": true,
           "neverInternal90D": true
@@ -2139,7 +2139,7 @@
         "6M": {
           "windowLabel": "Source-reported · Seeking Alpha 6M",
           "sourceWindow": "Seeking Alpha 6M",
-          "revisionPct": 54.78,
+          "revisionPct": 54.8,
           "neverInternal30D": true,
           "neverInternal60D": true,
           "neverInternal90D": true
@@ -2208,7 +2208,7 @@
         "1M": {
           "windowLabel": "Source-reported · Seeking Alpha 1M",
           "sourceWindow": "Seeking Alpha 1M",
-          "revisionPct": 42.39,
+          "revisionPct": 0.21,
           "neverInternal30D": true,
           "neverInternal60D": true,
           "neverInternal90D": true
@@ -2216,7 +2216,7 @@
         "3M": {
           "windowLabel": "Source-reported · Seeking Alpha 3M",
           "sourceWindow": "Seeking Alpha 3M",
-          "revisionPct": 0.15,
+          "revisionPct": 6.99,
           "neverInternal30D": true,
           "neverInternal60D": true,
           "neverInternal90D": true
@@ -2224,7 +2224,7 @@
         "6M": {
           "windowLabel": "Source-reported · Seeking Alpha 6M",
           "sourceWindow": "Seeking Alpha 6M",
-          "revisionPct": 5.41,
+          "revisionPct": 17.26,
           "neverInternal30D": true,
           "neverInternal60D": true,
           "neverInternal90D": true
@@ -2293,7 +2293,7 @@
         "1M": {
           "windowLabel": "Source-reported · Seeking Alpha 1M",
           "sourceWindow": "Seeking Alpha 1M",
-          "revisionPct": 34.55,
+          "revisionPct": 0.66,
           "neverInternal30D": true,
           "neverInternal60D": true,
           "neverInternal90D": true
@@ -2301,7 +2301,7 @@
         "3M": {
           "windowLabel": "Source-reported · Seeking Alpha 3M",
           "sourceWindow": "Seeking Alpha 3M",
-          "revisionPct": 0.45,
+          "revisionPct": 8.9,
           "neverInternal30D": true,
           "neverInternal60D": true,
           "neverInternal90D": true
@@ -2309,7 +2309,7 @@
         "6M": {
           "windowLabel": "Source-reported · Seeking Alpha 6M",
           "sourceWindow": "Seeking Alpha 6M",
-          "revisionPct": 11.43,
+          "revisionPct": 22.49,
           "neverInternal30D": true,
           "neverInternal60D": true,
           "neverInternal90D": true
@@ -2378,7 +2378,7 @@
         "1M": {
           "windowLabel": "Source-reported · Seeking Alpha 1M",
           "sourceWindow": "Seeking Alpha 1M",
-          "revisionPct": 26.27,
+          "revisionPct": 0.25,
           "neverInternal30D": true,
           "neverInternal60D": true,
           "neverInternal90D": true
@@ -2386,7 +2386,7 @@
         "3M": {
           "windowLabel": "Source-reported · Seeking Alpha 3M",
           "sourceWindow": "Seeking Alpha 3M",
-          "revisionPct": 0.6,
+          "revisionPct": 8.15,
           "neverInternal30D": true,
           "neverInternal60D": true,
           "neverInternal90D": true
@@ -2394,7 +2394,7 @@
         "6M": {
           "windowLabel": "Source-reported · Seeking Alpha 6M",
           "sourceWindow": "Seeking Alpha 6M",
-          "revisionPct": 12.77,
+          "revisionPct": null,
           "neverInternal30D": true,
           "neverInternal60D": true,
           "neverInternal90D": true
@@ -2407,5 +2407,5 @@
     }
   ],
   "revisionMomentumNote": "Internal 30D/60D/90D are computed from daily EPS history keyed by ticker + reportedFiscalPeriodEnding (normalized). Each window is anchored on the latest valid observation for that identity (targetDate = latestDate − N days), not the snapshot timestamp. Baseline admission is the schedule-aware weekday-gap rule in tools/revision_windows.py (Friday→Monday valid; ancient observations cannot fake an N-day baseline). Insufficient history → unavailable (never substitute the oldest observation). Seeking Alpha 1M/3M/6M are Source-reported windows and are never treated as Internal 30/60/90D. Up/Down Analyst counts are unavailable unless present as source-native fields (captured SA sources in this repo do not include them).",
-  "buildId": "1ff6b1266bef5147e6ef43fa33b5346449531ac31593fb8c694790ce39dcc94a"
+  "buildId": "3598ec229ca31c286e6a2a5aee962e35e65c400cac81aec38659b0633c11611e"
 }
